@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: li-picture-cloud
+  datasource:
+    username: root
+    password: 123456
+    url: jdbc:mysql://localhost:3306/li_picture_cloud_data?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+server:
+  port: 8124
+  servlet:
+    context-path: /api
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: isDeleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+  packages-to-scan:
+    - com.li.lipicturecloud.controller
+  paths-to-exclude:
+    - /actuator/**
+
+
