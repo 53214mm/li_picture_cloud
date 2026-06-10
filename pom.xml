@@ -99,6 +99,14 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
+<!--    对象存储    -->
+        <!-- Source: https://mvnrepository.com/artifact/com.qcloud/cos_api -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>cos_api</artifactId>
+            <version>5.6.269</version>
+            <scope>compile</scope>
+        </dependency>
     </dependencies>
 
     <build>

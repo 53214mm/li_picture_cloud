@@ -1,3 +1,26 @@
+# === 敏感配置文件 ===
+application-local.yaml
+application-local.yml
+**/application-local.*
+**/*-local.yaml
+**/*-local.yml
+
+# === 密钥和凭证 ===
+*.pem
+*.key
+*.p12
+*.keystore
+*.jks
+.env
+.env.*
+credentials.*
+secrets.*
+
+# === 临时文件 ===
+tmp
+test-classes
+
+
 HELP.md
 target/
 .mvn/wrapper/maven-wrapper.jar
