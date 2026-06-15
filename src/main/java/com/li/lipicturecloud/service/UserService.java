@@ -12,6 +12,8 @@ import com.li.lipicturecloud.model.vo.UserVO;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import java.util.List;
+
 /**
  * 用户服务接口
  * <p>
@@ -138,4 +140,16 @@ public interface UserService extends IService<User> {
      * @return 脱敏后的用户视图对象
      */
     UserVO getUserVOById(long id);
+
+    /**
+     * 是否为管理员
+     *
+     * @param user
+     * @return
+     */
+    boolean isAdmin(UserVO userVO);
+
+    UserVO getUserVO(User user);
+
+    List<UserVO> getUserVOList(List<User> userList);
 }

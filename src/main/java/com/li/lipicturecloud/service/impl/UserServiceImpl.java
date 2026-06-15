@@ -1,12 +1,11 @@
 package com.li.lipicturecloud.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.util.ObjUtil;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.lipicturecloud.constant.UserConstant;
@@ -22,11 +21,13 @@ import com.li.lipicturecloud.model.entity.User;
 import com.li.lipicturecloud.model.enums.UserRoleEnum;
 import com.li.lipicturecloud.model.vo.UserVO;
 import com.li.lipicturecloud.service.UserService;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -279,14 +280,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
 
-        // 从 Session 中取出用户信息
+        // 从 Session 中取出用户信息（登录时存入的是 UserVO）
         Object userObj = session.getAttribute(UserConstant.SESSION_USER_KEY);
         if (userObj == null) {
             // Session 存在但没有用户信息，说明未登录
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
 
-        // 强制转型为 UserVO 并返回
         return (UserVO) userObj;
     }
 
@@ -532,4 +532,28 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         BeanUtil.copyProperties(user, userVO);
         return userVO;
     }
+
+    @Override
+    public boolean isAdmin(UserVO userVO) {
+        return userVO != null && UserRoleEnum.ADMIN.getValue().equals(userVO.getUserRole());
+    }
+
+    @Override
+    public UserVO getUserVO(User user) {
+        if (user == null) {
+            return null;
+        }
+        UserVO userVO = new UserVO();
+        BeanUtils.copyProperties(user, userVO);
+        return userVO;
+    }
+
+    @Override
+    public List<UserVO> getUserVOList(List<User> userList) {
+        if (CollUtil.isEmpty(userList)) {
+            return new ArrayList<>();
+        }
+        return userList.stream().map(this::getUserVO).collect(Collectors.toList());
+    }
+
 }

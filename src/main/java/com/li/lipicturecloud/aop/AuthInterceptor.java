@@ -3,7 +3,6 @@ package com.li.lipicturecloud.aop;
 import com.li.lipicturecloud.annotation.AuthCheck;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
-import com.li.lipicturecloud.model.entity.User;
 import com.li.lipicturecloud.model.enums.UserRoleEnum;
 import com.li.lipicturecloud.model.vo.UserVO;
 import com.li.lipicturecloud.service.UserService;

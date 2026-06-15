@@ -151,8 +151,8 @@ public class UserController {
     @Operation(summary = "获取当前登录用户", description = "从 Session 中获取已登录的用户信息，未登录则返回错误")
     public BaseResponse<UserVO> getCurrentUser(HttpServletRequest request) {
 
-        UserVO userVO = userService.getLoginUser(request);
-        return ResultUtils.success(userVO);
+        UserVO loginUser = userService.getLoginUser(request);
+        return ResultUtils.success(loginUser);
     }
 
     // ============================================================

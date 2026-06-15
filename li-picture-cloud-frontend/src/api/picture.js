@@ -1,0 +1,54 @@
+import request from './request'
+
+// ==================== 公开接口 ====================
+
+/** 根据 ID 获取图片 VO（含关联用户信息） */
+export function getPictureVOById(id) {
+  return request.get('/picture/get/vo', { params: { id } })
+}
+
+/** 分页获取图片 VO 列表（公开，最多 20 条/页） */
+export function listPictureVOByPage(data) {
+  return request.post('/picture/list/page/vo', data)
+}
+
+/** 获取预设标签与分类 */
+export function getPictureTagCategory() {
+  return request.get('/picture/tag_category')
+}
+
+// ==================== 登录用户接口 ====================
+
+/** 编辑图片（仅本人或管理员） */
+export function editPicture(data) {
+  return request.post('/picture/edit', data)
+}
+
+/** 删除图片（仅本人或管理员） */
+export function deletePicture(id) {
+  return request.post('/picture/delete', { id })
+}
+
+// ==================== 管理员接口 ====================
+
+/** 上传图片（需 admin） */
+export function uploadPicture(formData) {
+  return request.post('/picture/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+/** 更新图片（管理员可修改任意图片） */
+export function updatePicture(data) {
+  return request.post('/picture/update', data)
+}
+
+/** 分页获取原始图片列表（管理员） */
+export function listPictureByPage(data) {
+  return request.post('/picture/list/page', data)
+}
+
+/** 获取原始图片实体（管理员） */
+export function getPictureById(id) {
+  return request.get('/picture/get', { params: { id } })
+}

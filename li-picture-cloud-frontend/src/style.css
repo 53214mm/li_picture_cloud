@@ -1,0 +1,101 @@
+/* ============================================================
+   Swiss Graphic Design — Global Styles
+   配色：白底 + 红(#E03A30) + 黄(#FFC800) + 蓝(#005AFF)
+   字体：Inter，无衬线，大号标题 + 清晰信息层级
+   ============================================================ */
+
+:root {
+  --red: #E03A30;
+  --yellow: #FFC800;
+  --blue: #005AFF;
+  --white: #FFFFFF;
+  --black: #0A0A0A;
+  --gray-100: #F5F5F5;
+  --gray-200: #E8E8E8;
+  --gray-400: #999999;
+  --gray-600: #555555;
+  --gray-900: #1A1A1A;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  --max-width: 1440px;
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+body {
+  font-family: var(--font);
+  color: var(--black);
+  background: var(--white);
+  line-height: 1.5;
+}
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; border: none; background: none; }
+ul, ol { list-style: none; }
+img { max-width: 100%; display: block; }
+input { font-family: inherit; }
+
+/* ============================================================
+   布局工具类
+   ============================================================ */
+.container {
+  width: 100%;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+/* ============================================================
+   按钮
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 2rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: all 0.2s;
+}
+
+.btn-primary { background: var(--black); color: var(--white); }
+.btn-primary:hover { background: var(--red); }
+
+.btn-outline {
+  border: 2px solid var(--black);
+  background: transparent;
+  color: var(--black);
+}
+.btn-outline:hover { background: var(--black); color: var(--white); }
+
+.btn-danger { background: var(--red); color: var(--white); }
+.btn-danger:hover { opacity: 0.85; }
+
+/* ============================================================
+   输入框
+   ============================================================ */
+.input {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  font-size: 1rem;
+  border: 2px solid var(--gray-200);
+  background: var(--white);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.input:focus { border-color: var(--black); }
+.input::placeholder { color: var(--gray-400); }
+
+/* ============================================================
+   页面过渡
+   ============================================================ */
+.page-enter-active,
+.page-leave-active { transition: opacity 0.3s; }
+.page-enter-from,
+.page-leave-to { opacity: 0; }
