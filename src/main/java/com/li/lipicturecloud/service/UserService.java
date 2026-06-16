@@ -68,6 +68,20 @@ public interface UserService extends IService<User> {
     UserVO getLoginUser(HttpServletRequest request);
 
     /**
+     * 获取当前登录用户（完整实体）
+     * <p>
+     * 先从 Session 中取出 UserVO 获取用户 ID，
+     * 再从数据库查询完整的 User 实体（含密码密文、审核相关字段等）。
+     * <b>仅在需要完整 User 实体的场景使用</b>（如审核时需要 reviewerId），
+     * 一般场景请使用 {@link #getLoginUser(HttpServletRequest)}。
+     *
+     * @param request HTTP 请求对象，用于获取 Session
+     * @return 当前登录用户的完整实体
+     * @throws com.li.lipicturecloud.exception.BusinessException 未登录 / 用户不存在时抛出
+     */
+    User getLoginUserEntity(HttpServletRequest request);
+
+    /**
      * 判断当前请求是否已登录
      *
      * @param request HTTP 请求对象
@@ -147,7 +161,15 @@ public interface UserService extends IService<User> {
      * @param user
      * @return
      */
+    /**
+     * 是否为管理员（UserVO 版本）
+     */
     boolean isAdmin(UserVO userVO);
+
+    /**
+     * 是否为管理员（User 实体版本）
+     */
+    boolean isAdmin(User user);
 
     UserVO getUserVO(User user);
 

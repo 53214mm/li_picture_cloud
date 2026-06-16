@@ -1,13 +1,10 @@
 <template>
   <div class="detail-page">
     <div class="container">
-      <!-- 返回 -->
       <button class="back-btn" @click="$router.back()">&larr; 返回图库</button>
 
-      <!-- 加载 -->
       <div v-if="loading" class="loading">加载中…</div>
 
-      <!-- 详情 -->
       <template v-else-if="picture">
         <div class="detail-layout">
           <!-- 图片展示区 -->
@@ -23,6 +20,12 @@
             <div class="author" v-if="picture.user">
               <span class="author-avatar">{{ picture.user.userName?.charAt(0) }}</span>
               <span>{{ picture.user.userName }}</span>
+            </div>
+
+            <!-- 审核状态 -->
+            <div class="review-badge" :class="reviewClass" v-if="picture.reviewStatus !== undefined">
+              {{ reviewText }}
+              <small v-if="picture.reviewMessage"> — {{ picture.reviewMessage }}</small>
             </div>
 
             <!-- 简介 -->
@@ -55,6 +58,10 @@
                 <dt>编辑时间</dt>
                 <dd>{{ formatDate(picture.editTime) }}</dd>
               </div>
+              <div v-if="picture.reviewTime">
+                <dt>审核时间</dt>
+                <dd>{{ formatDate(picture.reviewTime) }}</dd>
+              </div>
             </dl>
 
             <!-- 标签 -->
@@ -62,7 +69,23 @@
               <span v-for="tag in picture.tags" :key="tag" class="tag-badge">{{ tag }}</span>
             </div>
 
-            <!-- 操作按钮 -->
+            <!-- 管理员审核操作 -->
+            <div class="review-actions" v-if="userStore.isAdmin && picture.reviewStatus === 0">
+              <div class="field">
+                <span>审核信息（可选）</span>
+                <input v-model="reviewMessage" class="input" placeholder="通过或拒绝的理由" />
+              </div>
+              <div class="review-btns">
+                <button class="btn btn-danger" @click="handleReview(2)" :disabled="reviewing">
+                  {{ reviewing ? '处理中…' : '拒绝' }}
+                </button>
+                <button class="btn btn-primary" @click="handleReview(1)" :disabled="reviewing">
+                  {{ reviewing ? '处理中…' : '通过' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 编辑/删除按钮 -->
             <div class="actions" v-if="canEdit">
               <button class="btn btn-outline" @click="openEditModal">编辑信息</button>
               <button class="btn btn-danger" @click="handleDelete">删除图片</button>
@@ -71,7 +94,6 @@
         </div>
       </template>
 
-      <!-- 不存在 -->
       <div v-else class="empty-state">图片不存在或已被删除</div>
     </div>
 
@@ -116,7 +138,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { getPictureVOById, editPicture, deletePicture, getPictureTagCategory } from '@/api/picture'
+import { getPictureVOById, editPicture, deletePicture, reviewPicture, getPictureTagCategory } from '@/api/picture'
 
 const route = useRoute()
 const router = useRouter()
@@ -125,10 +147,26 @@ const userStore = useUserStore()
 const picture = ref(null)
 const loading = ref(false)
 const categoryList = ref([])
+const reviewMessage = ref('')
+const reviewing = ref(false)
 
 const canEdit = computed(() => {
   if (!userStore.isLoggedIn || !picture.value) return false
   return userStore.isAdmin || picture.value.userId === userStore.currentUser?.id
+})
+
+const reviewClass = computed(() => {
+  const s = picture.value?.reviewStatus
+  if (s === 1) return 'review-pass'
+  if (s === 2) return 'review-reject'
+  return 'review-pending'
+})
+
+const reviewText = computed(() => {
+  const s = picture.value?.reviewStatus
+  if (s === 1) return '✅ 已通过'
+  if (s === 2) return '❌ 已拒绝'
+  return '⏳ 待审核'
 })
 
 // 编辑弹窗
@@ -155,6 +193,24 @@ onMounted(async () => {
   }
 })
 
+async function handleReview(status) {
+  reviewing.value = true
+  try {
+    await reviewPicture({
+      id: picture.value.id,
+      reviewStatus: status,
+      reviewMessage: reviewMessage.value || (status === 1 ? '通过' : '拒绝')
+    })
+    // 刷新
+    picture.value = await getPictureVOById(picture.value.id)
+    reviewMessage.value = ''
+  } catch (e) {
+    alert(e.message || '审核操作失败')
+  } finally {
+    reviewing.value = false
+  }
+}
+
 function openEditModal() {
   editForm.name = picture.value.name || ''
   editForm.introduction = picture.value.introduction || ''
@@ -167,10 +223,7 @@ async function handleEdit() {
   modalError.value = ''
   saving.value = true
   try {
-    const tags = editForm.tagsStr
-      .split(/[,，]/)
-      .map(t => t.trim())
-      .filter(Boolean)
+    const tags = editForm.tagsStr.split(/[,，]/).map(t => t.trim()).filter(Boolean)
     await editPicture({
       id: picture.value.id,
       name: editForm.name,
@@ -179,7 +232,6 @@ async function handleEdit() {
       tags
     })
     showEditModal.value = false
-    // 刷新数据
     picture.value = await getPictureVOById(picture.value.id)
   } catch (e) {
     modalError.value = e.message || '编辑失败'
@@ -213,58 +265,62 @@ function formatSize(bytes) {
 <style scoped>
 .detail-page { padding: 2rem 0 5rem; }
 
-/* 返回按钮 */
 .back-btn {
   display: inline-flex; align-items: center; gap: 0.5rem;
   font-size: 0.875rem; font-weight: 500; margin-bottom: 2rem;
 }
 .back-btn:hover { color: var(--red); }
 
-/* 布局 */
 .detail-layout {
   display: grid; grid-template-columns: 1fr 1fr; gap: 3rem;
   align-items: start;
 }
 
-/* 图片 */
 .image-area {
   border: 2px solid var(--black);
   overflow: hidden;
 }
 .main-image { width: 100%; display: block; }
 
-/* 信息 */
 .pic-name { font-size: 2rem; font-weight: 700; letter-spacing: -0.04em; margin-bottom: 1rem; }
-.author { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.9375rem; }
+.author { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; font-size: 0.9375rem; }
 .author-avatar {
   width: 2rem; height: 2rem; border-radius: 50%;
   background: var(--black); color: var(--white);
   display: flex; align-items: center; justify-content: center;
   font-size: 0.75rem; font-weight: 600;
 }
+
+/* 审核状态 */
+.review-badge {
+  display: inline-block; padding: 0.375rem 1rem;
+  font-size: 0.875rem; font-weight: 600; margin-bottom: 1rem;
+}
+.review-pending { background: var(--yellow); color: var(--black); }
+.review-pass { background: #EFF9F0; color: #1A7A2E; border: 1px solid #1A7A2E; }
+.review-reject { background: #FFF0EF; color: var(--red); border: 1px solid var(--red); }
+
 .intro { font-size: 1rem; line-height: 1.7; margin-bottom: 1.5rem; color: var(--gray-900); }
 .intro.empty { color: var(--gray-400); }
 
-/* 元数据网格 */
 .meta-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
-  margin-bottom: 1.5rem;
-  padding: 1.25rem; background: var(--gray-100);
+  margin-bottom: 1.5rem; padding: 1.25rem; background: var(--gray-100);
 }
 .meta-grid dt { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--gray-400); margin-bottom: 0.25rem; }
 .meta-grid dd { font-size: 0.9375rem; font-weight: 500; }
 
-/* 标签 */
-.tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 2rem; }
-.tag-badge {
-  padding: 0.375rem 1rem; font-size: 0.8125rem; font-weight: 500;
-  background: var(--black); color: var(--white);
-}
+.tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem; }
+.tag-badge { padding: 0.375rem 1rem; font-size: 0.8125rem; font-weight: 500; background: var(--black); color: var(--white); }
 
-/* 操作 */
+/* 审核操作 */
+.review-actions {
+  padding: 1.25rem; background: var(--gray-100); margin-bottom: 1.5rem;
+}
+.review-btns { display: flex; gap: 0.75rem; margin-top: 0.75rem; }
+
 .actions { display: flex; gap: 0.75rem; }
 
-/* 弹窗 */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.5);
   display: flex; align-items: center; justify-content: center; z-index: 200;
@@ -279,13 +335,9 @@ function formatSize(bytes) {
 .modal-actions .btn { flex: 1; }
 .field { display: flex; flex-direction: column; gap: 0.375rem; }
 .field span { font-size: 0.8125rem; font-weight: 600; }
-.form-error {
-  padding: 0.5rem 0.75rem; background: #FFF0EF; color: var(--red);
-  font-size: 0.8125rem; font-weight: 500;
-}
+.form-error { padding: 0.5rem 0.75rem; background: #FFF0EF; color: var(--red); font-size: 0.8125rem; font-weight: 500; }
 .textarea { resize: vertical; min-height: 80px; font-family: inherit; }
 
-/* 状态 */
 .loading { text-align: center; padding: 4rem 0; color: var(--gray-400); }
 .empty-state { text-align: center; padding: 5rem 0; color: var(--gray-400); font-size: 1.125rem; }
 

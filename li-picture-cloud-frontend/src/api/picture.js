@@ -29,13 +29,20 @@ export function deletePicture(id) {
   return request.post('/picture/delete', { id })
 }
 
-// ==================== 管理员接口 ====================
+// ==================== 登录用户接口 ====================
 
-/** 上传图片（需 admin） */
+/** 上传图片（所有登录用户均可上传，非管理员需审核） */
 export function uploadPicture(formData) {
   return request.post('/picture/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
+}
+
+// ==================== 管理员接口 ====================
+
+/** 审核图片（管理员） */
+export function reviewPicture(data) {
+  return request.post('/picture/review', data)
 }
 
 /** 更新图片（管理员可修改任意图片） */
@@ -43,7 +50,7 @@ export function updatePicture(data) {
   return request.post('/picture/update', data)
 }
 
-/** 分页获取原始图片列表（管理员） */
+/** 分页获取原始图片列表（管理员，可查看全部审核状态） */
 export function listPictureByPage(data) {
   return request.post('/picture/list/page', data)
 }

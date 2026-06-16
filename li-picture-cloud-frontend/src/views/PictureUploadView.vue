@@ -3,41 +3,66 @@
     <div class="container">
       <div class="upload-card">
         <h1>上传图片</h1>
-        <p class="subtitle">支持 JPG、JPEG、PNG、WEBP 格式，单文件不超过 2MB</p>
+        <p class="subtitle">支持 JPG/JPEG/PNG/WEBP 格式，单文件不超过 2MB。也可通过图片 URL 上传。</p>
 
-        <form @submit.prevent="handleUpload" class="upload-form">
-          <!-- 文件选择 -->
-          <div
-            class="drop-zone"
-            :class="{ 'has-file': file, 'dragover': dragOver }"
-            @dragover.prevent="dragOver = true"
-            @dragleave="dragOver = false"
-            @drop.prevent="onDrop"
-          >
-            <input
-              ref="fileInput"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              class="file-input-hidden"
-              @change="onFileChange"
-            />
-            <template v-if="file">
-              <img :src="previewUrl" class="preview-img" />
-              <div class="file-info">
-                <strong>{{ file.name }}</strong>
-                <span>{{ formatSize(file.size) }}</span>
-              </div>
-              <button type="button" class="btn btn-outline btn-sm" @click="clearFile">重新选择</button>
-            </template>
-            <template v-else>
-              <div class="drop-prompt">
-                <span class="drop-icon">📁</span>
-                <p>拖拽图片到此处，或点击选择文件</p>
-              </div>
-            </template>
-          </div>
+        <!-- 模式切换 -->
+        <div class="mode-tabs">
+          <button
+            class="mode-tab"
+            :class="{ active: uploadMode === 'file' }"
+            @click="switchMode('file')"
+          >📁 文件上传</button>
+          <button
+            class="mode-tab"
+            :class="{ active: uploadMode === 'url' }"
+            @click="switchMode('url')"
+          >🔗 URL 上传</button>
+        </div>
 
-          <!-- 图片名称 -->
+        <form @submit.prevent="handleSubmit" class="upload-form">
+          <!-- ===== 文件上传模式 ===== -->
+          <template v-if="uploadMode === 'file'">
+            <div
+              class="drop-zone"
+              :class="{ 'has-file': file, 'dragover': dragOver }"
+              @dragover.prevent="dragOver = true"
+              @dragleave="dragOver = false"
+              @drop.prevent="onDrop"
+              @click="fileInput?.click()"
+            >
+              <input
+                ref="fileInput"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                class="file-input-hidden"
+                @change="onFileChange"
+              />
+              <template v-if="file">
+                <img :src="previewUrl" class="preview-img" />
+                <div class="file-info">
+                  <strong>{{ file.name }}</strong>
+                  <span>{{ formatSize(file.size) }}</span>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" @click.stop="clearFile">重新选择</button>
+              </template>
+              <template v-else>
+                <div class="drop-prompt">
+                  <span class="drop-icon">📁</span>
+                  <p>拖拽图片到此处，或点击选择文件</p>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- ===== URL 上传模式 ===== -->
+          <template v-if="uploadMode === 'url'">
+            <div class="field">
+              <span>图片 URL</span>
+              <input v-model="urlInput" class="input" placeholder="https://example.com/image.jpg" />
+            </div>
+          </template>
+
+          <!-- 图片名称（两种模式通用） -->
           <div class="field">
             <span>图片名称（可选）</span>
             <input v-model="form.name" class="input" placeholder="为图片命名" />
@@ -52,7 +77,7 @@
 
           <div class="form-actions">
             <router-link to="/gallery" class="btn btn-outline">取消</router-link>
-            <button type="submit" class="btn btn-primary" :disabled="!file || uploading">
+            <button type="submit" class="btn btn-primary" :disabled="!canSubmit || uploading">
               {{ uploading ? '上传中…' : '上传图片' }}
             </button>
           </div>
@@ -67,16 +92,19 @@ import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { uploadPicture } from '@/api/picture'
+import request from '@/api/request'
 
 const router = useRouter()
 const userStore = useUserStore()
 
-// 权限守卫
-if (!userStore.isAdmin) router.replace('/login')
+// 权限守卫：需要登录
+if (!userStore.isLoggedIn) router.replace('/login')
 
+const uploadMode = ref('file')
 const fileInput = ref(null)
 const file = ref(null)
 const previewUrl = ref('')
+const urlInput = ref('')
 const dragOver = ref(false)
 const uploading = ref(false)
 const error = ref('')
@@ -84,6 +112,17 @@ const success = ref(false)
 const uploadedId = ref(null)
 const form = reactive({ name: '' })
 
+const canSubmit = computed(() => {
+  if (uploadMode.value === 'file') return !!file.value
+  return !!urlInput.value.trim()
+})
+
+function switchMode(mode) {
+  uploadMode.value = mode
+  error.value = ''
+}
+
+// ===== 文件模式 =====
 function onDrop(e) {
   dragOver.value = false
   const f = e.dataTransfer.files[0]
@@ -96,7 +135,6 @@ function onFileChange(e) {
 }
 
 function selectFile(f) {
-  // 前端校验
   const allowed = ['image/jpeg', 'image/png', 'image/webp']
   if (!allowed.includes(f.type)) {
     error.value = '仅支持 JPG、JPEG、PNG、WEBP 格式'
@@ -117,24 +155,24 @@ function clearFile() {
   if (fileInput.value) fileInput.value.value = ''
 }
 
-async function handleUpload() {
-  if (!file.value) return
+// ===== 提交 =====
+async function handleSubmit() {
   error.value = ''
   uploading.value = true
   try {
-    const formData = new FormData()
-    formData.append('file', file.value)
-    if (form.name.trim()) {
-      // 注意：后端 PictureUploadRequest 通过 JSON body 传递
-      // 这里需要用 Blob 方式传递 JSON
-      formData.append('pictureUploadRequest', new Blob(
-        [JSON.stringify({ name: form.name.trim() })],
-        { type: 'application/json' }
-      ))
+    let result
+    if (uploadMode.value === 'file') {
+      // 文件上传
+      const formData = new FormData()
+      formData.append('file', file.value)
+      result = await uploadPicture(formData)
+    } else {
+      // URL 上传
+      result = await request.post('/picture/upload/url', {
+        fileUrl: urlInput.value.trim(),
+        name: form.name.trim()
+      })
     }
-    // 实际上后端用 @RequestPart 接收，需要用正确的参数名
-    // 暂时通过 FormData 直接传 file，name 等后续再处理
-    const result = await uploadPicture(formData)
     uploadedId.value = result.id
     success.value = true
     setTimeout(() => router.push(`/picture/${result.id}`), 2000)
@@ -167,17 +205,22 @@ function formatSize(bytes) {
   padding: 3rem 2.5rem;
 }
 .upload-card h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.04em; margin-bottom: 0.5rem; }
-.subtitle { color: var(--gray-600); font-size: 0.9375rem; margin-bottom: 2rem; }
+.subtitle { color: var(--gray-600); font-size: 0.9375rem; margin-bottom: 1.5rem; }
 .upload-form { display: flex; flex-direction: column; gap: 1.25rem; }
+
+/* 模式切换 */
+.mode-tabs { display: flex; gap: 0; margin-bottom: 1rem; border: 2px solid var(--black); }
+.mode-tab {
+  flex: 1; padding: 0.625rem 1rem; font-size: 0.875rem; font-weight: 600;
+  background: var(--white); border: none; cursor: pointer; transition: all 0.2s;
+}
+.mode-tab.active { background: var(--black); color: var(--white); }
 
 /* 拖拽区域 */
 .drop-zone {
   border: 2px dashed var(--gray-200);
-  padding: 2rem;
-  text-align: center;
-  cursor: pointer;
+  padding: 2rem; text-align: center; cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
-  position: relative;
 }
 .drop-zone:hover,
 .drop-zone.dragover { border-color: var(--black); background: var(--gray-100); }

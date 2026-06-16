@@ -291,6 +291,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     /**
+     * 获取当前登录用户（完整实体）
+     * <p>
+     * 先从 Session 中取出 UserVO 获取用户 ID，
+     * 再从数据库查询完整的 User 实体。
+     * 适用场景：图片审核（需要 reviewerId）等需要完整 User 数据的操作。
+     */
+    @Override
+    public User getLoginUserEntity(HttpServletRequest request) {
+        // 复用 getLoginUser 获取 Session 中的 UserVO，拿到用户 ID
+        UserVO userVO = getLoginUser(request);
+        // 根据 ID 从数据库查询完整 User 实体
+        User user = this.getById(userVO.getId());
+        if (user == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "用户不存在");
+        }
+        return user;
+    }
+
+    /**
      * 判断当前请求是否已登录
      *
      * @param request HTTP 请求对象
@@ -536,6 +555,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     @Override
     public boolean isAdmin(UserVO userVO) {
         return userVO != null && UserRoleEnum.ADMIN.getValue().equals(userVO.getUserRole());
+    }
+
+    @Override
+    public boolean isAdmin(User user) {
+        return user != null && UserRoleEnum.ADMIN.getValue().equals(user.getUserRole());
     }
 
     @Override

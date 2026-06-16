@@ -3,9 +3,11 @@ package com.li.lipicturecloud.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.li.lipicturecloud.model.dto.picture.PictureQueryRequest;
+import com.li.lipicturecloud.model.dto.picture.PictureReviewRequest;
 import com.li.lipicturecloud.model.dto.picture.PictureUploadRequest;
 import com.li.lipicturecloud.model.entity.Picture;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.li.lipicturecloud.model.entity.User;
 import com.li.lipicturecloud.model.vo.UserVO;
 import com.li.lipicturecloud.model.vo.PictureVO;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,16 +21,16 @@ import org.springframework.web.multipart.MultipartFile;
 public interface PictureService extends IService<Picture> {
 
     /**
-     * 上传图片
+     * 上传图片（统一入口：支持 MultipartFile 文件上传和 String URL 上传）
      *
-     * @param multipartFile
-     * @param pictureUploadRequest
-     * @param loginUser  当前登录用户（UserVO 脱敏视图）
-     * @return
+     * @param inputSource          输入源（MultipartFile 或 String fileUrl）
+     * @param pictureUploadRequest 上传请求（可含 id 表示更新）
+     * @param loginUser            当前登录用户（完整实体）
+     * @return PictureVO
      */
-    PictureVO uploadPicture(MultipartFile multipartFile,
+    PictureVO uploadPicture(Object inputSource,
                             PictureUploadRequest pictureUploadRequest,
-                            UserVO loginUser);
+                            User loginUser);
 
 
     /**
@@ -44,4 +46,15 @@ public interface PictureService extends IService<Picture> {
     Page<PictureVO> getPictureVOPage(Page<Picture> picturePage, HttpServletRequest request);
 
     void validPicture(Picture picture);
+
+    /**
+     * 图片审核
+     *
+     * @param pictureReviewRequest
+     * @param loginUser
+     */
+    void doPictureReview(PictureReviewRequest pictureReviewRequest, User loginUser);
+
+
+    void fillReviewParams(Picture picture, User loginUser);
 }

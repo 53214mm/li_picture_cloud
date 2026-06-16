@@ -7,8 +7,11 @@
       <div class="nav-links">
         <router-link to="/gallery">探索</router-link>
         <template v-if="userStore.isLoggedIn">
-          <router-link v-if="userStore.isAdmin" to="/upload">上传</router-link>
-          <router-link v-if="userStore.isAdmin" to="/admin/users">管理</router-link>
+          <router-link to="/upload">上传</router-link>
+          <template v-if="userStore.isAdmin">
+            <router-link to="/admin/pictures">审核</router-link>
+            <router-link to="/admin/users">用户</router-link>
+          </template>
           <span class="nav-user">{{ userStore.currentUser?.userName }}</span>
           <button class="nav-btn" @click="handleLogout">登出</button>
         </template>

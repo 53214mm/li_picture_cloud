@@ -256,27 +256,50 @@ GET /user/get?id=1823456789012345678
 
 ## 三、图片接口 `/picture`
 
-### 3.1 上传图片
+### 3.1 文件上传图片
 
 ```
 POST /picture/upload
 Content-Type: multipart/form-data
-需要 admin 角色
+需要登录
 
 表单参数：
   file:                    (binary)  图片文件，≤2MB，格式：jpg/jpeg/png/webp
-  pictureUploadRequest:    (JSON)    可选 JSON 部分
 
-pictureUploadRequest 示例：
+成功响应：
+{ "code": 0, "data": { PictureVO } }
+
+注意：非管理员上传的图片将进入"待审核"状态，管理员自动过审。
+```
+
+### 3.2 URL 上传图片
+
+```
+POST /picture/upload/url
+Content-Type: application/json
+需要登录
+
+请求体：
 {
-  "id": 1823456789012345678   // 可选，传入则为更新已有图片
+  "fileUrl": "https://example.com/image.jpg"   // 必填，图片 URL（http/https）
 }
 
 成功响应：
 { "code": 0, "data": { PictureVO } }
+
+后端校验流程：
+1. URL 格式验证（必须是合法的 http/https URL）
+2. HEAD 请求验证文件存在（状态码 200）
+3. Content-Type 白名单（image/jpeg, image/png, image/webp）
+4. Content-Length ≤ 2MB
+5. 下载文件 → COS 上传 → 提取元数据
+
+可能错误：
+- 40000: 文件地址不能为空 / 文件地址格式不正确 / 仅支持 HTTP(S) 协议
+- 40000: 文件不存在或无法访问 / 文件类型错误 / 文件大小不能超过 2M
 ```
 
-### 3.2 删除图片
+### 3.3 删除图片
 
 ```
 POST /picture/delete
@@ -432,6 +455,39 @@ GET /picture/tag_category
 ```
 
 前端用此接口渲染搜索页面的标签筛选和分类下拉框。
+
+### 3.10 图片审核（管理员）
+
+```
+POST /picture/review
+需要 admin 角色
+
+请求体：
+{
+  "id": 1823456789012345678,       // 必填，图片 ID
+  "reviewStatus": 1,                // 必填：1=通过, 2=拒绝（不允许设为 0=待审核）
+  "reviewMessage": "画面清晰，审核通过" // 可选，审核意见
+}
+
+成功响应：
+{ "code": 0, "data": true }
+
+可能错误：
+- 40000: 请求参数为空 / id 为空 / 状态无效 / 不允许设为待审核
+- 40000: 请勿重复审核（已是该状态）
+- 40400: 图片不存在
+- 40101: 无权限（非管理员）
+```
+
+### 3.11 图片列表公开查询（审核过滤说明）
+
+```
+POST /picture/list/page/vo
+公开 — 自动过滤仅显示 reviewStatus=1（已通过）的数据
+
+后端自动设置：
+pictureQueryRequest.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
+```
 
 ---
 

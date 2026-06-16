@@ -36,6 +36,11 @@ const routes = [
     path: '/admin/users',
     name: 'admin-users',
     component: () => import('@/views/AdminUserView.vue')
+  },
+  {
+    path: '/admin/pictures',
+    name: 'admin-pictures',
+    component: () => import('@/views/PictureManageView.vue')
   }
 ]
 
