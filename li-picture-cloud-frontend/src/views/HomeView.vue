@@ -30,8 +30,9 @@
             :key="i"
             class="mosaic-item"
             :class="'mosaic-' + item.size"
-            :style="{ background: item.color }"
+            :style="{ backgroundImage: 'url(' + item.image + ')' }"
           >
+            <div class="mosaic-overlay"></div>
             <span class="mosaic-label">{{ item.label }}</span>
           </div>
         </div>
@@ -59,14 +60,14 @@ const features = [
 ]
 
 const mosaicItems = [
-  { label: '城市剪影', size: 'lg', color: '#1A1A1A' },
-  { label: '自然风光', size: 'sm', color: 'var(--blue)' },
-  { label: '人像写真', size: 'sm', color: 'var(--red)' },
-  { label: '抽象艺术', size: 'md', color: 'var(--yellow)' },
-  { label: '建筑设计', size: 'sm', color: '#2D2D2D' },
-  { label: '旅行日记', size: 'lg', color: 'var(--red)' },
-  { label: '黑白纪实', size: 'sm', color: '#3A3A3A' },
-  { label: '静物摄影', size: 'sm', color: 'var(--blue)' },
+  { label: '城市剪影', size: 'lg', image: '/images/mosaic/city.jpg' },
+  { label: '自然风光', size: 'sm', image: '/images/mosaic/nature.jpg' },
+  { label: '人像写真', size: 'sm', image: '/images/mosaic/portrait.jpg' },
+  { label: '抽象艺术', size: 'md', image: '/images/mosaic/abstract.jpg' },
+  { label: '建筑设计', size: 'sm', image: '/images/mosaic/architecture.jpg' },
+  { label: '旅行日记', size: 'lg', image: '/images/mosaic/travel.jpg' },
+  { label: '黑白纪实', size: 'sm', image: '/images/mosaic/bw.jpg' },
+  { label: '静物摄影', size: 'sm', image: '/images/mosaic/still-life.jpg' },
 ]
 </script>
 
@@ -111,12 +112,19 @@ const mosaicItems = [
   display: flex; align-items: flex-end;
   padding: 1.25rem;
   transition: transform 0.3s;
+  background-size: cover;
+  background-position: center;
 }
 .mosaic-item:hover { transform: scale(0.97); }
+.mosaic-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(transparent 50%, rgba(0,0,0,0.55));
+}
 .mosaic-lg { grid-column: span 2; grid-row: span 2; }
 .mosaic-md { grid-column: span 2; grid-row: span 1; }
 .mosaic-sm { grid-column: span 1; grid-row: span 1; }
 .mosaic-label {
+  position: relative; z-index: 1;
   color: var(--white); font-size: 0.9375rem; font-weight: 600;
   letter-spacing: -0.01em;
 }

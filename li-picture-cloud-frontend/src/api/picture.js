@@ -40,6 +40,11 @@ export function uploadPicture(formData) {
 
 // ==================== 管理员接口 ====================
 
+/** 批量抓取图片（管理员，从必应抓取，超时 5 分钟） */
+export function uploadPictureByBatch(data) {
+  return request.post('/picture/upload/batch', data, { timeout: 5 * 60 * 1000 })
+}
+
 /** 审核图片（管理员） */
 export function reviewPicture(data) {
   return request.post('/picture/review', data)

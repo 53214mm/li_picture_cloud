@@ -90,8 +90,13 @@
       <!-- 分页 -->
       <div class="pagination" v-if="total > query.pageSize">
         <button :disabled="query.current <= 1" @click="goPage(query.current - 1)">上一页</button>
-        <span>第 {{ query.current }} 页 / 共 {{ totalPages }} 页 ({{ total }} 张)</span>
+        <span>第 {{ query.current }} / {{ totalPages }} 页 ({{ total }} 张)</span>
         <button :disabled="query.current >= totalPages" @click="goPage(query.current + 1)">下一页</button>
+        <span class="jumper">跳至
+          <input v-model.number="jumpPage" class="jump-input" @keyup.enter="goPage(jumpPage)" placeholder="页数" />
+          页
+          <button class="btn-jump" @click="goPage(jumpPage)">GO</button>
+        </span>
       </div>
     </div>
   </div>
@@ -125,6 +130,16 @@ const query = reactive({
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / query.pageSize)))
+const jumpPage = ref(null)
+
+function goPage(page) {
+  if (!page || page < 1) page = 1
+  if (page > totalPages.value) page = totalPages.value
+  query.current = page
+  jumpPage.value = null
+  loadPictures()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
 
 onMounted(async () => {
   try {
@@ -164,12 +179,6 @@ function toggleTag(tag) {
     query.tags.push(tag)
   }
   handleSearch()
-}
-
-function goPage(page) {
-  query.current = page
-  loadPictures()
-  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 function goDetail(id) {
@@ -260,4 +269,12 @@ function formatDate(d) {
 .pagination button { font-weight: 600; padding: 0.5rem 1rem; border: 2px solid var(--black); }
 .pagination button:disabled { opacity: 0.3; cursor: default; }
 .pagination button:hover:not(:disabled) { background: var(--black); color: var(--white); }
+.jumper { font-size: 0.8125rem; color: var(--gray-600); display: flex; align-items: center; gap: 0.375rem; }
+.jump-input {
+  width: 56px; padding: 0.375rem 0.5rem; text-align: center;
+  border: 1.5px solid var(--gray-200); font-size: 0.8125rem; font-family: inherit; outline: none;
+}
+.jump-input:focus { border-color: var(--black); }
+.btn-jump { padding: 0.25rem 0.625rem; font-size: 0.75rem; font-weight: 600; border: 1.5px solid var(--black); background: var(--white); cursor: pointer; }
+.btn-jump:hover { background: var(--black); color: var(--white); }
 </style>

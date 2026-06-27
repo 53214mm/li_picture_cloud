@@ -3,6 +3,8 @@ package com.li.lipicturecloud.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -14,6 +16,7 @@ import com.li.lipicturecloud.manager.upload.PictureUploadTemplate;
 import com.li.lipicturecloud.model.dto.file.UploadPictureResult;
 import com.li.lipicturecloud.model.dto.picture.PictureQueryRequest;
 import com.li.lipicturecloud.model.dto.picture.PictureReviewRequest;
+import com.li.lipicturecloud.model.dto.picture.PictureUploadByBatchRequest;
 import com.li.lipicturecloud.model.dto.picture.PictureUploadRequest;
 import com.li.lipicturecloud.model.entity.Picture;
 import com.li.lipicturecloud.model.entity.User;
@@ -25,15 +28,16 @@ import com.li.lipicturecloud.mapper.PictureMapper;
 import com.li.lipicturecloud.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.io.IOException;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -41,6 +45,7 @@ import java.util.stream.Collectors;
 * @description 针对表【picture(图片)】的数据库操作Service实现
 * @createDate 2026-06-10 17:23:29
 */
+@Slf4j
 @Service
 public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     implements PictureService{
@@ -89,7 +94,12 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         // 构造要入库的图片信息
         Picture picture = new Picture();
         picture.setUrl(uploadPictureResult.getUrl());
-        picture.setName(uploadPictureResult.getPicName());
+        String picName = uploadPictureResult.getPicName();
+        if (pictureUploadRequest != null && StrUtil.isNotBlank(pictureUploadRequest.getPicName())) {
+            picName = pictureUploadRequest.getPicName();
+        }
+        picture.setName(picName);
+
         picture.setPicSize(uploadPictureResult.getPicSize());
         picture.setPicWidth(uploadPictureResult.getPicWidth());
         picture.setPicHeight(uploadPictureResult.getPicHeight());
@@ -265,7 +275,163 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
     }
 
+    /**
+     * 批量上传图片（从必应图片搜索抓取）
+     * <p>
+     * 通过调用必应图片的异步搜索接口，根据关键词抓取图片链接，
+     * 然后逐张调用单图上传方法，将图片保存到系统中。
+     * 为降低被目标网站封禁的风险，在每次请求后加入随机延迟（模拟人类操作）。
+     * 同时支持为图片设置自定义名称前缀，并自动添加序号。
+     * </p>
+     *
+     * @param pictureUploadByBatchRequest 批量上传请求参数，包含搜索关键词、期望上传数量和名称前缀
+     * @param loginUser                    当前登录用户，用于记录上传者信息
+     * @return 实际成功上传的图片数量
+     * @throws BusinessException 当抓取页面失败、解析元素失败或参数校验不通过时抛出
+     */
+    @Override
+    public Integer uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, User loginUser) {
+        // ----- 1. 参数校验与提取 -----
+        String searchText = pictureUploadByBatchRequest.getSearchText();
+        ThrowUtils.throwIf(StrUtil.isBlank(searchText), ErrorCode.PARAMS_ERROR, "搜索词不能为空");
+
+        Integer count = pictureUploadByBatchRequest.getCount();
+        // 防止 JSON 中未传 count 导致 null → 自动拆箱 NPE
+        if (count == null) {
+            count = 10;
+        }
+        // 限制单次最大上传数量，防止资源滥用
+        ThrowUtils.throwIf(count > 30, ErrorCode.PARAMS_ERROR, "最多 30 条");
+
+        // 处理图片名称前缀：若未指定则使用搜索关键词作为默认前缀
+        String namePrefix = pictureUploadByBatchRequest.getNamePrefix();
+        if (StrUtil.isBlank(namePrefix)) {
+            namePrefix = searchText;
+        }
+
+        // ----- 2. 构造必应图片异步搜索接口的URL -----
+        // 对搜索词进行 URL 编码，防止中文/特殊字符导致请求失败
+        String encodedSearchText = cn.hutool.core.util.URLUtil.encode(searchText);
+        // first 参数控制偏移量，实现翻页避免重复抓取同一批图片
+        Integer offset = pictureUploadByBatchRequest.getOffset();
+        if (offset == null) offset = 0;
+        String fetchUrl = String.format("https://cn.bing.com/images/async?q=%s&first=%d&mmasync=1",
+                encodedSearchText, offset);
+
+        // ----- 3. 使用Jsoup发起HTTP请求，获取页面HTML文档 -----
+        Document document;
+        try {
+            // 设置 User-Agent 模拟浏览器，降低被屏蔽风险
+            document = Jsoup.connect(fetchUrl)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                    .get();
+        } catch (IOException e) {
+            log.error("获取必应页面失败", e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "获取页面失败");
+        }
+
+        // ----- 4. 从页面中提取图片列表容器 -----
+        // 必应异步接口返回的图片列表通常包裹在 class="dgControl" 的div中
+        Element div = document.getElementsByClass("dgControl").first();
+        if (ObjUtil.isNull(div)) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "获取元素失败");
+        }
+
+        // ----- 5. 选取所有 class="mimg" 的 img 标签，其 src 即为图片直链 -----
+        Elements imgElementList = div.select("img.mimg");
+
+        // ----- 6. 遍历图片元素，逐个上传 -----
+        int uploadCount = 0;                     // 记录实际上传成功数
+        int processedCount = 0;                 // 记录已处理图片数（用于序号生成）
+        Random random = new Random();            // 用于生成随机延迟时间
+
+        for (Element imgElement : imgElementList) {
+            processedCount++; // 每处理一个图片，计数器加1（无论成败）
+
+            // 6.1 提取原图 URL（优先从 a.iusc 的 m 属性 JSON 中取 murl）
+            String fileUrl = extractOriginalUrl(imgElement);
+            if (StrUtil.isBlank(fileUrl)) {
+                log.info("当前链接为空，已跳过");
+                continue;
+            }
+
+            // 6.2 构造单图上传请求，设置图片名称（前缀 + 序号）
+            PictureUploadRequest pictureUploadRequest = new PictureUploadRequest();
+            // 如果设置了名称前缀，则拼接当前处理的序号（从1开始）
+            // 注意：序号基于已处理数量，而非成功数量，确保即使某张失败，后续图片的序号依然连续
+            if (StrUtil.isNotBlank(namePrefix)) {
+                pictureUploadRequest.setPicName(namePrefix + processedCount);
+            }
+            // 其他业务参数（如分类、简介等）可根据需要补充，此处略
+
+            try {
+                // 调用单图上传（内部会使用 UrlPictureUpload 模板）
+                PictureVO pictureVO = this.uploadPicture(fileUrl, pictureUploadRequest, loginUser);
+                log.info("图片上传成功, id = {}, 名称 = {}", pictureVO.getId(), pictureUploadRequest.getPicName());
+                uploadCount++;
+            } catch (Exception e) {
+                // 单张图片上传失败时记录错误，继续处理下一张（不影响批量任务）
+                log.error("图片上传失败，URL: {}, 名称: {}", fileUrl, pictureUploadRequest.getPicName(), e);
+                // 注意：失败后同样需要延迟，避免连续失败触发风控
+            }
+
+            // ----- 7. 请求间隔控制（反爬策略）-----
+            // 每处理完一张图片（无论成败），随机休眠 500~1500ms，模拟人类操作间隔
+            // 随机延迟比固定延迟更难被识别为自动化工具，可有效降低被封风险
+            try {
+                int sleepMillis = 500 + random.nextInt(1000); // 范围 500~1500ms
+                Thread.sleep(sleepMillis);
+            } catch (InterruptedException e) {
+                // 当线程被中断时（例如外部停止任务），恢复中断状态并提前退出
+                Thread.currentThread().interrupt();
+                log.warn("批量上传过程中断，当前已成功上传 {} 张", uploadCount);
+                // 中断通常意味着需要停止任务，因此跳出循环
+                break;
+            }
+
+            // 6.4 判断是否已达到用户要求的上传数量
+            if (uploadCount >= count) {
+                break;
+            }
+        }
+
+        // ----- 8. 返回实际上传成功数 -----
+        return uploadCount;
+    }
 
 
+
+
+    /**
+     * 从 Bing 搜索结果的 img 元素中提取原图 URL
+     * 优先从父级 a.iusc 的 m 属性 JSON 中提取 murl，回退到升级缩略图分辨率
+     */
+    private String extractOriginalUrl(Element imgElement) {
+        // 策略 1：从 a.iusc 的 m 属性 JSON 中提取 murl（原图直链）
+        Element aTag = imgElement.parent();
+        if (aTag != null && "a".equals(aTag.tagName()) && aTag.hasClass("iusc")) {
+            String mAttr = aTag.attr("m");
+            if (StrUtil.isNotBlank(mAttr)) {
+                try {
+                    JSONObject json = JSONUtil.parseObj(mAttr);
+                    String murl = json.getStr("murl");
+                    if (StrUtil.isNotBlank(murl)) {
+                        log.debug("从 m 属性提取原图 URL 成功: {}", murl);
+                        return murl;
+                    }
+                } catch (Exception e) {
+                    log.debug("解析 m 属性 JSON 失败，回退: {}", e.getMessage());
+                }
+            }
+        }
+        // 策略 2：回退 - 读取 src 并升级 Bing 缩略图分辨率
+        String src = imgElement.attr("data-src");
+        if (StrUtil.isBlank(src)) src = imgElement.attr("src");
+        if (StrUtil.isBlank(src)) return null;
+        int qIdx = src.indexOf("?");
+        if (qIdx > -1) src = src.substring(0, qIdx);
+        if (src.contains("bing.net/th")) src = src.replaceFirst("pid=[\\d.]+", "pid=1.1");
+        return src;
+    }
 
 }

@@ -8,8 +8,9 @@
       <template v-else-if="picture">
         <div class="detail-layout">
           <!-- 图片展示区 -->
-          <div class="image-area">
+          <div class="image-area" @click="showFullscreen = true" title="点击全屏查看">
             <img :src="picture.url" :alt="picture.name" class="main-image" />
+            <span class="zoom-hint">🔍 点击全屏</span>
           </div>
 
           <!-- 信息区 -->
@@ -131,11 +132,33 @@
         </form>
       </div>
     </div>
+
+    <!-- 全屏查看 -->
+    <Teleport to="body">
+      <div
+        v-if="showFullscreen"
+        class="fullscreen-overlay"
+        @click="showFullscreen = false"
+        @keydown.esc="showFullscreen = false"
+      >
+        <div class="fullscreen-toolbar">
+          <span class="fs-name">{{ picture?.name || '未命名' }}</span>
+          <button class="fs-close" @click="showFullscreen = false" title="退出全屏 (Esc)">✕</button>
+        </div>
+        <img
+          :src="picture?.url"
+          :alt="picture?.name"
+          class="fullscreen-img"
+          @click.stop
+        />
+        <div class="fs-hint">点击背景或按 Esc 退出</div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getPictureVOById, editPicture, deletePicture, reviewPicture, getPictureTagCategory } from '@/api/picture'
@@ -149,6 +172,14 @@ const loading = ref(false)
 const categoryList = ref([])
 const reviewMessage = ref('')
 const reviewing = ref(false)
+const showFullscreen = ref(false)
+
+// ESC 键退出全屏
+function onKeydown(e) {
+  if (e.key === 'Escape') showFullscreen.value = false
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 const canEdit = computed(() => {
   if (!userStore.isLoggedIn || !picture.value) return false
@@ -340,6 +371,43 @@ function formatSize(bytes) {
 
 .loading { text-align: center; padding: 4rem 0; color: var(--gray-400); }
 .empty-state { text-align: center; padding: 5rem 0; color: var(--gray-400); font-size: 1.125rem; }
+
+/* 图片区全屏提示 */
+.image-area { position: relative; cursor: zoom-in; }
+.zoom-hint {
+  position: absolute; top: 0.75rem; right: 0.75rem;
+  padding: 0.25rem 0.75rem; font-size: 0.75rem; font-weight: 500;
+  background: rgba(0,0,0,0.65); color: var(--white);
+  opacity: 0; transition: opacity 0.2s;
+}
+.image-area:hover .zoom-hint { opacity: 1; }
+
+/* 全屏查看 */
+.fullscreen-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.fullscreen-toolbar {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 2rem; z-index: 1;
+}
+.fs-name { color: rgba(255,255,255,0.7); font-size: 1rem; font-weight: 500; }
+.fs-close {
+  width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; color: var(--white); background: rgba(255,255,255,0.1);
+  border: none; cursor: pointer; transition: background 0.2s;
+}
+.fs-close:hover { background: var(--red); }
+.fullscreen-img {
+  max-width: 95vw; max-height: 88vh;
+  object-fit: contain; user-select: none;
+}
+.fs-hint {
+  position: absolute; bottom: 1.5rem;
+  color: rgba(255,255,255,0.35); font-size: 0.8125rem;
+}
 
 @media (max-width: 768px) {
   .detail-layout { grid-template-columns: 1fr; }

@@ -51,9 +51,14 @@
 
       <!-- 分页 -->
       <div class="pagination" v-if="total > query.pageSize">
-        <button :disabled="query.current <= 1" @click="query.current--; loadUsers()">上一页</button>
-        <span>第 {{ query.current }} 页 / 共 {{ Math.ceil(total / query.pageSize) }} 页</span>
-        <button :disabled="query.current >= Math.ceil(total / query.pageSize)" @click="query.current++; loadUsers()">下一页</button>
+        <button :disabled="query.current <= 1" @click="goPage(query.current - 1)">上一页</button>
+        <span>第 {{ query.current }} / {{ totalPages }} 页</span>
+        <button :disabled="query.current >= totalPages" @click="goPage(query.current + 1)">下一页</button>
+        <span class="jumper">跳至
+          <input v-model.number="jumpPage" class="jump-input" @keyup.enter="goPage(jumpPage)" placeholder="页数" />
+          页
+          <button class="btn-jump" @click="goPage(jumpPage)">GO</button>
+        </span>
       </div>
 
       <!-- 创建 / 编辑弹窗 -->
@@ -103,7 +108,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { listUserByPage, addUser, updateUser, deleteUser } from '@/api/user'
@@ -117,6 +122,15 @@ if (!userStore.isAdmin) router.replace('/login')
 const users = ref([])
 const loading = ref(false)
 const total = ref(0)
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / query.pageSize)))
+const jumpPage = ref(null)
+function goPage(page) {
+  if (!page || page < 1) page = 1
+  if (page > totalPages.value) page = totalPages.value
+  query.current = page
+  jumpPage.value = null
+  loadUsers()
+}
 const query = reactive({ current: 1, pageSize: 10, userAccount: '', userName: '', userRole: '' })
 
 const showAddModal = ref(false)
@@ -222,6 +236,11 @@ function formatDate(d) {
 .pagination { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: 2rem; font-size: 0.875rem; }
 .pagination button { font-weight: 600; padding: 0.5rem 1rem; border: 2px solid var(--black); }
 .pagination button:disabled { opacity: 0.3; cursor: default; }
+.jumper { font-size: 0.8125rem; color: var(--gray-600); display: flex; align-items: center; gap: 0.375rem; }
+.jump-input { width: 56px; padding: 0.375rem 0.5rem; text-align: center; border: 1.5px solid var(--gray-200); font-size: 0.8125rem; font-family: inherit; outline: none; }
+.jump-input:focus { border-color: var(--black); }
+.btn-jump { padding: 0.25rem 0.625rem; font-size: 0.75rem; font-weight: 600; border: 1.5px solid var(--black); background: var(--white); cursor: pointer; }
+.btn-jump:hover { background: var(--black); color: var(--white); }
 
 /* 弹窗 */
 .modal-overlay {
