@@ -61,7 +61,7 @@
         <tbody>
           <tr v-for="pic in pictures" :key="pic.id">
             <td>
-              <img :src="pic.url" class="thumb" :alt="pic.name" />
+              <img :src="pic.thumbnailUrl || pic.url" class="thumb" :alt="pic.name" />
             </td>
             <td>
               <router-link :to="'/picture/' + pic.id" class="pic-link">{{ pic.name || '(无名称)' }}</router-link>

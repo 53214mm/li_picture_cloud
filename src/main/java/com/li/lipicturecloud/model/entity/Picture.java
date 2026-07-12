@@ -19,9 +19,19 @@ public class Picture {
     private Long id;
 
     /**
-     * 图片 url
+     * 图片 url（webp 高清）
      */
     private String url;
+
+    /**
+     * 缩略图 url
+     */
+    private String thumbnailUrl;
+
+    /**
+     * 原图 url（原始格式，用于下载）
+     */
+    private String originalUrl;
 
     /**
      * 图片名称

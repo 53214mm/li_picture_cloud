@@ -7,9 +7,9 @@ export function getPictureVOById(id) {
   return request.get('/picture/get/vo', { params: { id } })
 }
 
-/** 分页获取图片 VO 列表（公开，最多 20 条/页） */
+/** 分页获取图片 VO 列表（公开，最多 20 条/页，走缓存） */
 export function listPictureVOByPage(data) {
-  return request.post('/picture/list/page/vo', data)
+  return request.post('/picture/list/page/vo/cache', data)
 }
 
 /** 获取预设标签与分类 */

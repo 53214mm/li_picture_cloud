@@ -70,7 +70,7 @@
           @click="goDetail(pic.id)"
         >
           <img
-            :src="pic.url"
+            :src="pic.thumbnailUrl || pic.url"
             :alt="pic.name || '图片'"
             class="card-img"
             loading="lazy"
@@ -119,7 +119,7 @@ const tagList = ref([])
 const categoryList = ref([])
 
 const query = reactive({
-  current: 1,
+  current: Number(route.query.page) || 1,
   pageSize: 12,
   searchText: route.query.q || '',
   category: '',
@@ -132,11 +132,19 @@ const query = reactive({
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / query.pageSize)))
 const jumpPage = ref(null)
 
+function syncUrl() {
+  const q = {}
+  if (query.current > 1) q.page = query.current
+  if (query.searchText) q.q = query.searchText
+  router.replace({ query: q })
+}
+
 function goPage(page) {
   if (!page || page < 1) page = 1
   if (page > totalPages.value) page = totalPages.value
   query.current = page
   jumpPage.value = null
+  syncUrl()
   loadPictures()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -166,6 +174,7 @@ async function loadPictures() {
 
 function handleSearch() {
   query.current = 1
+  syncUrl()
   loadPictures()
 }
 

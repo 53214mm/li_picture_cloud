@@ -34,3 +34,10 @@ ALTER TABLE picture
 
 -- 创建基于 reviewStatus 列的索引
 CREATE INDEX idx_reviewStatus ON picture (reviewStatus);
+
+ALTER TABLE picture
+    -- 添加新列
+    ADD COLUMN thumbnailUrl varchar(512) NULL COMMENT '缩略图 url';
+
+ALTER TABLE picture
+    ADD COLUMN originalUrl varchar(512) NULL COMMENT '原图 url（原始格式，用于下载）';

@@ -86,10 +86,13 @@
               </div>
             </div>
 
-            <!-- 编辑/删除按钮 -->
-            <div class="actions" v-if="canEdit">
-              <button class="btn btn-outline" @click="openEditModal">编辑信息</button>
-              <button class="btn btn-danger" @click="handleDelete">删除图片</button>
+            <!-- 操作按钮 -->
+            <div class="actions">
+              <button class="btn btn-outline" @click="handleDownload">下载图片</button>
+              <template v-if="canEdit">
+                <button class="btn btn-outline" @click="openEditModal">编辑信息</button>
+                <button class="btn btn-danger" @click="handleDelete">删除图片</button>
+              </template>
             </div>
           </div>
         </div>
@@ -269,6 +272,13 @@ async function handleEdit() {
   } finally {
     saving.value = false
   }
+}
+
+function handleDownload() {
+  if (!picture.value?.id) return
+  const a = document.createElement('a')
+  a.href = `/api/picture/download/${picture.value.id}`
+  a.click()
 }
 
 async function handleDelete() {

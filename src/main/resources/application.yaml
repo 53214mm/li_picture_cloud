@@ -3,7 +3,7 @@ spring:
     name: li-picture-cloud
   datasource:
     username: root
-    password: 123456
+    password: ${MYSQL_PASSWORD:123456}
     url: jdbc:mysql://localhost:3306/li_picture_cloud_data?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     driver-class-name: com.mysql.cj.jdbc.Driver
   profiles:
@@ -11,6 +11,24 @@ spring:
   servlet:
     multipart:
       max-file-size: 10MB
+  # Redis 配置
+  data:
+    redis:
+      database: 15
+      host: 127.0.0.1
+      port: 6379
+      timeout: 5000
+      password: ${REDIS_PASSWORD:123456}
+  session:
+    store-type: redis
+    timeout: 2592000          # 30天（秒）
+    cookie:
+      max-age: 2592000        # 同样30天，与timeout保持同步
+  config:
+    activate:
+      on-profile: local
+
+
 
 server:
   port: 8124
