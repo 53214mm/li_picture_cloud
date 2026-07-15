@@ -2,10 +2,7 @@ package com.li.lipicturecloud.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.li.lipicturecloud.model.dto.picture.PictureQueryRequest;
-import com.li.lipicturecloud.model.dto.picture.PictureReviewRequest;
-import com.li.lipicturecloud.model.dto.picture.PictureUploadByBatchRequest;
-import com.li.lipicturecloud.model.dto.picture.PictureUploadRequest;
+import com.li.lipicturecloud.model.dto.picture.*;
 import com.li.lipicturecloud.model.entity.Picture;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.li.lipicturecloud.model.entity.User;
@@ -42,10 +39,26 @@ public interface PictureService extends IService<Picture> {
      */
     QueryWrapper<Picture> getQueryWrapper(PictureQueryRequest pictureQueryRequest);
 
+    /**
+     * 获取图片视图对象
+     * @param picture
+     * @param request
+     * @return
+     */
     PictureVO getPictureVO(Picture picture, HttpServletRequest request);
 
+    /**
+     * 获取图片视图对象分页
+     * @param picturePage
+     * @param request
+     * @return
+     */
     Page<PictureVO> getPictureVOPage(Page<Picture> picturePage, HttpServletRequest request);
 
+    /**
+     * 验证图片是否合法
+     * @param picture
+     */
     void validPicture(Picture picture);
 
     /**
@@ -57,6 +70,12 @@ public interface PictureService extends IService<Picture> {
     void doPictureReview(PictureReviewRequest pictureReviewRequest, User loginUser);
 
 
+    /**
+     * 填充图片审核参数
+     *
+     * @param picture
+     * @param loginUser
+     */
     void fillReviewParams(Picture picture, User loginUser);
 
     /**
@@ -70,5 +89,27 @@ public interface PictureService extends IService<Picture> {
             PictureUploadByBatchRequest pictureUploadByBatchRequest,
             User loginUser
     );
+
+    /**
+     * 检查用户是否有权限操作图片
+     *
+     * @param loginUser 当前登录用户
+     * @param picture   图片实体
+     */
+    void checkPictureAuth(User loginUser, Picture picture);
+
+    /**
+     * 删除图片
+     * @param pictureId
+     * @param loginUser
+     */
+    void deletePicture(long pictureId, User loginUser);
+
+    /**
+     * 编辑图片
+     * @param pictureEditRequest
+     * @param loginUser
+     */
+    void editPicture(PictureEditRequest pictureEditRequest, User loginUser);
 
 }

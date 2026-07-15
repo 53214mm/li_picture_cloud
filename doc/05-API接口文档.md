@@ -8,7 +8,7 @@
 |------|-----|
 | 基础 URL | `http://localhost:8124/api` |
 | 响应格式 | JSON，统一 `BaseResponse<T>` 封装 |
-| 认证方式 | Session（Cookie：`JSESSIONID`） |
+| 认证方式 | Session（Cookie：`JSESSIONID`），Redis 存储，30 天有效期 |
 | 日期格式 | ISO 8601 |
 | OpenAPI 文档 | `GET /api/v3/api-docs` |
 | Swagger UI | `http://localhost:8124/api/swagger-ui.html` |
@@ -265,11 +265,16 @@ Content-Type: multipart/form-data
 
 表单参数：
   file:                    (binary)  图片文件，≤2MB，格式：jpg/jpeg/png/webp
+  id:                      (可选)    若传入则为更新已有图片
+  picName:                 (可选)    自定义图片名称
 
 成功响应：
 { "code": 0, "data": { PictureVO } }
 
-注意：非管理员上传的图片将进入"待审核"状态，管理员自动过审。
+说明：
+- 上传后自动生成三种画质：webp 压缩图(url) + 256px 缩略图(thumbnailUrl, >2MB) + 原图(originalUrl)
+- 非管理员上传的图片将进入"待审核"状态，管理员自动过审
+- 上传成功后清除全部列表缓存
 ```
 
 ### 3.2 URL 上传图片
@@ -281,7 +286,9 @@ Content-Type: application/json
 
 请求体：
 {
-  "fileUrl": "https://example.com/image.jpg"   // 必填，图片 URL（http/https）
+  "fileUrl": "https://example.com/image.jpg",   // 必填，图片 URL（http/https）
+  "id": 1823456789012345678,                     // 可选，若传入则为更新
+  "picName": "自定义名称"                         // 可选
 }
 
 成功响应：
@@ -292,7 +299,7 @@ Content-Type: application/json
 2. HEAD 请求验证文件存在（状态码 200）
 3. Content-Type 白名单（image/jpeg, image/png, image/webp）
 4. Content-Length ≤ 2MB
-5. 下载文件 → COS 上传 → 提取元数据
+5. 下载文件 → COS 上传 → webp 压缩 + 缩略图生成 → 提取元数据
 
 可能错误：
 - 40000: 文件地址不能为空 / 文件地址格式不正确 / 仅支持 HTTP(S) 协议
@@ -309,18 +316,20 @@ POST /picture/upload/batch
 {
   "searchText": "风景壁纸",          // 必填，搜索关键词（自动 URL 编码）
   "count": 10,                       // 可选，抓取数量（默认 10，最大 30）
-  "namePrefix": "风景_",             // 可选，图片名称前缀（默认取搜索词）
+  "offset": 0,                       // 可选，偏移量（避免重复抓取同一批图片）
+  "namePrefix": "风景_"              // 可选，图片名称前缀（默认取搜索词）
 }
 
 成功响应：
 { "code": 0, "data": 5 }            // 实际成功上传数量
 
 实现原理：
-1. 调用必应图片异步搜索接口获取 HTML
-2. 使用 Jsoup 解析 HTML，提取 class="mimg" 的 img 标签的 src 属性
-3. 逐个下载图片 → COS 上传 → 入库
-4. 每张图片间隔 500~1500ms 随机延迟（反爬策略）
-5. 单张失败不影响整体任务
+1. 调用必应图片异步搜索接口 cn.bing.com/images/async?q=xxx&first=N
+2. 使用 Jsoup 解析 HTML，遍历 img.mimg 标签
+3. 优先从 a.iusc 的 m 属性 JSON 中提取 murl（原图直链）
+4. 逐个下载图片 → COS 上传（webp + 缩略图）→ 入库
+5. 每张图片间隔 500~1500ms 随机延迟（反爬策略）
+6. 单张失败不影响整体任务
 
 可能错误：
 - 40000: 搜索词不能为空 / 最多 30 条
@@ -466,7 +475,49 @@ POST /picture/list/page
 返回 Picture 实体列表（不含关联 UserVO）
 ```
 
-### 3.9 获取预设标签与分类
+### 3.9 分页获取图片 VO 列表（二级缓存版）★ 前端推荐
+
+```
+POST /picture/list/page/vo/cache
+公开（最多 20 条/页）
+
+请求体：同 3.7
+
+成功响应：同 3.7
+
+缓存策略：
+1. 先查 Caffeine 本地缓存（JVM 内存，微秒级响应）
+2. 未命中 → 查 Redis 分布式缓存（网络 IO，毫秒级）
+3. 未命中 → 查 MySQL 数据库
+4. 结果回写 Redis（5~10 分钟随机 TTL）→ 回写 Caffeine
+
+缓存失效：图片上传/编辑/删除/审核操作后自动递增版本号，旧缓存自然过期。
+Redis 不可用时自动降级为"本地缓存 + 数据库"两级模式，业务不受影响。
+```
+
+### 3.10 下载图片原图（后端代理）
+
+```
+GET /picture/download/{id}
+需要登录（仅图片作者本人或管理员）
+
+响应：
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="download.png"; filename*=UTF-8''图片名称.png
+
+说明：
+- 优先下载 originalUrl（原始格式），若不存在则下载 url（webp）
+- 通过后端代理下载，解决 COS 跨域限制
+- 文件名使用 RFC 5987 编码，支持中文文件名（现代浏览器自动解码）
+- ASCII 兜底文件名为 "download.{ext}"（兼容旧浏览器）
+
+可能错误：
+- 40000: ID 非法
+- 40400: 图片不存在
+- 40101: 无权限（既不是作者也不是管理员）
+```
+
+### 3.11 获取预设标签与分类
 
 ```
 GET /picture/tag_category
@@ -484,7 +535,7 @@ GET /picture/tag_category
 
 前端用此接口渲染搜索页面的标签筛选和分类下拉框。
 
-### 3.10 图片审核（管理员）
+### 3.12 图片审核（管理员）
 
 ```
 POST /picture/review
@@ -507,7 +558,7 @@ POST /picture/review
 - 40101: 无权限（非管理员）
 ```
 
-### 3.11 图片列表公开查询（审核过滤说明）
+### 3.13 图片列表公开查询（审核过滤说明）
 
 ```
 POST /picture/list/page/vo
@@ -586,7 +637,9 @@ GET /hi/
 ```json
 {
   "id": "1823456789012345678",
-  "url": "https://xx-...cos.ap-beijing.myqcloud.com/public/123/20260613_xxx.jpg",
+  "url": "https://xx-...cos.ap-beijing.myqcloud.com/public/123/20260613_xxx.webp",
+  "thumbnailUrl": "https://xx-...cos.ap-beijing.myqcloud.com/public/123/thumb_xxx.webp",
+  "originalUrl": "https://xx-...cos.ap-beijing.myqcloud.com/public/123/20260613_xxx.jpg",
   "name": "示例图片",
   "introduction": "这是一张示例图片",
   "tags": ["标签1", "标签2"],           // ★ List<String>
@@ -597,6 +650,10 @@ GET /hi/
   "picScale": 1.78,
   "picFormat": "jpg",
   "userId": "1823456789012345678",
+  "reviewStatus": 1,                     // ★ 0=待审核 1=通过 2=拒绝
+  "reviewMessage": "管理员自动过审",
+  "reviewerId": "1823456789012345678",
+  "reviewTime": "2026-06-13T10:00:00",
   "createTime": "2026-06-13T10:00:00",
   "editTime": null,
   "updateTime": "2026-06-13T10:00:00",
@@ -604,4 +661,7 @@ GET /hi/
 }
 ```
 
-> 注意：`tags` 在数据库中为 JSON 字符串，VO 中已转为 List。
+> 注意：
+> - `url` 为 webp 压缩图（展示用），`thumbnailUrl` 为 256px 缩略图（列表用），`originalUrl` 为原始格式（下载用）
+> - `tags` 在数据库中为 JSON 字符串，VO 中已转为 List
+> - 前端应根据场景选用不同的 URL：列表显示用 `thumbnailUrl`，详情展示用 `url`，下载用 `originalUrl`

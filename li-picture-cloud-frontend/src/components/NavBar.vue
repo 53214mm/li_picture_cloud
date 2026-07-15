@@ -9,6 +9,8 @@
         <router-link to="/gallery">探索</router-link>
         <template v-if="userStore.isLoggedIn">
           <router-link to="/upload">上传</router-link>
+          <router-link to="/space/my">我的空间</router-link>
+          <router-link to="/spaces">空间管理</router-link>
           <template v-if="userStore.isAdmin">
             <router-link to="/admin/pictures">审核</router-link>
             <router-link to="/admin/users">用户</router-link>

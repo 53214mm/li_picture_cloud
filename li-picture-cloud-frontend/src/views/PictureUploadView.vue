@@ -33,7 +33,7 @@
               <input
                 ref="fileInput"
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/jpeg,image/jpg,image/png,image/webp,.jpg,.jpeg,.jpe,.jfif,.png,.webp"
                 class="file-input-hidden"
                 @change="onFileChange"
               />
@@ -68,6 +68,17 @@
             <input v-model="form.name" class="input" placeholder="为图片命名" />
           </div>
 
+          <!-- 空间选择（可选，留空上传至公共图库） -->
+          <div class="field">
+            <span>上传到空间（可选）</span>
+            <select v-model="form.spaceId" class="input">
+              <option :value="null">公共图库（无需空间）</option>
+              <option v-for="sp in spaceList" :key="sp.id" :value="sp.id">
+                {{ sp.spaceName }}（{{ sp.totalCount }}/{{ sp.maxCount }} 张）
+              </option>
+            </select>
+          </div>
+
           <!-- 提交 -->
           <div v-if="error" class="form-error">{{ error }}</div>
           <div v-if="success" class="form-success">
@@ -88,13 +99,15 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { uploadPicture } from '@/api/picture'
+import { listSpaceVOByPage } from '@/api/space'
 import request from '@/api/request'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 // 权限守卫：需要登录
@@ -110,7 +123,20 @@ const uploading = ref(false)
 const error = ref('')
 const success = ref(false)
 const uploadedId = ref(null)
-const form = reactive({ name: '' })
+const spaceList = ref([])
+// 从 URL query 读取 pre-selected spaceId
+const form = reactive({
+  name: '',
+  // 保持 String，避免 Snowflake ID 精度丢失
+  spaceId: route.query.spaceId || null
+})
+
+onMounted(async () => {
+  try {
+    const res = await listSpaceVOByPage({ current: 1, pageSize: 20, userId: userStore.currentUser?.id })
+    spaceList.value = res.records || []
+  } catch { /* 加载失败不影响上传 */ }
+})
 
 const canSubmit = computed(() => {
   if (uploadMode.value === 'file') return !!file.value
@@ -135,7 +161,7 @@ function onFileChange(e) {
 }
 
 function selectFile(f) {
-  const allowed = ['image/jpeg', 'image/png', 'image/webp']
+  const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
   if (!allowed.includes(f.type)) {
     error.value = '仅支持 JPG、JPEG、PNG、WEBP 格式'
     return
@@ -165,12 +191,16 @@ async function handleSubmit() {
       // 文件上传
       const formData = new FormData()
       formData.append('file', file.value)
+      if (form.spaceId) {
+        formData.append('spaceId', form.spaceId)
+      }
       result = await uploadPicture(formData)
     } else {
       // URL 上传
       result = await request.post('/picture/upload/url', {
         fileUrl: urlInput.value.trim(),
-        name: form.name.trim()
+        picName: form.name.trim(),
+        spaceId: form.spaceId || undefined
       })
     }
     uploadedId.value = result.id
