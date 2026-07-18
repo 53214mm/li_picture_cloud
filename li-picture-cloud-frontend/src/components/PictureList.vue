@@ -67,6 +67,15 @@
           </div>
         </div>
 
+        <!-- 选择框（批量模式） -->
+        <div v-if="selectable" class="card-check" @click.stop>
+          <input
+            type="checkbox"
+            :checked="isSelected(pic.id)"
+            @change="$emit('toggle-select', pic.id)"
+          />
+        </div>
+
         <!-- 快捷操作按钮 -->
         <div class="card-actions" v-if="showActions !== false" @click.stop>
           <slot name="actions" :picture="pic">
@@ -110,10 +119,12 @@ const props = defineProps({
   categoryList: { type: Array, default: () => [] },
   emptyText: { type: String, default: '暂无图片' },
   showToolbar: { type: Boolean, default: true },
-  showActions: { type: Boolean, default: false }
+  showActions: { type: Boolean, default: false },
+  selectable: { type: Boolean, default: false },
+  selectedIds: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['search', 'filter-change', 'page-change', 'jump'])
+const emit = defineEmits(['search', 'filter-change', 'page-change', 'jump', 'toggle-select'])
 
 const router = useRouter()
 
@@ -139,6 +150,10 @@ function handleJump() {
     emit('page-change', page)
     jumpInput.value = null
   }
+}
+
+function isSelected(id) {
+  return props.selectedIds.includes(id)
 }
 
 function goDetail(id) {
@@ -211,6 +226,21 @@ function formatDate(d) {
   transition: opacity 0.2s;
 }
 .gallery-card:hover .card-actions { opacity: 1; }
+
+/* 复选框 */
+.card-check {
+  position: absolute; top: 0.5rem; left: 0.5rem; z-index: 5;
+}
+.card-check input[type="checkbox"] {
+  width: 20px; height: 20px; cursor: pointer;
+  accent-color: var(--black);
+}
+
+/* 有勾选时卡片高亮 */
+.gallery-card:has(.card-check input:checked) {
+  border-color: var(--black);
+  box-shadow: 0 0 0 2px var(--black);
+}
 .action-btn {
   width: 32px; height: 32px;
   border: none; background: rgba(0,0,0,0.6); color: var(--white);

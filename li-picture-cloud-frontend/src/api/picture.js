@@ -64,3 +64,13 @@ export function listPictureByPage(data) {
 export function getPictureById(id) {
   return request.get('/picture/get', { params: { id } })
 }
+
+/** 以图搜图 — 获取 Bing 识图搜索 URL */
+export function getImageSearchUrl(imageUrl) {
+  return request.post('/picture/search/image', { fileUrl: imageUrl })
+}
+
+/** 批量编辑图片（分类/标签/命名） */
+export function editPictureByBatch(data) {
+  return request.post('/picture/edit/batch', data)
+}

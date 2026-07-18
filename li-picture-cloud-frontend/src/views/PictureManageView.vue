@@ -16,6 +16,37 @@
         </div>
       </div>
 
+      <!-- 以图搜图 -->
+      <details class="batch-panel">
+        <summary class="batch-toggle">🔍 以图搜图（Bing）</summary>
+        <div class="batch-form">
+          <p class="form-hint">粘贴图片 URL，Bing 将搜索视觉相似的图片并返回结果。</p>
+          <div class="batch-row">
+            <input v-model="searchImageUrl" class="input" placeholder="粘贴图片 URL" style="flex:1" @keyup.enter="handleSearchImage" />
+            <button class="btn btn-primary btn-sm" @click="handleSearchImage" :disabled="searching">
+              {{ searching ? '搜索中…' : '搜索' }}
+            </button>
+          </div>
+          <div v-if="searchError" class="form-error">{{ searchError }}</div>
+          <!-- 搜索结果 -->
+          <div v-if="searchResults.length" class="search-results">
+            <div class="result-header">
+              <span>找到 {{ searchResults.length }} 张相似图片</span>
+              <button class="btn btn-outline btn-sm" @click="searchResults = []">清除</button>
+            </div>
+            <div class="result-grid">
+              <div v-for="(img, idx) in searchResults" :key="idx" class="result-card">
+                <img :src="img.thumbUrl" :alt="idx + 1" class="result-thumb" />
+                <div class="result-actions">
+                  <button class="btn-sm-text primary" @click="uploadSearchResult(img)">上传</button>
+                  <a :href="img.fromUrl" target="_blank" rel="noopener noreferrer" class="btn-sm-text">来源</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+
       <!-- 批量抓取 -->
       <details class="batch-panel">
         <summary class="batch-toggle">🔍 从必应批量抓取图片</summary>
@@ -40,6 +71,10 @@
           <option value="">全部分类</option>
           <option v-for="c in categoryList" :key="c" :value="c">{{ c }}</option>
         </select>
+        <input v-model="query.startEditTime" type="date" class="input" style="max-width:160px" title="编辑时间从" @change="loadPictures" />
+        <span class="date-sep">—</span>
+        <input v-model="query.endEditTime" type="date" class="input" style="max-width:160px" title="编辑时间至" @change="loadPictures" />
+        <button class="btn btn-outline btn-sm" @click="clearFilter">清除筛选</button>
         <button class="btn btn-outline btn-sm" @click="loadPictures">刷新</button>
       </div>
 
@@ -109,7 +144,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { listPictureByPage, reviewPicture, deletePicture, getPictureTagCategory, uploadPictureByBatch } from '@/api/picture'
+import { listPictureByPage, reviewPicture, deletePicture, getPictureTagCategory, uploadPictureByBatch, getImageSearchUrl } from '@/api/picture'
+import request from '@/api/request'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -136,9 +172,20 @@ const query = reactive({
   searchText: '',
   category: '',
   reviewStatus: null,
+  startEditTime: '',
+  endEditTime: '',
   sortField: 'createTime',
   sortOrder: 'descend'
 })
+
+function clearFilter() {
+  query.searchText = ''
+  query.category = ''
+  query.startEditTime = ''
+  query.endEditTime = ''
+  query.current = 1
+  loadPictures()
+}
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / query.pageSize)))
 const jumpPage = ref(null)
@@ -148,6 +195,47 @@ function goPage(page) {
   query.current = page
   jumpPage.value = null
   loadPictures()
+}
+
+// 以图搜图
+const searchImageUrl = ref('')
+const searching = ref(false)
+const searchError = ref('')
+const searchResults = ref([])
+
+async function handleSearchImage() {
+  searchError.value = ''
+  searchResults.value = []
+  if (!searchImageUrl.value.trim()) {
+    searchError.value = '请输入图片 URL'
+    return
+  }
+  searching.value = true
+  try {
+    const results = await getImageSearchUrl(searchImageUrl.value.trim())
+    searchResults.value = results || []
+    if (searchResults.value.length === 0) {
+      searchError.value = '未找到相似图片'
+    }
+  } catch (e) {
+    searchError.value = e.message || '搜索失败'
+  } finally {
+    searching.value = false
+  }
+}
+
+async function uploadSearchResult(img) {
+  if (!img.fromUrl) return
+  try {
+    await request.post('/picture/upload/url', {
+      fileUrl: img.fromUrl,
+      picName: '以图搜图结果'
+    })
+    alert('上传成功！等待审核后可见')
+    loadPictures()
+  } catch (e) {
+    alert(e.message || '上传失败')
+  }
 }
 
 // 批量抓取
@@ -198,7 +286,11 @@ function switchTab(status) {
 async function loadPictures() {
   loading.value = true
   try {
-    const res = await listPictureByPage({ ...query })
+    // 将空字符串日期转为 undefined，避免后端解析空字符串报错
+    const params = { ...query }
+    if (!params.startEditTime) params.startEditTime = undefined
+    if (!params.endEditTime) params.endEditTime = undefined
+    const res = await listPictureByPage(params)
     pictures.value = res.records || []
     total.value = res.total || 0
   } catch (e) {
@@ -291,7 +383,13 @@ function formatDate(d) {
   font-size: 0.8125rem; font-weight: 500; margin-top: 0.5rem;
 }
 
+.form-hint { font-size: 0.8125rem; color: var(--gray-400); margin-bottom: 0.5rem; }
+.btn-sm-text { font-size: 0.75rem; font-weight: 500; cursor: pointer; border: none; background: none; text-decoration: underline; }
+.btn-sm-text.primary { color: var(--blue); }
+.btn-sm-text:hover { opacity: 0.7; }
+
 .toolbar { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center; }
+.date-sep { font-size: 0.875rem; color: var(--gray-400); }
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.75rem; }
 
 /* 表格 */

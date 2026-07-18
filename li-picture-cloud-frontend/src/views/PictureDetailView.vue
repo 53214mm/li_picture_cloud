@@ -88,6 +88,7 @@
 
             <!-- 操作按钮 -->
             <div class="actions">
+              <button class="btn btn-outline" @click="showShare = true">分享</button>
               <button class="btn btn-outline" @click="handleDownload">下载图片</button>
               <template v-if="canEdit">
                 <button class="btn btn-outline" @click="openEditModal">编辑信息</button>
@@ -100,6 +101,16 @@
 
       <div v-else class="empty-state">图片不存在或已被删除</div>
     </div>
+
+    <!-- 分享弹窗 -->
+    <ShareModal
+      :visible="showShare"
+      :picture-id="picture?.id"
+      :title="picture?.name"
+      :image-url="picture?.url"
+      :thumbnail-url="picture?.thumbnailUrl"
+      @close="showShare = false"
+    />
 
     <!-- 编辑弹窗 -->
     <div v-if="showEditModal" class="modal-overlay" @click.self="showEditModal = false">
@@ -165,6 +176,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getPictureVOById, editPicture, deletePicture, reviewPicture, getPictureTagCategory } from '@/api/picture'
+import ShareModal from '@/components/ShareModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -176,6 +188,7 @@ const categoryList = ref([])
 const reviewMessage = ref('')
 const reviewing = ref(false)
 const showFullscreen = ref(false)
+const showShare = ref(false)
 
 // ESC 键退出全屏
 function onKeydown(e) {

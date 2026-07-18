@@ -22,6 +22,8 @@ import com.li.lipicturecloud.constant.UserConstant;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.exception.ThrowUtils;
+import com.li.lipicturecloud.api.imagesearch.ImageSearchApiFacade;
+import com.li.lipicturecloud.api.imagesearch.model.ImageSearchResult;
 import com.li.lipicturecloud.model.dto.picture.*;
 import com.li.lipicturecloud.model.entity.Picture;
 import com.li.lipicturecloud.model.entity.User;
@@ -68,6 +70,8 @@ public class PictureController {
     private CosManager cosManager;
     @Resource
     private CosClientConfig cosClientConfig;
+    @Resource
+    private ImageSearchApiFacade imageSearchApiFacade;
     /**
      * 本地缓存
      */
@@ -406,7 +410,35 @@ public class PictureController {
         }
     }
 
+    /**
+     * 以图搜图（Bing 反向图片搜索）
+     * <p>
+     * 通过 Jsoup 解析 Bing 的以图搜图结果，返回相似图片列表。
+     */
+    @PostMapping("/search/image")
+    public BaseResponse<List<ImageSearchResult>> searchImageByImage(
+            @RequestBody PictureUploadRequest uploadRequest) {
+        String fileUrl = uploadRequest.getFileUrl();
+        ThrowUtils.throwIf(StrUtil.isBlank(fileUrl), ErrorCode.PARAMS_ERROR, "图片 URL 不能为空");
+        ThrowUtils.throwIf(!fileUrl.startsWith("http://") && !fileUrl.startsWith("https://"),
+                ErrorCode.PARAMS_ERROR, "仅支持 HTTP/HTTPS 协议的图片地址");
+        List<ImageSearchResult> results = imageSearchApiFacade.searchByImage(fileUrl);
+        return ResultUtils.success(results);
+    }
 
+    /**
+     * 批量编辑图片
+     * @param pictureEditByBatchRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/edit/batch")
+    public BaseResponse<Boolean> editPictureByBatch(@RequestBody PictureEditByBatchRequest pictureEditByBatchRequest, HttpServletRequest request) {
+        ThrowUtils.throwIf(pictureEditByBatchRequest == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUserEntity(request);
+        pictureService.editPictureByBatch(pictureEditByBatchRequest, loginUser);
+        return ResultUtils.success(true);
+    }
 
 
 }

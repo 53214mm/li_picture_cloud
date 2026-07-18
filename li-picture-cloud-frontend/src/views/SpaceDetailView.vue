@@ -29,6 +29,9 @@
               <button v-if="isOwner" class="btn btn-primary btn-sm" @click="showUpload = !showUpload">
                 {{ showUpload ? '取消上传' : '+ 上传图片' }}
               </button>
+              <button v-if="isOwner" class="btn btn-outline btn-sm" @click="toggleBatchMode">
+                {{ batchMode ? '退出批量' : '批量管理' }}
+              </button>
               <router-link to="/spaces" class="btn btn-outline btn-sm">返回列表</router-link>
             </div>
           </div>
@@ -103,6 +106,25 @@
           <div v-if="uploadSuccess" class="form-success">上传成功！</div>
         </div>
 
+        <!-- 批量操作工具栏 -->
+        <div v-if="batchMode && selectedIds.length" class="batch-toolbar">
+          <span class="batch-count">已选 {{ selectedIds.length }} 张</span>
+          <input v-model="batchForm.category" class="input" placeholder="分类" style="max-width:120px" />
+          <input v-model="batchForm.tagsStr" class="input" placeholder="标签（逗号分隔）" style="max-width:200px" />
+          <input v-model="batchForm.nameRule" class="input" placeholder="命名规则（图片{序号}）" style="max-width:200px" />
+          <button class="btn btn-primary btn-sm" @click="handleBatchEdit">应用</button>
+          <button class="btn btn-outline btn-sm" @click="selectedIds = []">取消选择</button>
+          <span v-if="batchError" class="batch-error">{{ batchError }}</span>
+        </div>
+
+        <!-- 全选按钮（批量模式） -->
+        <div v-if="batchMode && pictures.length" style="margin-bottom:0.75rem">
+          <label style="font-size:0.875rem;cursor:pointer;user-select:none;">
+            <input type="checkbox" :checked="allSelected" @change="toggleAll" style="margin-right:0.375rem" />
+            全选当前页
+          </label>
+        </div>
+
         <!-- 图片列表（复用组件） -->
         <PictureList
           :pictures="pictures"
@@ -112,10 +134,13 @@
           :page-size="12"
           :category-list="categoryList"
           :empty-text="isOwner ? '空间暂无图片，点击上方按钮上传' : '空间暂无图片'"
-          :show-actions="isOwner"
+          :show-actions="isOwner && !batchMode"
+          :selectable="batchMode"
+          :selected-ids="selectedIds"
           @search="onSearch"
           @filter-change="onFilterChange"
           @page-change="onPageChange"
+          @toggle-select="toggleSelect"
         >
           <template #toolbar-actions>
             <span v-if="isOwner" class="hint-text">鼠标悬停图片查看快捷操作</span>
@@ -124,6 +149,9 @@
             <button class="action-btn" @click.stop="openEditDialog(picture)" title="编辑">
               <span class="action-icon">✏️</span>
             </button>
+            <button class="action-btn share" @click.stop="openShare(picture)" title="分享">
+              <span class="action-icon">🔗</span>
+            </button>
             <button class="action-btn danger" @click.stop="handleDeletePic(picture)" title="删除">
               <span class="action-icon">🗑️</span>
             </button>
@@ -131,6 +159,16 @@
         </PictureList>
       </template>
     </div>
+
+    <!-- 分享弹窗 -->
+    <ShareModal
+      :visible="showShare"
+      :picture-id="sharePic?.id"
+      :title="sharePic?.name"
+      :image-url="sharePic?.url"
+      :thumbnail-url="sharePic?.thumbnailUrl"
+      @close="showShare = false"
+    />
 
     <!-- 编辑图片弹窗 -->
     <div v-if="showEditDialog" class="modal-overlay" @click.self="showEditDialog = false">
@@ -174,10 +212,11 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getSpaceVOById } from '@/api/space'
-import { listPictureVOByPage, editPicture, deletePicture, getPictureTagCategory } from '@/api/picture'
+import { listPictureVOByPage, editPicture, deletePicture, getPictureTagCategory, editPictureByBatch } from '@/api/picture'
 import { uploadPicture } from '@/api/picture'
 import request from '@/api/request'
 import PictureList from '@/components/PictureList.vue'
+import ShareModal from '@/components/ShareModal.vue'
 import { spaceLevelText, formatSize, formatDate } from '@/constants/space'
 
 const route = useRoute()
@@ -222,6 +261,60 @@ const canUpload = computed(() => {
 
 // 编辑
 const showEditDialog = ref(false)
+const showShare = ref(false)
+const sharePic = ref(null)
+
+// 批量管理
+const batchMode = ref(false)
+const selectedIds = ref([])
+const batchError = ref('')
+const batchForm = reactive({ category: '', tagsStr: '', nameRule: '' })
+
+function toggleBatchMode() {
+  batchMode.value = !batchMode.value
+  selectedIds.value = []
+  batchError.value = ''
+}
+
+function toggleSelect(id) {
+  const idx = selectedIds.value.indexOf(id)
+  if (idx >= 0) selectedIds.value.splice(idx, 1)
+  else selectedIds.value.push(id)
+}
+
+const allSelected = computed(() => {
+  return pictures.value.length > 0 && pictures.value.every(p => selectedIds.value.includes(p.id))
+})
+
+function toggleAll() {
+  if (allSelected.value) {
+    selectedIds.value = []
+  } else {
+    selectedIds.value = pictures.value.map(p => p.id)
+  }
+}
+
+async function handleBatchEdit() {
+  batchError.value = ''
+  if (!selectedIds.value.length) return
+  const tags = batchForm.tagsStr ? batchForm.tagsStr.split(',').map(t => t.trim()).filter(Boolean) : null
+  try {
+    await editPictureByBatch({
+      pictureIdList: selectedIds.value,
+      spaceId: Number(spaceId.value),
+      category: batchForm.category || undefined,
+      tags: tags || undefined,
+      nameRule: batchForm.nameRule || undefined
+    })
+    selectedIds.value = []
+    batchForm.category = ''
+    batchForm.tagsStr = ''
+    batchForm.nameRule = ''
+    loadPictures()
+  } catch (e) {
+    batchError.value = e.message || '批量编辑失败'
+  }
+}
 const editError = ref('')
 const editForm = reactive({ id: null, name: '', introduction: '', category: '', tagsStr: '' })
 
@@ -377,6 +470,11 @@ async function handleEditSave() {
 }
 
 // ===== 删除图片 =====
+function openShare(pic) {
+  sharePic.value = pic
+  showShare.value = true
+}
+
 async function handleDeletePic(pic) {
   if (!confirm(`确定删除图片"${pic.name || '未命名'}"吗？`)) return
   try {
@@ -431,6 +529,14 @@ async function handleDeletePic(pic) {
 .form-error { padding: 0.5rem 0.75rem; background: #FFF0EF; color: var(--red); font-size: 0.8125rem; font-weight: 500; margin-top: 0.5rem; }
 .form-success { padding: 0.5rem 0.75rem; background: #EFF9F0; color: #1A7A2E; font-size: 0.8125rem; font-weight: 500; margin-top: 0.5rem; }
 .hint-text { font-size: 0.8125rem; color: var(--gray-400); }
+
+/* 批量工具栏 */
+.batch-toolbar {
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+  padding: 0.75rem 1rem; border: 2px solid var(--black); background: var(--gray-100); margin-bottom: 1rem;
+}
+.batch-count { font-size: 0.875rem; font-weight: 600; white-space: nowrap; }
+.batch-error { font-size: 0.8125rem; color: var(--red); margin-left: 0.5rem; }
 
 /* 快捷操作按钮 */
 .action-btn {
