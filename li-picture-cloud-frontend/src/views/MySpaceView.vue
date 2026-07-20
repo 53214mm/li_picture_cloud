@@ -66,6 +66,20 @@
             <span class="action-desc">给空间重新命名</span>
           </button>
         </div>
+
+        <!-- AI 助手 -->
+        <div class="ai-section">
+          <div class="ai-header">
+            <div>
+              <h3>🤖 AI 助手</h3>
+              <p>智能图片生成、分析与管理</p>
+            </div>
+            <button class="btn btn-outline btn-sm" @click="$refs.aiPanel?.clearHistory()">清空对话</button>
+          </div>
+          <div class="ai-card">
+            <AiAgentPanel ref="aiPanel" :user-id="userStore.currentUser?.id" />
+          </div>
+        </div>
       </template>
 
       <!-- 无空间时：引导创建 -->
@@ -105,6 +119,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { listSpaceVOByPage, editSpace } from '@/api/space'
+import AiAgentPanel from '@/components/AiAgentPanel.vue'
 import { spaceLevelText, formatSize, formatDate } from '@/constants/space'
 
 const router = useRouter()
@@ -210,4 +225,12 @@ async function handleEdit() {
 .field label { font-size: 0.8125rem; font-weight: 600; }
 .form-error { padding: 0.75rem 1rem; background: #FFF0EF; color: var(--red); font-size: 0.875rem; font-weight: 500; }
 .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
+
+/* AI 助手区域 */
+.ai-section { margin-top: 2.5rem; }
+.ai-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem; }
+.ai-header h3 { font-size: 1.25rem; font-weight: 700; }
+.ai-header p { font-size: 0.8125rem; color: var(--gray-400); }
+.ai-card { border: 2px solid var(--black); background: #fff; overflow: hidden; height: 520px; }
+.btn-sm { padding: 0.375rem 1rem; font-size: 0.75rem; }
 </style>

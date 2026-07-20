@@ -78,6 +78,7 @@
             <template v-if="uploadFile">
               <img :src="uploadPreview" class="preview-img" />
               <span>{{ uploadFile.name }}</span>
+              <button class="btn btn-outline btn-sm" @click.stop="openFileEditor">编辑</button>
               <button class="btn btn-outline btn-sm" @click.stop="clearFile">重新选择</button>
             </template>
             <template v-else>
@@ -170,6 +171,14 @@
       @close="showShare = false"
     />
 
+    <!-- 图片编辑弹窗 -->
+    <ImageEditModal
+      :visible="showFileEditor"
+      :image-src="uploadPreview"
+      @close="showFileEditor = false"
+      @save="onFileEditSave"
+    />
+
     <!-- 编辑图片弹窗 -->
     <div v-if="showEditDialog" class="modal-overlay" @click.self="showEditDialog = false">
       <div class="modal-card">
@@ -217,6 +226,7 @@ import { uploadPicture } from '@/api/picture'
 import request from '@/api/request'
 import PictureList from '@/components/PictureList.vue'
 import ShareModal from '@/components/ShareModal.vue'
+import ImageEditModal from '@/components/ImageEditModal.vue'
 import { spaceLevelText, formatSize, formatDate } from '@/constants/space'
 
 const route = useRoute()
@@ -253,6 +263,7 @@ const uploadName = ref('')
 const uploading = ref(false)
 const uploadError = ref('')
 const uploadSuccess = ref(false)
+const showFileEditor = ref(false)
 
 const canUpload = computed(() => {
   if (uploadMode.value === 'file') return !!uploadFile.value
@@ -381,7 +392,20 @@ function onFileChange(e) {
 function clearFile() {
   uploadFile.value = null
   uploadPreview.value = ''
+  showFileEditor.value = false
   if (fileInput.value) fileInput.value.value = ''
+}
+
+function openFileEditor() {
+  if (!uploadFile.value) return
+  showFileEditor.value = true
+}
+
+function onFileEditSave(blob) {
+  const newName = uploadFile.value.name.replace(/\.\w+$/, '') + '_edited.png'
+  uploadFile.value = new File([blob], newName, { type: 'image/png' })
+  uploadPreview.value = URL.createObjectURL(blob)
+  showFileEditor.value = false
 }
 
 async function handleUpload() {

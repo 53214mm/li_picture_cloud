@@ -6,11 +6,29 @@ spring:
     password: ${MYSQL_PASSWORD:123456}
     url: jdbc:mysql://localhost:3306/li_picture_cloud_data?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     driver-class-name: com.mysql.cj.jdbc.Driver
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaEmbeddingAutoConfiguration
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+      - org.springframework.ai.mcp.client.common.autoconfigure.McpToolCallbackAutoConfiguration
   profiles:
     active: local
   servlet:
     multipart:
-      max-file-size: 10MB
+      max-file-size: 50MB
+  ai:
+    dashscope:
+      chat:
+        options:
+          model: qwen-max
+    mcp:
+      client:
+        sse:
+          connections:
+            mxai-mcp-server:
+              url: https://mcp.mxai.cn
+              sse-endpoint: /sse
   # Redis 配置
   data:
     redis:

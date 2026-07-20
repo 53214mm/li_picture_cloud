@@ -43,6 +43,7 @@
                   <strong>{{ file.name }}</strong>
                   <span>{{ formatSize(file.size) }}</span>
                 </div>
+                <button type="button" class="btn btn-outline btn-sm" @click.stop="openEditor">编辑</button>
                 <button type="button" class="btn btn-outline btn-sm" @click.stop="clearFile">重新选择</button>
               </template>
               <template v-else>
@@ -95,6 +96,14 @@
         </form>
       </div>
     </div>
+
+    <!-- 图片编辑弹窗 -->
+    <ImageEditModal
+      :visible="showEditor"
+      :image-src="previewUrl"
+      @close="showEditor = false"
+      @save="onEditSave"
+    />
   </div>
 </template>
 
@@ -104,6 +113,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { uploadPicture } from '@/api/picture'
 import { listSpaceVOByPage } from '@/api/space'
+import ImageEditModal from '@/components/ImageEditModal.vue'
 import request from '@/api/request'
 
 const router = useRouter()
@@ -124,6 +134,7 @@ const error = ref('')
 const success = ref(false)
 const uploadedId = ref(null)
 const spaceList = ref([])
+const showEditor = ref(false)
 // 从 URL query 读取 pre-selected spaceId
 const form = reactive({
   name: '',
@@ -178,7 +189,21 @@ function selectFile(f) {
 function clearFile() {
   file.value = null
   previewUrl.value = ''
+  showEditor.value = false
   if (fileInput.value) fileInput.value.value = ''
+}
+
+function openEditor() {
+  if (!file.value) return
+  showEditor.value = true
+}
+
+function onEditSave(blob) {
+  // 用编辑后的 blob 替换原文件
+  const newName = file.value.name.replace(/\.\w+$/, '') + '_edited.png'
+  file.value = new File([blob], newName, { type: 'image/png' })
+  previewUrl.value = URL.createObjectURL(blob)
+  showEditor.value = false
 }
 
 // ===== 提交 =====

@@ -440,5 +440,45 @@ public class PictureController {
         return ResultUtils.success(true);
     }
 
+    /**
+     * 图片代理（解决 Canvas 编辑时的 COS 跨域问题）
+     * <p>
+     * 仅代理本系统 COS 存储桶的图片，防止 SSRF 攻击。
+     */
+    @GetMapping("/image-proxy")
+    public void proxyImage(@RequestParam String url, HttpServletResponse response) throws IOException {
+        ThrowUtils.throwIf(StrUtil.isBlank(url)
+                || (!url.startsWith("http://") && !url.startsWith("https://")),
+                ErrorCode.PARAMS_ERROR, "无效的图片地址");
+
+        // SSRF 防护：仅允许代理本系统 COS 存储桶的图片
+        String cosHost = cosClientConfig.getHost();
+        if (!url.startsWith(cosHost)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "仅支持代理本系统存储桶的图片");
+        }
+
+        try {
+            // 禁止自动跟随重定向，防止重定向到内网地址
+            byte[] bytes = cn.hutool.http.HttpUtil.createGet(url)
+                    .setFollowRedirects(false)
+                    .timeout(5000)
+                    .execute()
+                    .bodyBytes();
+
+            String contentType = cn.hutool.http.HttpUtil.createRequest(
+                    cn.hutool.http.Method.HEAD, url)
+                    .setFollowRedirects(false)
+                    .timeout(3000)
+                    .execute()
+                    .header("Content-Type");
+            response.setContentType(contentType != null ? contentType : "image/png");
+            response.setHeader("Access-Control-Allow-Origin", "*");
+            response.getOutputStream().write(bytes);
+            response.getOutputStream().flush();
+        } catch (Exception e) {
+            log.error("图片代理失败, url={}", url, e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "图片加载失败");
+        }
+    }
 
 }

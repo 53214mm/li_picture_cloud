@@ -89,6 +89,7 @@
             <!-- 操作按钮 -->
             <div class="actions">
               <button class="btn btn-outline" @click="showShare = true">分享</button>
+              <button v-if="canEdit" class="btn btn-outline" @click="openImageEditor">编辑图片</button>
               <button class="btn btn-outline" @click="handleDownload">下载图片</button>
               <template v-if="canEdit">
                 <button class="btn btn-outline" @click="openEditModal">编辑信息</button>
@@ -110,6 +111,14 @@
       :image-url="picture?.url"
       :thumbnail-url="picture?.thumbnailUrl"
       @close="showShare = false"
+    />
+
+    <!-- 图片编辑弹窗（通过后端代理加载 COS 图片，解决跨域） -->
+    <ImageEditModal
+      :visible="showImageEditor"
+      :image-src="imageEditorSrc"
+      @close="showImageEditor = false"
+      @save="onImageEditSave"
     />
 
     <!-- 编辑弹窗 -->
@@ -175,8 +184,9 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { getPictureVOById, editPicture, deletePicture, reviewPicture, getPictureTagCategory } from '@/api/picture'
+import { getPictureVOById, editPicture, deletePicture, reviewPicture, getPictureTagCategory, uploadPicture } from '@/api/picture'
 import ShareModal from '@/components/ShareModal.vue'
+import ImageEditModal from '@/components/ImageEditModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -189,6 +199,12 @@ const reviewMessage = ref('')
 const reviewing = ref(false)
 const showFullscreen = ref(false)
 const showShare = ref(false)
+const showImageEditor = ref(false)
+// 通过后端代理加载 COS 图片，避免 Canvas 跨域 taint
+const imageEditorSrc = computed(() => {
+  if (!picture.value?.url) return ''
+  return `/api/picture/image-proxy?url=${encodeURIComponent(picture.value.url)}`
+})
 
 // ESC 键退出全屏
 function onKeydown(e) {
@@ -284,6 +300,25 @@ async function handleEdit() {
     modalError.value = e.message || '编辑失败'
   } finally {
     saving.value = false
+  }
+}
+
+function openImageEditor() {
+  showImageEditor.value = true
+}
+
+async function onImageEditSave(blob) {
+  // 用编辑后的图片替换当前图片
+  const fd = new FormData()
+  const ext = picture.value?.picFormat || 'png'
+  fd.append('file', blob, `edited.${ext}`)
+  fd.append('id', picture.value.id)  // 更新模式：传入已有图片 ID
+  try {
+    await uploadPicture(fd)
+    showImageEditor.value = false
+    loadPicture()
+  } catch (e) {
+    alert(e.message || '更新图片失败')
   }
 }
 
