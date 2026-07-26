@@ -53,6 +53,11 @@ const routes = [
     name: 'space-detail',
     component: () => import('@/views/SpaceDetailView.vue')
   },
+  {
+    path: '/space/analyze',
+    name: 'space-analyze',
+    component: () => import('@/views/SpaceAnalyzeView.vue')
+  },
   // ===== 管理员 =====
   {
     path: '/admin/pictures',

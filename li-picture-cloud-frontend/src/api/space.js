@@ -41,6 +41,11 @@ export function listSpaceVOByPage(data) {
 }
 
 /** 获取空间级别列表 */
+/** 获取当前用户的空间列表 */
+export function listMySpaces() {
+  return listSpaceVOByPage({ current: 1, pageSize: 10 })
+}
+
 export function listSpaceLevel() {
   return request.get('/space/list/level')
 }
