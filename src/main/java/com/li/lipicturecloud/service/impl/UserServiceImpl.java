@@ -11,6 +11,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.lipicturecloud.constant.UserConstant;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
+import com.li.lipicturecloud.manager.auth.StpKit;
 import com.li.lipicturecloud.mapper.UserMapper;
 import com.li.lipicturecloud.model.dto.user.UserAddRequest;
 import com.li.lipicturecloud.model.dto.user.UserLoginRequest;
@@ -30,6 +31,8 @@ import jakarta.servlet.http.HttpSession;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static com.li.lipicturecloud.constant.UserConstant.SESSION_USER_KEY;
 
 /**
  * 用户服务实现类
@@ -228,11 +231,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 获取（或创建）HttpSession，将 UserVO 存入 Session
         // 存入的 key 为 SESSION_USER_KEY = "loginUser"
         HttpSession session = request.getSession();
-        session.setAttribute(UserConstant.SESSION_USER_KEY, userVO);
+        session.setAttribute(SESSION_USER_KEY, userVO);
+
+        //记录用户登录态到 Sa-token，便于空间鉴权时使用，注意保证该用户信息与 SpringSession 中的信息过期时间一致
+        StpKit.SPACE.login(user.getId());
+        StpKit.SPACE.getSession().set(SESSION_USER_KEY, user);
 
         // ============================================================
         // 第 5 步：返回脱敏用户信息
         // ============================================================
+
         return userVO;
     }
 
@@ -255,7 +263,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         HttpSession session = request.getSession(false);
         if (session != null) {
             // 移除 Session 中的用户信息，使登录态失效
-            session.removeAttribute(UserConstant.SESSION_USER_KEY);
+            session.removeAttribute(SESSION_USER_KEY);
         }
         // 无论 Session 是否存在，注销操作均视为成功
         return true;
@@ -281,7 +289,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
 
         // 从 Session 中取出用户信息（登录时存入的是 UserVO）
-        Object userObj = session.getAttribute(UserConstant.SESSION_USER_KEY);
+        Object userObj = session.getAttribute(SESSION_USER_KEY);
         if (userObj == null) {
             // Session 存在但没有用户信息，说明未登录
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
@@ -321,7 +329,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (session == null) {
             return false;
         }
-        return session.getAttribute(UserConstant.SESSION_USER_KEY) != null;
+        return session.getAttribute(SESSION_USER_KEY) != null;
     }
 
     // ============================================================
