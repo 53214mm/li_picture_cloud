@@ -4,6 +4,7 @@ application-local.yml
 **/application-local.*
 **/*-local.yaml
 **/*-local.yml
+!**/application-local.example.yaml
 
 # === 密钥和凭证 ===
 *.pem
@@ -13,6 +14,8 @@ application-local.yml
 *.jks
 .env
 .env.*
+!.env.example
+!**/.env.example
 credentials.*
 secrets.*
 
@@ -20,10 +23,22 @@ secrets.*
 tmp
 test-classes
 
+# === 前端依赖与构建产物 ===
+**/node_modules/
+**/dist/
+**/.vite/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# === 运行时数据与日志 ===
+logs/
+chat-memory/
+*.log
+
 
 HELP.md
 target/
-.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 
