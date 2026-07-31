@@ -1,0 +1,32 @@
+# Copy this file to application-local.yaml for local development.
+# Keep real credentials out of Git and provide them through environment variables.
+
+cos:
+  client:
+    host: ${COS_HOST:}
+    secretId: ${COS_SECRET_ID:}
+    secretKey: ${COS_SECRET_KEY:}
+    region: ${COS_REGION:}
+    bucket: ${COS_BUCKET:}
+
+spring:
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY:}
+    qianfan:
+      api-key: ${QIANFAN_API_KEY:}
+      Bearer: ${QIANFAN_BEARER_TOKEN:}
+
+pgvector:
+  datasource:
+    url: ${PGVECTOR_URL:jdbc:postgresql://localhost:5432/postgres}
+    username: ${PGVECTOR_USERNAME:postgres}
+    password: ${PGVECTOR_PASSWORD:}
+  store:
+    index-type: ${PGVECTOR_INDEX_TYPE:HNSW}
+    dimensions: ${PGVECTOR_DIMENSIONS:1536}
+    distance-type: ${PGVECTOR_DISTANCE_TYPE:COSINE_DISTANCE}
+    max-document-batch-size: ${PGVECTOR_MAX_DOCUMENT_BATCH_SIZE:10000}
+
+mxai:
+  api-key: ${MXAI_API_KEY:}

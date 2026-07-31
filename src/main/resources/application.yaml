@@ -2,9 +2,9 @@ spring:
   application:
     name: li-picture-cloud
   datasource:
-    username: root
-    password: ${MYSQL_PASSWORD:123456}
-    url: jdbc:mysql://localhost:3306/li_picture_cloud_data?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD}
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:li_picture_cloud_data}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     driver-class-name: com.mysql.cj.jdbc.Driver
   autoconfigure:
     exclude:
@@ -36,7 +36,7 @@ spring:
       host: 127.0.0.1
       port: 6379
       timeout: 5000
-      password: ${REDIS_PASSWORD:123456}
+      password: ${REDIS_PASSWORD}
   session:
     store-type: redis
     timeout: 2592000          # 30天（秒）
@@ -78,5 +78,4 @@ springdoc:
     - com.li.lipicturecloud.controller
   paths-to-exclude:
     - /actuator/**
-
 
