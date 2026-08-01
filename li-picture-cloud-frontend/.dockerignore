@@ -1,0 +1,11 @@
+node_modules
+dist
+.vite
+.idea
+.vscode
+.env
+.env.*
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*

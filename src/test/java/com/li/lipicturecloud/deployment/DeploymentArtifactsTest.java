@@ -12,6 +12,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DeploymentArtifactsTest {
 
     @Test
+    void backendImageUsesJava21MultiStageAndNonRootRuntime() throws IOException {
+        String dockerfile = read("Dockerfile");
+
+        assertThat(dockerfile).contains("AS build", "./mvnw", "21-jre", "USER app", "EXPOSE 8124");
+        assertThat(dockerfile).doesNotContain("application-local.yaml");
+    }
+
+    @Test
+    void frontendImageBuildsWithNode22AndServesSpaWithNginx() throws IOException {
+        String dockerfile = read("li-picture-cloud-frontend/Dockerfile");
+        String nginx = read("li-picture-cloud-frontend/nginx.conf");
+
+        assertThat(dockerfile).contains("node:22", "npm ci", "npm run build", "nginx:1.27-alpine");
+        assertThat(nginx).contains("try_files $uri $uri/ /index.html", "location /assets/");
+    }
+
+    @Test
     void productionProfileMapsEveryExternalSecretFromEnvironment() throws IOException {
         String yaml = read("src/main/resources/application-prod.yaml");
 
