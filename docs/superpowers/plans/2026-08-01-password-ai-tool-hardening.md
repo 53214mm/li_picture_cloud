@@ -12,7 +12,7 @@
 
 - BCrypt strength is exactly 12.
 - Existing 32-character MD5 hashes must be rejected; there is no compatibility login or automatic migration.
-- `TerminalOperationTool`, `FileOperationTool`, and `ResourceDownloadTool` must be deleted and absent from the model tool list.
+- `TerminalOperationTool`, `FileOperationTool`, `ResourceDownloadTool`, and `PDFGenerationTool` must be deleted and absent from the model tool list.
 - MCP generation tools must remain available through `RefreshableMcpToolProvider`.
 - AI-generated images may only be saved to a space owned by the user with `spaceType = PRIVATE`.
 - The local `src/main/resources/application.yaml` modification must never be staged or committed.
@@ -226,6 +226,7 @@ git push origin main
 - Delete: `src/main/java/com/li/lipicturecloud/AI/tools/TerminalOperationTool.java`
 - Delete: `src/main/java/com/li/lipicturecloud/AI/tools/FileOperationTool.java`
 - Delete: `src/main/java/com/li/lipicturecloud/AI/tools/ResourceDownloadTool.java`
+- Delete: `src/main/java/com/li/lipicturecloud/AI/tools/PDFGenerationTool.java`
 - Create: `src/test/java/com/li/lipicturecloud/AI/tools/ToolRegistrationTest.java`
 
 **Interfaces:**
@@ -234,7 +235,7 @@ git push origin main
 
 - [ ] **Step 1: Write the failing registry test**
 
-Instantiate `ToolRegistration` with real tool objects or inject its fields using `ReflectionTestUtils`. Convert callbacks to tool names and assert the list contains `saveToMySpace` and the image-management/analysis names, while it excludes `executeCommandSafe`, `readFile`, `writeFile`, and `downloadResource`.
+Instantiate `ToolRegistration` with real tool objects or inject its fields using `ReflectionTestUtils`. Convert callbacks to tool names and assert the list contains `saveToMySpace` and the image-management/analysis names, while it excludes `executeCommandSafe`, `readFile`, `writeFile`, `downloadResource`, and all PDF file-operation methods.
 
 - [ ] **Step 2: Run RED**
 
@@ -252,7 +253,7 @@ Delete object creation and callback entries for the three forbidden tools, then 
 
 ```powershell
 .\mvnw.cmd -Dtest=ToolRegistrationTest test
-rg -n "TerminalOperationTool|FileOperationTool|ResourceDownloadTool|executeCommandSafe" src/main/java
+rg -n "TerminalOperationTool|FileOperationTool|ResourceDownloadTool|PDFGenerationTool|executeCommandSafe" src/main/java
 rg -n "refreshableMcpToolProvider|getToolCallbacks" src/main/java/com/li/lipicturecloud/AI/app/PicCloudApp.java
 ```
 
@@ -261,7 +262,7 @@ Expected: test passes; first `rg` is empty; second confirms MCP injection remain
 - [ ] **Step 5: Commit and push**
 
 ```powershell
-git add -- src/main/java/com/li/lipicturecloud/AI/tools/ToolRegistration.java src/main/java/com/li/lipicturecloud/AI/tools/TerminalOperationTool.java src/main/java/com/li/lipicturecloud/AI/tools/FileOperationTool.java src/main/java/com/li/lipicturecloud/AI/tools/ResourceDownloadTool.java src/test/java/com/li/lipicturecloud/AI/tools/ToolRegistrationTest.java
+git add -- src/main/java/com/li/lipicturecloud/AI/tools/ToolRegistration.java src/main/java/com/li/lipicturecloud/AI/tools/TerminalOperationTool.java src/main/java/com/li/lipicturecloud/AI/tools/FileOperationTool.java src/main/java/com/li/lipicturecloud/AI/tools/ResourceDownloadTool.java src/main/java/com/li/lipicturecloud/AI/tools/PDFGenerationTool.java src/test/java/com/li/lipicturecloud/AI/tools/ToolRegistrationTest.java
 git commit -m "security: remove general server AI tools"
 git push origin main
 ```
@@ -342,7 +343,7 @@ Expected: all tests pass, lint has zero warnings, Vite builds, bundle budget pas
 - [ ] **Step 3: Verify security invariants and Git scope**
 
 ```powershell
-rg -n "DigestUtil\.md5Hex|UserConstant\.SALT|TerminalOperationTool|FileOperationTool|ResourceDownloadTool" src/main/java
+rg -n "DigestUtil\.md5Hex|UserConstant\.SALT|TerminalOperationTool|FileOperationTool|ResourceDownloadTool|PDFGenerationTool" src/main/java
 git diff --check
 git status --short
 git fetch origin main

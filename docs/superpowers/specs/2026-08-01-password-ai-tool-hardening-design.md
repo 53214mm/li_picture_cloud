@@ -49,6 +49,7 @@
 - `TerminalOperationTool`
 - `FileOperationTool`
 - `ResourceDownloadTool`
+- `PDFGenerationTool`（其读取、写入、合并和拆分接口同样接受服务器文件路径）
 
 对应 Java 类一并删除，避免后来误注册。`ToolRegistration` 中仍保留图片平台业务确实需要的本地工具。
 
