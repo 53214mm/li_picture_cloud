@@ -20,4 +20,7 @@ springdoc:
 
 app:
   collaboration:
+    store: redis
+    state-ttl: ${COLLABORATION_STATE_TTL:24h}
+    channel: ${COLLABORATION_CHANNEL:picture-cloud:collaboration:events}
     allowed-origins: ${COLLABORATION_ALLOWED_ORIGINS}

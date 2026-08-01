@@ -2,38 +2,49 @@ package com.li.lipicturecloud.collaboration;
 
 import com.li.lipicturecloud.collaboration.model.CollaborationCommand;
 import com.li.lipicturecloud.collaboration.model.CollaborationState;
-import com.li.lipicturecloud.domain.collaboration.CollaborationAction;
-import com.li.lipicturecloud.domain.collaboration.CollaborationSession;
-import com.li.lipicturecloud.domain.collaboration.CollaborationSnapshot;
-import com.li.lipicturecloud.domain.collaboration.StaleCollaborationVersionException;
+import com.li.lipicturecloud.collaboration.store.ApplyCollaborationResult;
+import com.li.lipicturecloud.collaboration.store.CollaborationStateStore;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
 @Service
 public class CollaborationSessionService {
 
-    private final Map<Long, PictureSession> sessions = new ConcurrentHashMap<>();
+    private final CollaborationStateStore stateStore;
     private final LongAdder appliedCommands = new LongAdder();
     private final LongAdder duplicateCommands = new LongAdder();
     private final LongAdder versionConflicts = new LongAdder();
 
+    public CollaborationSessionService(CollaborationStateStore stateStore) {
+        this.stateStore = stateStore;
+    }
+
     public CollaborationState current(Long pictureId) {
         validatePictureId(pictureId);
-        return sessions.computeIfAbsent(pictureId, PictureSession::new).current();
+        return stateStore.current(pictureId);
     }
 
     public CollaborationState apply(CollaborationCommand command) {
         validate(command);
-        return sessions.computeIfAbsent(command.pictureId(), PictureSession::new).apply(command);
+        try {
+            ApplyCollaborationResult result = stateStore.apply(command);
+            if (result.newlyApplied()) {
+                appliedCommands.increment();
+            } else {
+                duplicateCommands.increment();
+            }
+            return result.state();
+        } catch (CollaborationVersionConflictException exception) {
+            versionConflicts.increment();
+            throw exception;
+        }
     }
 
     public CollaborationMetrics metrics() {
         return new CollaborationMetrics(
-                appliedCommands.sum(), duplicateCommands.sum(), versionConflicts.sum(), sessions.size());
+                appliedCommands.sum(), duplicateCommands.sum(), versionConflicts.sum(),
+                stateStore.activeSessionCount());
     }
 
     private void validate(CollaborationCommand command) {
@@ -50,45 +61,6 @@ public class CollaborationSessionService {
     private void validatePictureId(Long pictureId) {
         if (pictureId == null || pictureId <= 0) {
             throw new IllegalArgumentException("图片 ID 无效");
-        }
-    }
-
-    private final class PictureSession {
-        private final CollaborationSession domainSession;
-        private final Map<String, CollaborationState> processedCommands = new HashMap<>();
-
-        private PictureSession(Long pictureId) {
-            domainSession = CollaborationSession.start(pictureId);
-        }
-
-        private synchronized CollaborationState current() {
-            return toState(domainSession.snapshot());
-        }
-
-        private synchronized CollaborationState apply(CollaborationCommand command) {
-            CollaborationState existing = processedCommands.get(command.commandId());
-            if (existing != null) {
-                duplicateCommands.increment();
-                return existing;
-            }
-            CollaborationState state;
-            try {
-                CollaborationSnapshot snapshot = domainSession.apply(
-                        CollaborationAction.valueOf(command.operation().name()), command.baseVersion());
-                state = toState(snapshot);
-            } catch (StaleCollaborationVersionException exception) {
-                versionConflicts.increment();
-                throw new CollaborationVersionConflictException(
-                        exception.expectedVersion(), exception.actualVersion());
-            }
-            processedCommands.put(command.commandId(), state);
-            appliedCommands.increment();
-            return state;
-        }
-
-        private CollaborationState toState(CollaborationSnapshot snapshot) {
-            return new CollaborationState(
-                    snapshot.pictureId(), snapshot.rotation(), snapshot.scale(), snapshot.version());
         }
     }
 }

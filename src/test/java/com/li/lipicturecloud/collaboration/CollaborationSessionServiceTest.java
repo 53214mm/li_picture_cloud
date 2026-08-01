@@ -3,6 +3,7 @@ package com.li.lipicturecloud.collaboration;
 import com.li.lipicturecloud.collaboration.model.CollaborationCommand;
 import com.li.lipicturecloud.collaboration.model.CollaborationOperation;
 import com.li.lipicturecloud.collaboration.model.CollaborationState;
+import com.li.lipicturecloud.collaboration.store.InMemoryCollaborationStateStore;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -10,7 +11,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CollaborationSessionServiceTest {
 
-    private final CollaborationSessionService service = new CollaborationSessionService();
+    private final CollaborationSessionService service = new CollaborationSessionService(
+            new InMemoryCollaborationStateStore());
 
     @Test
     void appliesRotateAndZoomCommandsToServerState() {

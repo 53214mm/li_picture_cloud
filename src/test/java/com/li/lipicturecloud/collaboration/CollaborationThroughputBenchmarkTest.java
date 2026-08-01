@@ -2,6 +2,7 @@ package com.li.lipicturecloud.collaboration;
 
 import com.li.lipicturecloud.collaboration.model.CollaborationCommand;
 import com.li.lipicturecloud.collaboration.model.CollaborationOperation;
+import com.li.lipicturecloud.collaboration.store.InMemoryCollaborationStateStore;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -10,7 +11,8 @@ class CollaborationThroughputBenchmarkTest {
 
     @Test
     void measuresDirectStateMachineThroughput() {
-        CollaborationSessionService service = new CollaborationSessionService();
+        CollaborationSessionService service = new CollaborationSessionService(
+                new InMemoryCollaborationStateStore());
         int commands = 100_000;
         long started = System.nanoTime();
         for (int i = 0; i < commands; i++) {

@@ -13,6 +13,16 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -26,6 +36,9 @@ jobs:
 
       - name: Test, package, and report backend coverage
         run: ./mvnw -B -Dspring.profiles.active=test verify
+
+      - name: Test Redis collaboration integration
+        run: ./mvnw -B -Dredis.integration.enabled=true -Dtest=RedisCollaborationStateStoreTest,RedisCollaborationEventBusTest test
 
       - name: Publish backend coverage artifact
         uses: actions/upload-artifact@v4

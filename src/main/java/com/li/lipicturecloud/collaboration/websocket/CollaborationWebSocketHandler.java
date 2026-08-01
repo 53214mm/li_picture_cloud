@@ -7,6 +7,7 @@ import com.li.lipicturecloud.collaboration.model.CollaborationCommand;
 import com.li.lipicturecloud.collaboration.model.CollaborationCommandRequest;
 import com.li.lipicturecloud.collaboration.model.CollaborationEvent;
 import com.li.lipicturecloud.collaboration.model.CollaborationState;
+import com.li.lipicturecloud.collaboration.event.CollaborationEventPublisher;
 import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
 import com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConstant;
 import org.springframework.stereotype.Component;
@@ -26,14 +27,17 @@ public class CollaborationWebSocketHandler extends TextWebSocketHandler {
     private final CollaborationSessionService sessionService;
     private final SpaceAuthorizationAccessService accessService;
     private final ObjectMapper objectMapper;
+    private final CollaborationEventPublisher eventPublisher;
     private final Map<Long, Set<WebSocketSession>> rooms = new ConcurrentHashMap<>();
 
     public CollaborationWebSocketHandler(CollaborationSessionService sessionService,
                                          SpaceAuthorizationAccessService accessService,
-                                         ObjectMapper objectMapper) {
+                                         ObjectMapper objectMapper,
+                                         CollaborationEventPublisher eventPublisher) {
         this.sessionService = sessionService;
         this.accessService = accessService;
         this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -42,7 +46,7 @@ public class CollaborationWebSocketHandler extends TextWebSocketHandler {
         Long userId = userId(session);
         rooms.computeIfAbsent(pictureId, ignored -> ConcurrentHashMap.newKeySet()).add(session);
         send(session, CollaborationEvent.state(sessionService.current(pictureId)));
-        broadcast(pictureId, CollaborationEvent.presence(
+        eventPublisher.publish(pictureId, CollaborationEvent.presence(
                 "JOIN", userId, sessionService.current(pictureId)));
     }
 
@@ -57,7 +61,8 @@ public class CollaborationWebSocketHandler extends TextWebSocketHandler {
                     message.getPayload(), CollaborationCommandRequest.class);
             CollaborationState state = sessionService.apply(new CollaborationCommand(
                     request.commandId(), pictureId, userId, request.operation(), request.baseVersion()));
-            broadcast(pictureId, CollaborationEvent.operation(userId, request.operation(), state));
+            eventPublisher.publish(pictureId,
+                    CollaborationEvent.operation(userId, request.operation(), state));
         } catch (CollaborationVersionConflictException exception) {
             send(session, CollaborationEvent.error(exception.getMessage(), sessionService.current(pictureId)));
         } catch (RuntimeException exception) {
@@ -76,11 +81,11 @@ public class CollaborationWebSocketHandler extends TextWebSocketHandler {
                 rooms.remove(pictureId, room);
             }
         }
-        broadcast(pictureId, CollaborationEvent.presence(
+        eventPublisher.publish(pictureId, CollaborationEvent.presence(
                 "LEAVE", userId(session), sessionService.current(pictureId)));
     }
 
-    private void broadcast(Long pictureId, CollaborationEvent event) throws IOException {
+    public void broadcastLocal(Long pictureId, CollaborationEvent event) throws IOException {
         for (WebSocketSession session : rooms.getOrDefault(pictureId, Set.of())) {
             if (session.isOpen()) {
                 send(session, event);

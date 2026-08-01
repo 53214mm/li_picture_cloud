@@ -33,8 +33,8 @@ spring:
   data:
     redis:
       database: 15
-      host: 127.0.0.1
-      port: 6379
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
       timeout: 5000
       password: ${REDIS_PASSWORD}
   session:
@@ -42,12 +42,6 @@ spring:
     timeout: 2592000          # 30天（秒）
     cookie:
       max-age: 2592000        # 同样30天，与timeout保持同步
-  config:
-    activate:
-      on-profile: local
-
-
-
 server:
   port: 8124
   servlet:
@@ -81,4 +75,7 @@ springdoc:
 
 app:
   collaboration:
+    store: ${COLLABORATION_STORE:redis}
+    state-ttl: ${COLLABORATION_STATE_TTL:24h}
+    channel: ${COLLABORATION_CHANNEL:picture-cloud:collaboration:events}
     allowed-origins: ${COLLABORATION_ALLOWED_ORIGINS:http://localhost:5173}

@@ -44,6 +44,8 @@ mxai:
 app:
   mcp:
     enabled: false
+  collaboration:
+    store: memory
 
 server:
   servlet:
