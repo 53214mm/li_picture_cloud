@@ -316,7 +316,7 @@ async function onImageEditSave(blob) {
   try {
     await uploadPicture(fd)
     showImageEditor.value = false
-    loadPicture()
+    picture.value = await getPictureVOById(picture.value.id)
   } catch (e) {
     alert(e.message || '更新图片失败')
   }

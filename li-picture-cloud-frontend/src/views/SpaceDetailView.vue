@@ -218,7 +218,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getSpaceVOById } from '@/api/space'
 import { listPictureVOByPage, editPicture, deletePicture, getPictureTagCategory, editPictureByBatch } from '@/api/picture'
@@ -230,7 +230,6 @@ import ImageEditModal from '@/components/ImageEditModal.vue'
 import { spaceLevelText, formatSize, formatDate } from '@/constants/space'
 
 const route = useRoute()
-const router = useRouter()
 const userStore = useUserStore()
 
 // 空间 ID 是 Snowflake 长整型，必须保持 String 避免 JS 精度丢失

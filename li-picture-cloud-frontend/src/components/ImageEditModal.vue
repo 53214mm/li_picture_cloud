@@ -25,7 +25,7 @@
 import { ref } from 'vue'
 import ImageEditor from './ImageEditor.vue'
 
-const props = defineProps({
+defineProps({
   visible: { type: Boolean, default: false },
   imageSrc: { type: String, default: '' }
 })

@@ -78,7 +78,7 @@ function loadHistory() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) { const msgs = JSON.parse(saved); if (msgs.length) return msgs }
-  } catch(e) {}
+  } catch { /* localStorage may be unavailable */ }
   return [{ role: 'assistant', content: '你好！我是 **PicAgent** 🎨\n\n试试点击下方按钮，或者直接告诉我你想做什么。' }]
 }
 function saveHistory(msgs) { localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs.slice(-40))) }
@@ -121,7 +121,7 @@ function renderMd(text) {
       ALLOWED_TAGS: ['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'strong', 'em', 'code', 'pre', 'ul', 'ol', 'li', 'a', 'blockquote', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'span', 'div'],
       ALLOWED_ATTR: ['src', 'alt', 'href', 'target', 'rel', 'class', 'style', 'loading']
     })
-  } catch(e) { return text.replace(/\n/g, '<br>') }
+  } catch { return text.replace(/\n/g, '<br>') }
 }
 
 /** ★ 修复快捷按钮：只填输入框不自动发送，让用户可以继续编辑 */
@@ -171,15 +171,13 @@ function submitImageForm() {
 
 /** ★ 清空对话：清除前端状态 + 后端记忆 */
 async function clearChat() {
-  try { await fetch('/api/ai/chat/clear?chatId=' + chatId, { method: 'POST' }) } catch(e) {}
+  try { await fetch('/api/ai/chat/clear?chatId=' + chatId, { method: 'POST' }) } catch { /* local state is still cleared */ }
   messages.value = [{ role: 'assistant', content: '你好！我是 **PicAgent** 🎨\n\n试试点击下方按钮，或者直接告诉我你想做什么。' }]
   streaming.value = ''
   chatId = 'pic-' + Date.now()
   localStorage.removeItem(STORAGE_KEY)
   localStorage.setItem(CHAT_ID_KEY, chatId)
 }
-
-function sendQuick(prompt) { fillInput(prompt); send() }
 
 async function send() {
   const msg = input.value.trim()
@@ -205,7 +203,7 @@ function doSend(msg) {
       const msgs = messages.value.slice(-39)
       msgs.push({ role: 'assistant', content: streaming.value })
       localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs))
-    } catch(e) {}
+    } catch { /* localStorage may be unavailable */ }
     scroll()
   }
 

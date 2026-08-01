@@ -37,7 +37,7 @@ const props = defineProps({
   imageSrc: { type: String, required: true }
 })
 
-const emit = defineEmits(['done'])
+defineEmits(['done'])
 
 const canvas = ref(null)
 const canvasWrap = ref(null)
