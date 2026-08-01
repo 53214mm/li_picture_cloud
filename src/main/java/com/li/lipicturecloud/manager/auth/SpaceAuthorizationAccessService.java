@@ -49,9 +49,27 @@ public class SpaceAuthorizationAccessService {
         }
     }
 
+    public void checkForUser(String permission, Long pictureId, Long userId) {
+        if (!getPermissionsForUser(null, pictureId, null, userId).contains(permission)) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "缺少权限：" + permission);
+        }
+    }
+
     public Set<String> getPermissions(Long spaceId, Long pictureId, Long spaceUserId,
                                       HttpServletRequest request) {
         User loginUser = userService.getLoginUserEntity(request);
+        return getPermissions(spaceId, pictureId, spaceUserId, loginUser);
+    }
+
+    public Set<String> getPermissionsForUser(Long spaceId, Long pictureId, Long spaceUserId, Long userId) {
+        User user = userService.getById(userId);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "用户登录态已失效");
+        }
+        return getPermissions(spaceId, pictureId, spaceUserId, user);
+    }
+
+    private Set<String> getPermissions(Long spaceId, Long pictureId, Long spaceUserId, User loginUser) {
         AuthorizationSubject subject = userService.isAdmin(loginUser)
                 ? AuthorizationSubject.platformAdmin(loginUser.getId())
                 : AuthorizationSubject.user(loginUser.getId());

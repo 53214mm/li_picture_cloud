@@ -79,3 +79,6 @@ springdoc:
   paths-to-exclude:
     - /actuator/**
 
+app:
+  collaboration:
+    allowed-origins: ${COLLABORATION_ALLOWED_ORIGINS:http://localhost:5173}
