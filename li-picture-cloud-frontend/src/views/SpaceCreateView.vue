@@ -2,8 +2,26 @@
   <div class="create-page">
     <div class="container">
       <div class="form-card">
-        <h1>创建私有空间</h1>
-        <p class="subtitle">空间是独立的图片存储区域，拥有独立的容量和数量配额。</p>
+        <h1>创建空间</h1>
+        <p class="subtitle">选择个人使用或团队协作，每类空间都拥有独立的容量和数量配额。</p>
+
+        <div class="type-section">
+          <h3>选择空间类型</h3>
+          <div class="type-options">
+            <button
+              v-for="option in typeOptions"
+              :key="option.value"
+              type="button"
+              class="type-option"
+              :class="{ active: form.spaceType === option.value }"
+              :aria-pressed="form.spaceType === option.value"
+              @click="form.spaceType = option.value"
+            >
+              <span class="type-name">{{ option.name }}</span>
+              <span class="type-desc">{{ option.description }}</span>
+            </button>
+          </div>
+        </div>
 
         <!-- 空间级别选择 -->
         <div class="level-section">
@@ -67,7 +85,8 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { addSpace } from '@/api/space'
 import { listSpaceLevel } from '@/api/space'
-import { SPACE_LEVEL, formatSize } from '@/constants/space'
+import { SPACE_LEVEL, SPACE_TYPE, formatSize } from '@/constants/space'
+import { buildSpaceCreatePayload } from '@/utils/spaceAccess'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -75,9 +94,26 @@ const userStore = useUserStore()
 if (!userStore.isLoggedIn) router.replace('/login')
 
 const spaceLevels = ref([])
-const form = reactive({ spaceName: '', spaceLevel: SPACE_LEVEL.COMMON })
+const form = reactive({
+  spaceName: '',
+  spaceLevel: SPACE_LEVEL.COMMON,
+  spaceType: SPACE_TYPE.PRIVATE
+})
 const error = ref('')
 const submitting = ref(false)
+
+const typeOptions = [
+  {
+    value: SPACE_TYPE.PRIVATE,
+    name: '私有空间',
+    description: '仅自己使用，适合管理个人图片。'
+  },
+  {
+    value: SPACE_TYPE.TEAM,
+    name: '团队空间',
+    description: '邀请成员并按角色协同管理和编辑图片。'
+  }
+]
 
 const levelDescriptions = {
   [SPACE_LEVEL.COMMON]: '适合个人日常使用，存储少量图片素材。',
@@ -119,10 +155,7 @@ async function handleCreate() {
   if (submitting.value) return
   submitting.value = true
   try {
-    const newId = await addSpace({
-      spaceName: form.spaceName || undefined,
-      spaceLevel: form.spaceLevel
-    })
+    const newId = await addSpace(buildSpaceCreatePayload(form))
     router.push(`/space/${newId}`)
   } catch (e) {
     error.value = e.message || '创建失败'
@@ -144,6 +177,18 @@ async function handleCreate() {
 }
 .form-card h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.04em; margin-bottom: 0.5rem; }
 .subtitle { color: var(--gray-600); font-size: 0.9375rem; margin-bottom: 2rem; }
+
+.type-section { margin-bottom: 2rem; }
+.type-section h3 { font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; }
+.type-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+.type-option {
+  border: 2px solid var(--gray-200); padding: 1rem; background: var(--white);
+  text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 0.375rem;
+}
+.type-option:hover, .type-option.active { border-color: var(--black); }
+.type-option.active { background: var(--gray-100); }
+.type-name { font-size: 1rem; font-weight: 700; }
+.type-desc { color: var(--gray-600); font-size: 0.8125rem; line-height: 1.5; }
 
 /* 级别选择 */
 .level-section { margin-bottom: 2rem; }
@@ -176,4 +221,8 @@ async function handleCreate() {
 .field-hint { font-size: 0.75rem; color: var(--gray-400); text-align: right; }
 .form-error { padding: 0.75rem 1rem; background: #FFF0EF; color: var(--red); font-size: 0.875rem; font-weight: 500; margin-bottom: 1rem; }
 .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
+
+@media (max-width: 640px) {
+  .type-options { grid-template-columns: 1fr; }
+}
 </style>
