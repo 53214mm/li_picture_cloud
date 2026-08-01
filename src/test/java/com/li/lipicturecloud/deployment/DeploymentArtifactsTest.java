@@ -64,6 +64,25 @@ class DeploymentArtifactsTest {
         assertThat(compose).doesNotContain("ports:");
     }
 
+    @Test
+    void gatewayTemplatesCoverIpAcmeHttpsWebSocketAndSse() throws IOException {
+        String ip = read("deploy/nginx/lipicturecloud-ip-http.conf");
+        String acme = read("deploy/nginx/lipicturecloud-acme-http.conf");
+        String https = read("deploy/nginx/lipicturecloud-domain-https.conf");
+
+        assertThat(ip).contains(
+                "server_name 82.156.66.244",
+                "client_max_body_size 55m",
+                "location = /api/ws/collaboration",
+                "proxy_set_header Upgrade $http_upgrade",
+                "location = /api/ai/chat/stream",
+                "proxy_buffering off",
+                "proxy_pass http://lipicturecloud-backend:8124",
+                "proxy_pass http://lipicturecloud-web:80");
+        assertThat(acme).contains("server_name lipicturecloud.com", "location ^~ /.well-known/acme-challenge/");
+        assertThat(https).contains("listen 443 ssl", "ssl_certificate", "return 301 https://$host$request_uri");
+    }
+
     private String read(String path) throws IOException {
         return Files.readString(Path.of(path), StandardCharsets.UTF_8);
     }
