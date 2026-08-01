@@ -112,6 +112,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (userPassword.length() < MIN_PASSWORD_LENGTH) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "密码长度不能小于" + MIN_PASSWORD_LENGTH + "位");
         }
+        validatePasswordForHashing(userPassword);
 
         // ============================================================
         // 第 4 步：两次密码一致性校验
@@ -369,6 +370,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (userPassword.length() < MIN_PASSWORD_LENGTH) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "密码长度不能小于" + MIN_PASSWORD_LENGTH + "位");
         }
+        validatePasswordForHashing(userPassword);
 
         // ---- 唯一性校验 ----
         if (this.count(new LambdaQueryWrapper<User>().eq(User::getUserAccount, userAccount)) > 0) {
@@ -555,6 +557,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // user 中的 userPassword 在 UserVO 中没有对应字段，会被自动忽略
         BeanUtil.copyProperties(user, userVO);
         return userVO;
+    }
+
+    private void validatePasswordForHashing(String rawPassword) {
+        try {
+            passwordHashService.validateRawPassword(rawPassword);
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, exception.getMessage());
+        }
     }
 
     @Override
