@@ -2,6 +2,7 @@ package com.li.lipicturecloud.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.li.lipicturecloud.model.dto.spaceuser.SpaceUserAddRequest;
+import com.li.lipicturecloud.model.dto.spaceuser.SpaceUserEditRequest;
 import com.li.lipicturecloud.model.dto.spaceuser.SpaceUserQueryRequest;
 import com.li.lipicturecloud.model.entity.SpaceUser;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -18,6 +19,10 @@ import java.util.List;
 public interface SpaceUserService extends IService<SpaceUser> {
 
     long addSpaceUser(SpaceUserAddRequest spaceUserAddRequest);
+
+    boolean editSpaceUser(SpaceUserEditRequest spaceUserEditRequest);
+
+    boolean deleteSpaceUser(long id);
 
     void validSpaceUser(SpaceUser spaceUser, boolean add);
 

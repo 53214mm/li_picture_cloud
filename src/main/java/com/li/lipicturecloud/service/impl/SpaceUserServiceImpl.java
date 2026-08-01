@@ -4,16 +4,19 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.exception.ThrowUtils;
 import com.li.lipicturecloud.model.dto.spaceuser.SpaceUserAddRequest;
+import com.li.lipicturecloud.model.dto.spaceuser.SpaceUserEditRequest;
 import com.li.lipicturecloud.model.dto.spaceuser.SpaceUserQueryRequest;
 import com.li.lipicturecloud.model.entity.Space;
 import com.li.lipicturecloud.model.entity.SpaceUser;
 import com.li.lipicturecloud.model.entity.User;
 import com.li.lipicturecloud.model.enums.SpaceRoleEnum;
+import com.li.lipicturecloud.model.enums.SpaceTypeEnum;
 import com.li.lipicturecloud.model.vo.SpaceUserVO;
 import com.li.lipicturecloud.model.vo.SpaceVO;
 import com.li.lipicturecloud.model.vo.UserVO;
@@ -29,6 +32,7 @@ import org.springframework.stereotype.Service;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -53,11 +57,60 @@ public class SpaceUserServiceImpl extends ServiceImpl<SpaceUserMapper, SpaceUser
         ThrowUtils.throwIf(spaceUserAddRequest == null, ErrorCode.PARAMS_ERROR);
         SpaceUser spaceUser = new SpaceUser();
         BeanUtils.copyProperties(spaceUserAddRequest, spaceUser);
+        if (ObjUtil.isEmpty(spaceUser.getSpaceRole())) {
+            spaceUser.setSpaceRole(SpaceRoleEnum.VIEWER.getValue());
+        }
         validSpaceUser(spaceUser, true);
+        Space space = requireTeamSpace(spaceUser.getSpaceId());
+        Long memberCount = this.getBaseMapper().selectCount(new LambdaQueryWrapper<SpaceUser>()
+                .eq(SpaceUser::getSpaceId, space.getId())
+                .eq(SpaceUser::getUserId, spaceUser.getUserId()));
+        ThrowUtils.throwIf(memberCount != null && memberCount > 0,
+                ErrorCode.OPERATION_ERROR, "该用户已在团队中");
         // 数据库操作
         boolean result = this.save(spaceUser);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return spaceUser.getId();
+    }
+
+    @Override
+    public boolean editSpaceUser(SpaceUserEditRequest spaceUserEditRequest) {
+        ThrowUtils.throwIf(spaceUserEditRequest == null || spaceUserEditRequest.getId() <= 0,
+                ErrorCode.PARAMS_ERROR);
+        SpaceUser oldSpaceUser = this.getById(spaceUserEditRequest.getId());
+        ThrowUtils.throwIf(oldSpaceUser == null, ErrorCode.NOT_FOUND_ERROR, "团队成员不存在");
+        Space space = requireTeamSpace(oldSpaceUser.getSpaceId());
+        if (Objects.equals(space.getUserId(), oldSpaceUser.getUserId())) {
+            ThrowUtils.throwIf(!SpaceRoleEnum.ADMIN.getValue().equals(spaceUserEditRequest.getSpaceRole()),
+                    ErrorCode.OPERATION_ERROR, "团队创建者必须保留管理员角色");
+        }
+        SpaceUser spaceUser = new SpaceUser();
+        BeanUtils.copyProperties(spaceUserEditRequest, spaceUser);
+        validSpaceUser(spaceUser, false);
+        boolean result = this.updateById(spaceUser);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "修改团队成员失败");
+        return true;
+    }
+
+    @Override
+    public boolean deleteSpaceUser(long id) {
+        ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
+        SpaceUser spaceUser = this.getById(id);
+        ThrowUtils.throwIf(spaceUser == null, ErrorCode.NOT_FOUND_ERROR, "团队成员不存在");
+        Space space = requireTeamSpace(spaceUser.getSpaceId());
+        ThrowUtils.throwIf(Objects.equals(space.getUserId(), spaceUser.getUserId()),
+                ErrorCode.OPERATION_ERROR, "不能移除团队创建者");
+        boolean result = this.removeById(id);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "移除团队成员失败");
+        return true;
+    }
+
+    private Space requireTeamSpace(Long spaceId) {
+        Space space = spaceService.getById(spaceId);
+        ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR, "空间不存在");
+        ThrowUtils.throwIf(!Objects.equals(space.getSpaceType(), SpaceTypeEnum.TEAM.getValue()),
+                ErrorCode.PARAMS_ERROR, "只有团队空间可以管理成员");
+        return space;
     }
 
     @Override

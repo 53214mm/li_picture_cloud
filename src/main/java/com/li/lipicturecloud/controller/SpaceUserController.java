@@ -21,7 +21,6 @@ import com.li.lipicturecloud.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -67,13 +66,7 @@ public class SpaceUserController {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        long id = deleteRequest.getId();
-        // 判断是否存在
-        SpaceUser oldSpaceUser = spaceUserService.getById(id);
-        ThrowUtils.throwIf(oldSpaceUser == null, ErrorCode.NOT_FOUND_ERROR);
-        // 操作数据库
-        boolean result = spaceUserService.removeById(id);
-        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        boolean result = spaceUserService.deleteSpaceUser(deleteRequest.getId());
         return ResultUtils.success(true);
     }
 
@@ -118,18 +111,7 @@ public class SpaceUserController {
         if (spaceUserEditRequest == null || spaceUserEditRequest.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        // 将实体类和 DTO 进行转换
-        SpaceUser spaceUser = new SpaceUser();
-        BeanUtils.copyProperties(spaceUserEditRequest, spaceUser);
-        // 数据校验
-        spaceUserService.validSpaceUser(spaceUser, false);
-        // 判断是否存在
-        long id = spaceUserEditRequest.getId();
-        SpaceUser oldSpaceUser = spaceUserService.getById(id);
-        ThrowUtils.throwIf(oldSpaceUser == null, ErrorCode.NOT_FOUND_ERROR);
-        // 操作数据库
-        boolean result = spaceUserService.updateById(spaceUser);
-        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        boolean result = spaceUserService.editSpaceUser(spaceUserEditRequest);
         return ResultUtils.success(true);
     }
 
