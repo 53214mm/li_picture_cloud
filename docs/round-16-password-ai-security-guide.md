@@ -21,6 +21,24 @@ MCP 生图没有被删除。用户仍然可以让 AI 调用 MCP 生成图片；�
 - 不在登录时偷偷兼容或升级 MD5；
 - 不向外部用户透露数据库里保存了哪种密码格式。
 
+### 上线时必须让旧 Session 失效
+
+Spring Session 保存在 Redis 中，单纯重启后端不会自动删除旧登录态。如果不处理，切换 BCrypt 前已经登录的账号可能继续使用旧 Session。
+
+生产启动时应更换 Session namespace，例如：
+
+```bash
+export SPRING_SESSION_REDIS_NAMESPACE=li-picture-cloud:sessions:bcrypt-v1
+```
+
+Windows PowerShell：
+
+```powershell
+$env:SPRING_SESSION_REDIS_NAMESPACE = "li-picture-cloud:sessions:bcrypt-v1"
+```
+
+然后重启所有后端实例。新版本只会读取新 namespace，旧 Session 会立即失效，同时不会误删协同编辑或其他 Redis 数据。以后再次进行需要全员重新登录的认证升级，可以把末尾版本改为 `v2`。
+
 正式操作前必须备份数据库。例如在服务器终端使用 MySQL 官方工具，将文件保存到只有管理员可读的目录：
 
 ```bash
@@ -157,6 +175,7 @@ MCP 工具由 `RefreshableMcpToolProvider` 单独注入，删除本地服务器�
 - [ ] 已备份数据库，并验证备份文件可读取。
 - [ ] 新注册账号的 `userPassword` 以 BCrypt 前缀开头，但没有打印明文。
 - [ ] 旧 MD5 账号无法直接登录。
+- [ ] 已切换 Spring Session Redis namespace，旧登录态全部失效。
 - [ ] 第一个管理员重新登录后能进入管理页面。
 - [ ] AI 工具清单中没有终端、文件、下载和 PDF 路径工具。
 - [ ] MCP 生图仍然成功。
