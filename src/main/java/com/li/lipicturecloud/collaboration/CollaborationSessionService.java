@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.LongAdder;
 
 @Service
 public class CollaborationSessionService {
@@ -16,6 +17,9 @@ public class CollaborationSessionService {
     private static final double SCALE_STEP = 0.1;
 
     private final Map<Long, PictureSession> sessions = new ConcurrentHashMap<>();
+    private final LongAdder appliedCommands = new LongAdder();
+    private final LongAdder duplicateCommands = new LongAdder();
+    private final LongAdder versionConflicts = new LongAdder();
 
     public CollaborationState current(Long pictureId) {
         validatePictureId(pictureId);
@@ -25,6 +29,11 @@ public class CollaborationSessionService {
     public CollaborationState apply(CollaborationCommand command) {
         validate(command);
         return sessions.computeIfAbsent(command.pictureId(), PictureSession::new).apply(command);
+    }
+
+    public CollaborationMetrics metrics() {
+        return new CollaborationMetrics(
+                appliedCommands.sum(), duplicateCommands.sum(), versionConflicts.sum(), sessions.size());
     }
 
     private void validate(CollaborationCommand command) {
@@ -44,7 +53,7 @@ public class CollaborationSessionService {
         }
     }
 
-    private static final class PictureSession {
+    private final class PictureSession {
         private CollaborationState state;
         private final Map<String, CollaborationState> processedCommands = new HashMap<>();
 
@@ -59,9 +68,11 @@ public class CollaborationSessionService {
         private synchronized CollaborationState apply(CollaborationCommand command) {
             CollaborationState existing = processedCommands.get(command.commandId());
             if (existing != null) {
+                duplicateCommands.increment();
                 return existing;
             }
             if (command.baseVersion() != state.version()) {
+                versionConflicts.increment();
                 throw new CollaborationVersionConflictException(command.baseVersion(), state.version());
             }
 
@@ -75,6 +86,7 @@ public class CollaborationSessionService {
             }
             state = new CollaborationState(state.pictureId(), rotation, scale, state.version() + 1);
             processedCommands.put(command.commandId(), state);
+            appliedCommands.increment();
             return state;
         }
 

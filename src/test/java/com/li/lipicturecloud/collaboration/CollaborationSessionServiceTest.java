@@ -41,6 +41,21 @@ class CollaborationSessionServiceTest {
                 .isInstanceOf(CollaborationVersionConflictException.class);
     }
 
+    @Test
+    void exposesAppliedDuplicateAndConflictMetrics() {
+        CollaborationCommand command = command("same", CollaborationOperation.ROTATE_RIGHT, 0);
+        service.apply(command);
+        service.apply(command);
+        assertThatThrownBy(() -> service.apply(command("stale", CollaborationOperation.ZOOM_IN, 0)))
+                .isInstanceOf(CollaborationVersionConflictException.class);
+
+        CollaborationMetrics metrics = service.metrics();
+        assertThat(metrics.appliedCommands()).isEqualTo(1);
+        assertThat(metrics.duplicateCommands()).isEqualTo(1);
+        assertThat(metrics.versionConflicts()).isEqualTo(1);
+        assertThat(metrics.activePictures()).isEqualTo(1);
+    }
+
     private CollaborationCommand command(String id, CollaborationOperation operation, long version) {
         return new CollaborationCommand(id, 7L, 99L, operation, version);
     }
