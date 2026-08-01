@@ -33,7 +33,7 @@ class CollaborationHandshakeInterceptorTest {
         assertThat(accepted).isTrue();
         assertThat(attributes).containsEntry(CollaborationHandshakeInterceptor.PICTURE_ID, 7L)
                 .containsEntry(CollaborationHandshakeInterceptor.USER_ID, 8L);
-        verify(access).checkForUser(SpaceUserPermissionConstant.COLLABORATION_EDIT, 7L, 8L);
+        verify(access).checkForUser(SpaceUserPermissionConstant.COLLABORATION_JOIN, 7L, 8L);
     }
 
     @Test

@@ -74,8 +74,8 @@ class SpaceAuthorizationManagerTest {
 
     static Stream<Arguments> teamRolePermissions() {
         return Stream.of(
-                Arguments.of("viewer", Set.of("space:view", "picture:view"),
-                        Set.of("picture:edit", "collaboration:join", "spaceUser:manage")),
+                Arguments.of("viewer", Set.of("space:view", "picture:view", "collaboration:join"),
+                        Set.of("picture:edit", "collaboration:edit", "spaceUser:manage")),
                 Arguments.of("editor", Set.of("space:view", "picture:edit", "collaboration:join", "collaboration:edit"),
                         Set.of("spaceUser:manage", "space:manage")),
                 Arguments.of("admin", Set.of("space:manage", "spaceUser:manage", "collaboration:edit"), Set.of())

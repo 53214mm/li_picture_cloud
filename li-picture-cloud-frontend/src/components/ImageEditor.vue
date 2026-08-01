@@ -1,7 +1,7 @@
 <template>
   <div class="editor-root">
     <!-- 工具栏 -->
-    <div class="editor-toolbar">
+    <div v-if="!readOnly" class="editor-toolbar">
       <button v-if="!collaborative" class="tool-btn" :class="{ active: mode === 'crop' }" @click="setMode('crop')" title="裁剪">✂️ 裁剪</button>
       <button class="tool-btn" @click="handleRotate(-90)" title="逆时针旋转">↺ 左旋</button>
       <button class="tool-btn" @click="handleRotate(90)" title="顺时针旋转">↻ 右旋</button>
@@ -40,6 +40,7 @@ import { ref, onMounted, nextTick, watch } from 'vue'
 const props = defineProps({
   imageSrc: { type: String, required: true },
   collaborative: { type: Boolean, default: false },
+  readOnly: { type: Boolean, default: false },
   collaborationState: { type: Object, default: null }
 })
 
@@ -130,6 +131,7 @@ function handleRotate(deg) {
 }
 
 function emitOperation(operation) {
+  if (props.readOnly) return
   emit('operation', operation)
 }
 

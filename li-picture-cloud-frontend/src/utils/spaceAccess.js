@@ -11,6 +11,11 @@ export function hasPermission(permissions, permission) {
   return normalizePermissions(permissions).includes(permission)
 }
 
+export function collaborationMode(permissions, isTeamSpace) {
+  if (!isTeamSpace || !hasPermission(permissions, 'collaboration:join')) return null
+  return hasPermission(permissions, 'collaboration:edit') ? 'edit' : 'view'
+}
+
 export function groupMySpaces(ownedSpaces = [], memberships = [], currentUserId) {
   const privateSpaces = ownedSpaces.filter((space) => space.spaceType === SPACE_TYPE.PRIVATE)
   const ownedTeamSpaces = ownedSpaces

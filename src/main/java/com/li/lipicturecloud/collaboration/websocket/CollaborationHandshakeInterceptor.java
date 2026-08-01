@@ -47,7 +47,7 @@ public class CollaborationHandshakeInterceptor implements HandshakeInterceptor {
         try {
             Long pictureId = Long.valueOf(rawPictureId);
             accessService.checkForUser(
-                    SpaceUserPermissionConstant.COLLABORATION_EDIT, pictureId, user.getId());
+                    SpaceUserPermissionConstant.COLLABORATION_JOIN, pictureId, user.getId());
             attributes.put(PICTURE_ID, pictureId);
             attributes.put(USER_ID, user.getId());
             return true;

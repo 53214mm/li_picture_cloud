@@ -193,7 +193,8 @@ public class PictureController {
         // 空间权限校验
         Long spaceId = picture.getSpaceId();
         if(spaceId != null) {
-            pictureService.checkPictureAuth(userService.getLoginUserEntity(request), picture);
+            authorizationAccessService.check(
+                    SpaceUserPermissionConstant.PICTURE_VIEW, spaceId, null, null, request);
         }
         // 获取封装类
         return ResultUtils.success(pictureService.getPictureVO(picture, request));

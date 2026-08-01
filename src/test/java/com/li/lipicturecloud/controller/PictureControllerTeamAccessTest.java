@@ -57,6 +57,11 @@ class PictureControllerTeamAccessTest {
         when(pictureService.getQueryWrapper(any(PictureQueryRequest.class))).thenReturn(new QueryWrapper<>());
         when(pictureService.page(any(Page.class), any(QueryWrapper.class))).thenReturn(new Page<>());
         when(pictureService.getPictureVOPage(any(Page.class), eq(request))).thenReturn(new Page<PictureVO>());
+        Picture teamPicture = new Picture();
+        teamPicture.setId(9L);
+        teamPicture.setSpaceId(7L);
+        when(pictureService.getById(9L)).thenReturn(teamPicture);
+        when(pictureService.getPictureVO(teamPicture, request)).thenReturn(new PictureVO());
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get(any(String.class))).thenReturn(null);
 
@@ -88,6 +93,14 @@ class PictureControllerTeamAccessTest {
         query.setSpaceId(7L);
 
         assertDoesNotThrow(() -> controller.listPictureVOByPageWithCache(query, request));
+
+        verify(authorizationAccessService).check(
+                SpaceUserPermissionConstant.PICTURE_VIEW, 7L, null, null, request);
+    }
+
+    @Test
+    void viewerWithPictureViewPermissionCanOpenTeamPictureDetail() {
+        assertDoesNotThrow(() -> controller.getPictureVOById(9L, request));
 
         verify(authorizationAccessService).check(
                 SpaceUserPermissionConstant.PICTURE_VIEW, 7L, null, null, request);

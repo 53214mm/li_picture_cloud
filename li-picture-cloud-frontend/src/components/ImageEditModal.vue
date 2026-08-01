@@ -3,7 +3,7 @@
     <div v-if="visible" class="modal-overlay" @click.self="handleCancel">
       <div class="modal-panel">
         <div class="modal-header">
-          <h2>编辑图片</h2>
+          <h2>{{ readOnly ? '观看协同' : '编辑图片' }}</h2>
           <button class="close-btn" @click="handleCancel">&times;</button>
         </div>
 
@@ -16,15 +16,17 @@
           ref="editorRef"
           :image-src="imageSrc"
           :collaborative="collaborative"
+          :read-only="readOnly"
           :collaboration-state="collaborationState"
           @operation="sendOperation"
         />
 
         <div class="modal-footer">
-          <span class="note">编辑完成后点击"保存"，编辑后的图片将替换原图</span>
+          <span v-if="!readOnly" class="note">编辑完成后点击"保存"，编辑后的图片将替换原图</span>
+          <span v-else class="note">只读模式：你可以实时观看操作，但不能修改图片</span>
           <div class="footer-btns">
-            <button class="btn btn-outline btn-sm" @click="handleCancel">取消</button>
-            <button class="btn btn-primary btn-sm" @click="handleSave">保存并替换</button>
+            <button class="btn btn-outline btn-sm" @click="handleCancel">{{ readOnly ? '关闭' : '取消' }}</button>
+            <button v-if="!readOnly" class="btn btn-primary btn-sm" @click="handleSave">保存并替换</button>
           </div>
         </div>
       </div>
@@ -41,7 +43,8 @@ const props = defineProps({
   visible: { type: Boolean, default: false },
   imageSrc: { type: String, default: '' },
   pictureId: { type: [String, Number], default: null },
-  collaborative: { type: Boolean, default: false }
+  collaborative: { type: Boolean, default: false },
+  readOnly: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['close', 'save'])
@@ -57,7 +60,7 @@ const connectionText = computed(() => ({
   connected: '协同已连接',
   error: '协同连接异常',
   disconnected: '协同正在重连'
-}[connectionStatus.value]))
+}[connectionStatus.value]).replace('协同', props.readOnly ? '只读协同' : '协同'))
 
 watch(() => [props.visible, props.collaborative, props.pictureId], ([visible, collaborative, pictureId]) => {
   disconnect()
@@ -77,6 +80,7 @@ function handleCollaborationEvent(event) {
 }
 
 function sendOperation(operation) {
+  if (props.readOnly) return
   try {
     client?.send(operation, collaborationState.value.version)
   } catch (error) {
@@ -95,6 +99,7 @@ function disconnect() {
 onUnmounted(disconnect)
 
 async function handleSave() {
+  if (props.readOnly) return
   if (!editorRef.value) return
   const blob = await editorRef.value.exportBlob('image/png')
   emit('save', blob)

@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   buildSpaceCreatePayload,
+  collaborationMode,
   groupMySpaces,
   hasPermission,
   normalizePermissions
@@ -61,4 +62,11 @@ test('builds an explicit space creation payload', () => {
     spaceLevel: 0,
     spaceType: 0
   }), { spaceLevel: 0, spaceType: 0 })
+})
+
+test('chooses edit, view, or no collaboration mode', () => {
+  assert.equal(collaborationMode(['collaboration:join', 'collaboration:edit'], true), 'edit')
+  assert.equal(collaborationMode(['collaboration:join'], true), 'view')
+  assert.equal(collaborationMode(['collaboration:join'], false), null)
+  assert.equal(collaborationMode([], true), null)
 })

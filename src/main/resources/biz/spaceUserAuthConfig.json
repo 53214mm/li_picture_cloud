@@ -57,7 +57,8 @@
       "name": "浏览者",
       "permissions": [
         "space:view",
-        "picture:view"
+        "picture:view",
+        "collaboration:join"
       ],
       "description": "查看图片"
     },

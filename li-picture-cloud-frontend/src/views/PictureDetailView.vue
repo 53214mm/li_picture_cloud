@@ -89,8 +89,8 @@
             <!-- 操作按钮 -->
             <div class="actions">
               <button class="btn btn-outline" @click="showShare = true">分享</button>
-              <button v-if="canEdit" class="btn btn-outline" @click="openImageEditor">
-                {{ canCollaborate ? '协同编辑' : '编辑图片' }}
+              <button v-if="canEdit || collaborationModeValue === 'view'" class="btn btn-outline" @click="openImageEditor">
+                {{ collaborationButtonText }}
               </button>
               <button class="btn btn-outline" @click="handleDownload">下载图片</button>
               <template v-if="canEdit">
@@ -102,7 +102,7 @@
         </div>
       </template>
 
-      <div v-else class="empty-state">图片不存在或已被删除</div>
+      <div v-else class="empty-state">{{ detailError || '图片不存在或已被删除' }}</div>
     </div>
 
     <!-- 分享弹窗 -->
@@ -120,7 +120,8 @@
       :visible="showImageEditor"
       :image-src="imageEditorSrc"
       :picture-id="picture?.id"
-      :collaborative="canCollaborate"
+      :collaborative="Boolean(collaborationModeValue)"
+      :read-only="collaborationModeValue === 'view'"
       @close="showImageEditor = false"
       @save="onImageEditSave"
     />
@@ -194,6 +195,7 @@ import ShareModal from '@/components/ShareModal.vue'
 import ImageEditModal from '@/components/ImageEditModal.vue'
 import { getSpaceVOById } from '@/api/space'
 import { SPACE_TYPE } from '@/constants/space'
+import { collaborationMode } from '@/utils/spaceAccess'
 
 const route = useRoute()
 const router = useRouter()
@@ -209,6 +211,7 @@ const showShare = ref(false)
 const showImageEditor = ref(false)
 const permissions = ref([])
 const pictureSpaceType = ref(null)
+const detailError = ref('')
 // 通过后端代理加载 COS 图片，避免 Canvas 跨域 taint
 const imageEditorSrc = computed(() => {
   if (!picture.value?.url) return ''
@@ -227,10 +230,15 @@ const canEdit = computed(() => {
   return userStore.isAdmin || picture.value.userId === userStore.currentUser?.id || permissions.value.includes('picture:edit')
 })
 
-const canCollaborate = computed(() => (
+const collaborationModeValue = computed(() => collaborationMode(
+  permissions.value,
   pictureSpaceType.value === SPACE_TYPE.TEAM
-  && permissions.value.includes('collaboration:edit')
 ))
+const collaborationButtonText = computed(() => {
+  if (collaborationModeValue.value === 'edit') return '协同编辑'
+  if (collaborationModeValue.value === 'view') return '观看协同'
+  return '编辑图片'
+})
 
 const reviewClass = computed(() => {
   const s = picture.value?.reviewStatus
@@ -276,8 +284,9 @@ onMounted(async () => {
         pictureSpaceType.value = null
       }
     }
-  } catch {
+  } catch (e) {
     picture.value = null
+    detailError.value = e.message || '加载图片详情失败'
   } finally {
     loading.value = false
   }
