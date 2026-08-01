@@ -6,9 +6,11 @@ import com.li.lipicturecloud.model.enums.SpaceRoleEnum;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 
 import static com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConstant.*;
 
+@Component
 public class SpaceAuthorizationManager implements AuthorizationManager {
 
     private static final Set<String> PUBLIC_OWNER_PERMISSIONS = Set.of(

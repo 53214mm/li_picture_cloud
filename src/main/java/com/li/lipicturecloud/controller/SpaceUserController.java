@@ -1,6 +1,7 @@
 package com.li.lipicturecloud.controller;
 
 import cn.hutool.core.util.ObjectUtil;
+import com.li.lipicturecloud.annotation.SpacePermission;
 import com.li.lipicturecloud.common.BaseResponse;
 import com.li.lipicturecloud.common.DeleteRequest;
 import com.li.lipicturecloud.common.ResultUtils;
@@ -13,6 +14,8 @@ import com.li.lipicturecloud.model.dto.spaceuser.SpaceUserQueryRequest;
 import com.li.lipicturecloud.model.entity.SpaceUser;
 import com.li.lipicturecloud.model.entity.User;
 import com.li.lipicturecloud.model.vo.SpaceUserVO;
+import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
+import com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConstant;
 import com.li.lipicturecloud.service.SpaceUserService;
 import com.li.lipicturecloud.service.UserService;
 import jakarta.annotation.Resource;
@@ -23,8 +26,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/spaceUser")
@@ -37,10 +42,14 @@ public class SpaceUserController {
     @Resource
     private UserService userService;
 
+    @Resource
+    private SpaceAuthorizationAccessService authorizationAccessService;
+
     /**
      * 添加成员到空间
      */
     @PostMapping("/add")
+    @SpacePermission(value = SpaceUserPermissionConstant.SPACE_USER_MANAGE, spaceId = "#p0.spaceId")
     public BaseResponse<Long> addSpaceUser(@RequestBody SpaceUserAddRequest spaceUserAddRequest, HttpServletRequest request) {
         ThrowUtils.throwIf(spaceUserAddRequest == null, ErrorCode.PARAMS_ERROR);
         long id = spaceUserService.addSpaceUser(spaceUserAddRequest);
@@ -51,6 +60,7 @@ public class SpaceUserController {
      * 从空间移除成员
      */
     @PostMapping("/delete")
+    @SpacePermission(value = SpaceUserPermissionConstant.SPACE_USER_MANAGE, spaceUserId = "#p0.id")
     public BaseResponse<Boolean> deleteSpaceUser(@RequestBody DeleteRequest deleteRequest,
                                                  HttpServletRequest request) {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
@@ -70,6 +80,7 @@ public class SpaceUserController {
      * 查询某个成员在某个空间的信息
      */
     @PostMapping("/get")
+    @SpacePermission(value = SpaceUserPermissionConstant.SPACE_USER_MANAGE, spaceId = "#p0.spaceId")
     public BaseResponse<SpaceUser> getSpaceUser(@RequestBody SpaceUserQueryRequest spaceUserQueryRequest) {
         // 参数校验
         ThrowUtils.throwIf(spaceUserQueryRequest == null, ErrorCode.PARAMS_ERROR);
@@ -86,6 +97,7 @@ public class SpaceUserController {
      * 查询成员信息列表
      */
     @PostMapping("/list")
+    @SpacePermission(value = SpaceUserPermissionConstant.SPACE_USER_MANAGE, spaceId = "#p0.spaceId")
     public BaseResponse<List<SpaceUserVO>> listSpaceUser(@RequestBody SpaceUserQueryRequest spaceUserQueryRequest,
                                                          HttpServletRequest request) {
         ThrowUtils.throwIf(spaceUserQueryRequest == null, ErrorCode.PARAMS_ERROR);
@@ -99,6 +111,7 @@ public class SpaceUserController {
      * 编辑成员信息（设置权限）
      */
     @PostMapping("/edit")
+    @SpacePermission(value = SpaceUserPermissionConstant.SPACE_USER_MANAGE, spaceUserId = "#p0.id")
     public BaseResponse<Boolean> editSpaceUser(@RequestBody SpaceUserEditRequest spaceUserEditRequest,
                                                HttpServletRequest request) {
         if (spaceUserEditRequest == null || spaceUserEditRequest.getId() <= 0) {
@@ -131,5 +144,22 @@ public class SpaceUserController {
                 spaceUserService.getQueryWrapper(spaceUserQueryRequest)
         );
         return ResultUtils.success(spaceUserService.getSpaceUserVOList(spaceUserList));
+    }
+
+    /**
+     * 获取当前登录用户对指定资源拥有的权限。
+     * 前端可用它控制按钮展示，但后端接口仍会独立执行权限校验。
+     */
+    @PostMapping("/permissions")
+    public BaseResponse<Set<String>> getMyPermissions(
+            @RequestParam(required = false) Long spaceId,
+            @RequestParam(required = false) Long pictureId,
+            HttpServletRequest request) {
+        if ((spaceId == null) == (pictureId == null)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "spaceId 和 pictureId 必须且只能传一个");
+        }
+        Set<String> permissions = authorizationAccessService.getPermissions(
+                spaceId, pictureId, null, request);
+        return ResultUtils.success(permissions);
     }
 }
