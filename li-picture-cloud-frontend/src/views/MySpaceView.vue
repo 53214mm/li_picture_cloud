@@ -5,6 +5,7 @@
         <div>
           <h1>我的空间</h1>
           <p>集中查看个人空间、自己创建的团队，以及加入的其他团队。</p>
+          <p class="user-id">我的用户 ID：<code>{{ userStore.currentUser?.id }}</code>（其他人添加你时需要）</p>
         </div>
         <router-link to="/space/create" class="btn btn-primary">+ 创建空间</router-link>
       </div>
@@ -138,6 +139,8 @@ function openSpace(id) {
 .page-header { margin-bottom: 2.5rem; }
 .page-header h1 { font-size: 2rem; margin-bottom: 0.35rem; }
 .page-header p, .section-heading p { color: var(--gray-600); font-size: 0.875rem; }
+.page-header .user-id { margin-top: .4rem; color: var(--black); }
+.user-id code { user-select: all; font-weight: 700; }
 .space-section, .ai-section { margin-bottom: 2.5rem; }
 .section-heading { margin-bottom: 0.9rem; }
 .section-heading h2 { font-size: 1.25rem; }
