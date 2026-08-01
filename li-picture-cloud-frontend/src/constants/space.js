@@ -7,6 +7,36 @@ export const SPACE_LEVEL = {
   FLAGSHIP: 2
 }
 
+export const SPACE_TYPE = Object.freeze({
+  PRIVATE: 0,
+  TEAM: 1
+})
+
+export const SPACE_ROLE = Object.freeze({
+  VIEWER: 'viewer',
+  EDITOR: 'editor',
+  ADMIN: 'admin'
+})
+
+export const SPACE_TYPE_MAP = Object.freeze({
+  [SPACE_TYPE.PRIVATE]: { text: '私有空间' },
+  [SPACE_TYPE.TEAM]: { text: '团队空间' }
+})
+
+export const SPACE_ROLE_MAP = Object.freeze({
+  [SPACE_ROLE.VIEWER]: { text: '查看者' },
+  [SPACE_ROLE.EDITOR]: { text: '编辑者' },
+  [SPACE_ROLE.ADMIN]: { text: '管理员' }
+})
+
+export function spaceTypeText(type) {
+  return SPACE_TYPE_MAP[type]?.text || '未知空间'
+}
+
+export function spaceRoleText(role) {
+  return SPACE_ROLE_MAP[role]?.text || '未知角色'
+}
+
 /**
  * 空间级别元信息
  */
