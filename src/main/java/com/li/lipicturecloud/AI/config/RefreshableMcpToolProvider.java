@@ -2,11 +2,8 @@ package com.li.lipicturecloud.AI.config;
 
 import cn.hutool.core.util.StrUtil;
 import com.li.lipicturecloud.AI.common.UserContextHolder;
-import com.li.lipicturecloud.model.dto.picture.PictureUploadRequest;
+import com.li.lipicturecloud.AI.service.McpGeneratedImageHandler;
 import com.li.lipicturecloud.model.entity.User;
-import com.li.lipicturecloud.model.vo.PictureVO;
-import com.li.lipicturecloud.service.PictureService;
-import com.li.lipicturecloud.service.SpaceService;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
@@ -52,18 +49,12 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
     @Resource
     private McpSyncHttpClientRequestCustomizer mcpAuthCustomizer;
     @Resource
-    private PictureService pictureService;
-    @Resource
-    private SpaceService spaceService;
+    private McpGeneratedImageHandler generatedImageHandler;
 
     /** 缓存 MCP 工具回调列表，避免每次请求都连接 MCP 列举工具 */
     private volatile ToolCallback[] cachedCallbacks = new ToolCallback[0];
     private volatile long lastRefreshTime = 0;
     private static final long CACHE_TTL_MS = 10 * 60 * 1000; // 10 分钟刷新一次
-
-    /** URL 提取正则 */
-    private static final Pattern URL_PATTERN = Pattern.compile(
-            "https?://[^\\s\\n<>\"{}]+");
 
     /** taskId 提取正则会依次尝试匹配 */
     private static final Pattern[] TASK_ID_PATTERNS = {
@@ -205,17 +196,13 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
                     log.info("MCP 生成工具 {} 已调用，开始等待完成...", toolName);
                     text = pollUntilComplete(text);
                     // 完成后自动保存到用户空间
-                    if (text != null && text.contains("http")) {
-                        String saved = autoSaveToSpace(text, currentUser);
-                        if (saved != null) text = text + "\n" + saved;
-                    }
+                    text = generatedImageHandler.appendSaveResult(text, currentUser);
                     return text;
                 }
 
                 // get_task_status 返回图片 URL 时，自动保存到用户空间
-                if ("get_task_status".equals(toolName) && text.contains("http")) {
-                    String saved = autoSaveToSpace(text, currentUser);
-                    if (saved != null) text = text + "\n" + saved;
+                if ("get_task_status".equals(toolName)) {
+                    text = generatedImageHandler.appendSaveResult(text, currentUser);
                 }
                 return text;
             } catch (Exception e) {
@@ -375,31 +362,4 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
                 MAX_POLL_TOTAL_MS / 1000, taskId);
     }
 
-    // ======================== 自动保存 ========================
-
-    /** get_task_status / 生成工具返回图片 URL 时自动保存到空间 */
-    private String autoSaveToSpace(String text, User user) {
-        if (user == null) {
-            log.warn("autoSaveToSpace: user 为 null，跳过");
-            return null;
-        }
-        try {
-            Matcher matcher = URL_PATTERN.matcher(text);
-            if (!matcher.find()) return null;
-            String url = matcher.group();
-
-            var spaceList = spaceService.lambdaQuery()
-                    .eq(com.li.lipicturecloud.model.entity.Space::getUserId, user.getId()).list();
-            if (spaceList.isEmpty()) return null;
-            PictureUploadRequest req = new PictureUploadRequest();
-            req.setFileUrl(url);
-            req.setSpaceId(spaceList.get(0).getId());
-            req.setPicName("AI生成");
-            pictureService.uploadPicture(url, req, user);
-            return "【已自动保存到空间】";
-        } catch (Exception e) {
-            log.warn("自动保存失败: {}", e.getMessage());
-            return null;
-        }
-    }
 }
