@@ -43,6 +43,27 @@ class DeploymentArtifactsTest {
                 "api-key: ${MXAI_API_KEY}");
     }
 
+    @Test
+    void composeKeepsEveryProjectServiceInternalAndResourceLimited() throws IOException {
+        String compose = read("compose.yaml");
+
+        assertThat(compose).contains(
+                "container_name: lipicturecloud-mysql",
+                "container_name: lipicturecloud-redis",
+                "container_name: lipicturecloud-backend",
+                "container_name: lipicturecloud-web",
+                "mem_limit: 640m",
+                "mem_limit: 384m",
+                "mem_limit: 96m",
+                "mem_limit: 32m",
+                "/docker-entrypoint-initdb.d/01-user.sql:ro",
+                "/docker-entrypoint-initdb.d/02-picture.sql:ro",
+                "/docker-entrypoint-initdb.d/03-space.sql:ro",
+                "max-size: 10m",
+                "max-file: 3");
+        assertThat(compose).doesNotContain("ports:");
+    }
+
     private String read(String path) throws IOException {
         return Files.readString(Path.of(path), StandardCharsets.UTF_8);
     }
