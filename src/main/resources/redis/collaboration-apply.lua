@@ -14,7 +14,9 @@ if duplicate then
 end
 
 if redis.call('EXISTS', stateKey) == 0 then
-    redis.call('HSET', stateKey, 'rotation', '0', 'scale', '1.0', 'version', '0')
+    redis.call('HSET', stateKey, 'rotation', '0')
+    redis.call('HSET', stateKey, 'scale', '1.0')
+    redis.call('HSET', stateKey, 'version', '0')
 end
 
 local rotation = tonumber(redis.call('HGET', stateKey, 'rotation'))
@@ -38,7 +40,9 @@ else
 end
 
 version = version + 1
-redis.call('HSET', stateKey, 'rotation', tostring(rotation), 'scale', tostring(scale), 'version', tostring(version))
+redis.call('HSET', stateKey, 'rotation', tostring(rotation))
+redis.call('HSET', stateKey, 'scale', tostring(scale))
+redis.call('HSET', stateKey, 'version', tostring(version))
 redis.call('PEXPIRE', stateKey, ttlMillis)
 local result = cjson.encode({rotation = rotation, scale = scale, version = version})
 redis.call('SET', commandKey, result, 'PX', ttlMillis)

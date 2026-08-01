@@ -3,7 +3,9 @@ local ttlMillis = tonumber(ARGV[1])
 local pictureId = ARGV[2]
 
 if redis.call('EXISTS', stateKey) == 0 then
-    redis.call('HSET', stateKey, 'rotation', '0', 'scale', '1.0', 'version', '0')
+    redis.call('HSET', stateKey, 'rotation', '0')
+    redis.call('HSET', stateKey, 'scale', '1.0')
+    redis.call('HSET', stateKey, 'version', '0')
 end
 redis.call('PEXPIRE', stateKey, ttlMillis)
 
