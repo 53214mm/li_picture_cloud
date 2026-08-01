@@ -27,12 +27,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.http.MediaType;
 
 import java.util.List;
 import java.util.Set;
 
 @RestController
-@RequestMapping("/spaceUser")
+@RequestMapping(value = "/spaceUser", produces = MediaType.APPLICATION_JSON_VALUE)
 @Slf4j
 public class SpaceUserController {
 

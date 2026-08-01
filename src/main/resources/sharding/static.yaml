@@ -1,0 +1,28 @@
+databaseName: li_picture_cloud_static
+
+dataSources:
+  primary:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://${MYSQL_HOST:-localhost}:${MYSQL_PORT:-3306}/${MYSQL_DATABASE:-li_picture_cloud_data}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USERNAME:-root}
+    password: ${MYSQL_PASSWORD:-}
+
+rules:
+  - !SHARDING
+    tables:
+      picture:
+        actualDataNodes: primary.picture_$->{0..1}
+        tableStrategy:
+          standard:
+            shardingColumn: userId
+            shardingAlgorithmName: picture-by-user
+    shardingAlgorithms:
+      picture-by-user:
+        type: INLINE
+        props:
+          algorithm-expression: picture_$->{userId % 2}
+          allow-range-query-with-inline-sharding: true
+
+props:
+  sql-show: false

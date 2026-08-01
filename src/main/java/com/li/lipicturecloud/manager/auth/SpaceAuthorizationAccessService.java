@@ -10,7 +10,7 @@ import com.li.lipicturecloud.model.entity.Space;
 import com.li.lipicturecloud.model.entity.SpaceUser;
 import com.li.lipicturecloud.model.entity.User;
 import com.li.lipicturecloud.model.enums.SpaceTypeEnum;
-import com.li.lipicturecloud.service.PictureService;
+import com.li.lipicturecloud.repository.PictureRepository;
 import com.li.lipicturecloud.service.SpaceService;
 import com.li.lipicturecloud.service.SpaceUserService;
 import com.li.lipicturecloud.service.UserService;
@@ -25,20 +25,20 @@ public class SpaceAuthorizationAccessService {
     private final AuthorizationManager authorizationManager;
     private final UserService userService;
     private final SpaceService spaceService;
-    private final PictureService pictureService;
+    private final PictureRepository pictureRepository;
     private final SpaceUserService spaceUserService;
 
     public SpaceAuthorizationAccessService(
             AuthorizationManager authorizationManager,
             UserService userService,
             SpaceService spaceService,
-            PictureService pictureService,
+            PictureRepository pictureRepository,
             SpaceUserService spaceUserService
     ) {
         this.authorizationManager = authorizationManager;
         this.userService = userService;
         this.spaceService = spaceService;
-        this.pictureService = pictureService;
+        this.pictureRepository = pictureRepository;
         this.spaceUserService = spaceUserService;
     }
 
@@ -61,7 +61,7 @@ public class SpaceAuthorizationAccessService {
             spaceId = targetMembership.getSpaceId();
         }
         if (pictureId != null) {
-            Picture picture = pictureService.getById(pictureId);
+            Picture picture = pictureRepository.findById(pictureId).orElse(null);
             if (picture == null) {
                 throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "图片不存在");
             }
