@@ -7,7 +7,18 @@
           <button class="close-btn" @click="handleCancel">&times;</button>
         </div>
 
-        <ImageEditor ref="editorRef" :image-src="imageSrc" />
+        <div v-if="collaborative" class="collaboration-bar">
+          <span class="connection-dot" :class="connectionStatus"></span>
+          {{ connectionText }}
+          <span v-if="latestPrompt" class="operation-prompt">{{ latestPrompt }}</span>
+        </div>
+        <ImageEditor
+          ref="editorRef"
+          :image-src="imageSrc"
+          :collaborative="collaborative"
+          :collaboration-state="collaborationState"
+          @operation="sendOperation"
+        />
 
         <div class="modal-footer">
           <span class="note">编辑完成后点击"保存"，编辑后的图片将替换原图</span>
@@ -22,17 +33,66 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import ImageEditor from './ImageEditor.vue'
+import { CollaborationClient } from '@/services/collaborationClient'
 
-defineProps({
+const props = defineProps({
   visible: { type: Boolean, default: false },
-  imageSrc: { type: String, default: '' }
+  imageSrc: { type: String, default: '' },
+  pictureId: { type: [String, Number], default: null },
+  collaborative: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['close', 'save'])
 
 const editorRef = ref(null)
+const collaborationState = ref({ rotation: 0, scale: 1, version: 0 })
+const connectionStatus = ref('disconnected')
+const latestPrompt = ref('')
+let client = null
+let unsubscribe = null
+
+const connectionText = computed(() => ({
+  connected: '协同已连接',
+  error: '协同连接异常',
+  disconnected: '协同正在重连'
+}[connectionStatus.value]))
+
+watch(() => [props.visible, props.collaborative, props.pictureId], ([visible, collaborative, pictureId]) => {
+  disconnect()
+  if (!visible || !collaborative || !pictureId) return
+  client = new CollaborationClient()
+  unsubscribe = client.subscribe(handleCollaborationEvent)
+  client.connect(pictureId)
+}, { immediate: true })
+
+function handleCollaborationEvent(event) {
+  if (event.type === 'CONNECTION') {
+    connectionStatus.value = event.status
+    return
+  }
+  if (event.state) collaborationState.value = event.state
+  if (event.message && event.type !== 'STATE') latestPrompt.value = event.message
+}
+
+function sendOperation(operation) {
+  try {
+    client?.send(operation, collaborationState.value.version)
+  } catch (error) {
+    latestPrompt.value = error.message
+  }
+}
+
+function disconnect() {
+  unsubscribe?.()
+  unsubscribe = null
+  client?.close()
+  client = null
+  connectionStatus.value = 'disconnected'
+}
+
+onUnmounted(disconnect)
 
 async function handleSave() {
   if (!editorRef.value) return
@@ -41,6 +101,7 @@ async function handleSave() {
 }
 
 function handleCancel() {
+  disconnect()
   emit('close')
 }
 </script>
@@ -76,4 +137,13 @@ function handleCancel() {
 .note { font-size: 0.8125rem; color: var(--gray-400); }
 .footer-btns { display: flex; gap: 0.5rem; }
 .btn-sm { padding: 0.5rem 1.25rem; font-size: 0.75rem; }
+.collaboration-bar {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.65rem 1rem; border-bottom: 1px solid var(--gray-200);
+  font-size: 0.8125rem;
+}
+.connection-dot { width: 8px; height: 8px; border-radius: 50%; background: #999; }
+.connection-dot.connected { background: #1a7a2e; }
+.connection-dot.error { background: #c53030; }
+.operation-prompt { margin-left: auto; color: var(--gray-600); }
 </style>

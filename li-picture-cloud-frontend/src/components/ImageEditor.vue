@@ -2,15 +2,19 @@
   <div class="editor-root">
     <!-- 工具栏 -->
     <div class="editor-toolbar">
-      <button class="tool-btn" :class="{ active: mode === 'crop' }" @click="setMode('crop')" title="裁剪">✂️ 裁剪</button>
-      <button class="tool-btn" @click="rotate(-90)" title="逆时针旋转">↺</button>
-      <button class="tool-btn" @click="rotate(90)" title="顺时针旋转">↻</button>
-      <button class="tool-btn" @click="flipH" title="水平翻转">⇔</button>
-      <button class="tool-btn" @click="flipV" title="垂直翻转">⇕</button>
-      <button class="tool-btn" @click="reset" title="恢复原图">↩ 重置</button>
+      <button v-if="!collaborative" class="tool-btn" :class="{ active: mode === 'crop' }" @click="setMode('crop')" title="裁剪">✂️ 裁剪</button>
+      <button class="tool-btn" @click="handleRotate(-90)" title="逆时针旋转">↺ 左旋</button>
+      <button class="tool-btn" @click="handleRotate(90)" title="顺时针旋转">↻ 右旋</button>
+      <button v-if="!collaborative" class="tool-btn" @click="flipH" title="水平翻转">⇔</button>
+      <button v-if="!collaborative" class="tool-btn" @click="flipV" title="垂直翻转">⇕</button>
+      <button v-if="!collaborative" class="tool-btn" @click="reset" title="恢复原图">↩ 重置</button>
       <span class="tool-sep"></span>
       <label class="tool-label">缩放</label>
-      <input type="range" min="10" max="200" :value="zoom" class="zoom-slider" @input="setZoom($event.target.value)" />
+      <template v-if="collaborative">
+        <button class="tool-btn" @click="emitOperation('ZOOM_OUT')">− 缩小</button>
+        <button class="tool-btn" @click="emitOperation('ZOOM_IN')">＋ 放大</button>
+      </template>
+      <input v-else type="range" min="10" max="200" :value="zoom" class="zoom-slider" @input="setZoom($event.target.value)" />
       <span class="zoom-val">{{ zoom }}%</span>
     </div>
 
@@ -31,13 +35,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
 
 const props = defineProps({
-  imageSrc: { type: String, required: true }
+  imageSrc: { type: String, required: true },
+  collaborative: { type: Boolean, default: false },
+  collaborationState: { type: Object, default: null }
 })
 
-defineEmits(['done'])
+const emit = defineEmits(['done', 'operation'])
 
 const canvas = ref(null)
 const canvasWrap = ref(null)
@@ -49,6 +55,7 @@ const cropRect = ref(null)
 let img = null
 let originalImg = null  // 保存最原始图片，用于 reset
 let displayScale = 1   // canvas 显示比例
+let transformSequence = 0
 
 onMounted(() => loadImage())
 
@@ -58,7 +65,8 @@ function loadImage() {
   image.onload = () => {
     img = image
     originalImg = image
-    draw()
+    if (props.collaborative && props.collaborationState) applyCollaborationState(props.collaborationState)
+    else draw()
   }
   image.src = props.imageSrc
 }
@@ -115,6 +123,44 @@ function rotate(deg) {
   img.src = c.toDataURL('image/png')
   img.onload = () => { cropRect.value = null; draw() }
 }
+
+function handleRotate(deg) {
+  if (props.collaborative) emitOperation(deg < 0 ? 'ROTATE_LEFT' : 'ROTATE_RIGHT')
+  else rotate(deg)
+}
+
+function emitOperation(operation) {
+  emit('operation', operation)
+}
+
+function applyCollaborationState(state) {
+  if (!originalImg || !state) return
+  const sequence = ++transformSequence
+  zoom.value = Math.round(state.scale * 100)
+  const rotation = ((state.rotation % 360) + 360) % 360
+  if (rotation === 0) {
+    img = originalImg
+    draw()
+    return
+  }
+  const c = document.createElement('canvas')
+  const swapSides = rotation === 90 || rotation === 270
+  c.width = swapSides ? originalImg.height : originalImg.width
+  c.height = swapSides ? originalImg.width : originalImg.height
+  const ctx = c.getContext('2d')
+  ctx.translate(c.width / 2, c.height / 2)
+  ctx.rotate(rotation * Math.PI / 180)
+  ctx.drawImage(originalImg, -originalImg.width / 2, -originalImg.height / 2)
+  const transformed = new Image()
+  transformed.onload = () => {
+    if (sequence !== transformSequence) return
+    img = transformed
+    draw()
+  }
+  transformed.src = c.toDataURL('image/png')
+}
+
+watch(() => props.collaborationState, applyCollaborationState, { deep: true })
 
 // ===== 翻转 =====
 function flipH() { flip('h') }
@@ -188,8 +234,10 @@ function reset() {
 function exportBlob(format = 'image/png', quality = 0.92) {
   return new Promise((resolve) => {
     const c = document.createElement('canvas')
-    c.width = img.width; c.height = img.height
-    c.getContext('2d').drawImage(img, 0, 0)
+    const outputScale = props.collaborative ? (props.collaborationState?.scale || 1) : 1
+    c.width = Math.max(1, Math.round(img.width * outputScale))
+    c.height = Math.max(1, Math.round(img.height * outputScale))
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
     c.toBlob(blob => resolve(blob), format, quality)
   })
 }

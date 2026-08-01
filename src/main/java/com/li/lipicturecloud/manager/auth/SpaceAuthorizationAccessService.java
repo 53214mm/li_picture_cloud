@@ -55,6 +55,12 @@ public class SpaceAuthorizationAccessService {
         }
     }
 
+    public void checkSpaceForUser(String permission, Long spaceId, Long userId) {
+        if (!getPermissionsForUser(spaceId, null, null, userId).contains(permission)) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "缺少权限：" + permission);
+        }
+    }
+
     public Set<String> getPermissions(Long spaceId, Long pictureId, Long spaceUserId,
                                       HttpServletRequest request) {
         User loginUser = userService.getLoginUserEntity(request);

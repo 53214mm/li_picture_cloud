@@ -12,6 +12,8 @@ import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.exception.ThrowUtils;
 import com.li.lipicturecloud.manager.FileManager;
+import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
+import com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConstant;
 import com.li.lipicturecloud.manager.upload.PictureUploadTemplate;
 import com.li.lipicturecloud.model.dto.file.UploadPictureResult;
 import com.li.lipicturecloud.model.dto.picture.*;
@@ -69,6 +71,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Resource
     private TransactionTemplate transactionTemplate;
 
+    @Resource
+    private SpaceAuthorizationAccessService authorizationAccessService;
+
     @Override
     public PictureVO uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, User loginUser) {
         if (inputSource == null) {
@@ -80,10 +85,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         if(spaceId != null){
             Space space = spaceService.getById(spaceId);
             ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR, "空间不存在");
-            //校验是否有空间权限，仅管理员可上传
-            if(!loginUser.getId().equals(space.getUserId())){
-                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限上传到该空间");
-            }
+            authorizationAccessService.checkSpaceForUser(
+                    SpaceUserPermissionConstant.PICTURE_UPLOAD, spaceId, loginUser.getId());
             // 校验额度
             if (space.getTotalCount() >= space.getMaxCount()) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR, "空间条数不足");
@@ -102,10 +105,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         if (pictureId != null) {
             Picture oldPicture = this.getById(pictureId);
             ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
-            // 仅本人或管理员可编辑
-            if (!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
-                throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
-            }
+            authorizationAccessService.checkForUser(
+                    SpaceUserPermissionConstant.PICTURE_EDIT, pictureId, loginUser.getId());
             //校验空间是否一致
             //没传spaceId，则使用原来的spaceId
             if(spaceId == null){
@@ -513,18 +514,10 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Override
     public void checkPictureAuth(User loginUser, Picture picture) {
-        Long spaceId = picture.getSpaceId();
-        if (spaceId == null) {
-            // 公共图库，仅本人或管理员可操作
-            if (!picture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
-                throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
-            }
-        } else {
-            // 私有空间，仅空间管理员可操作
-            if (!picture.getUserId().equals(loginUser.getId())) {
-                throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
-            }
-        }
+        ThrowUtils.throwIf(loginUser == null || picture == null || picture.getId() == null,
+                ErrorCode.PARAMS_ERROR);
+        authorizationAccessService.checkForUser(
+                SpaceUserPermissionConstant.PICTURE_EDIT, picture.getId(), loginUser.getId());
     }
 
     @Override

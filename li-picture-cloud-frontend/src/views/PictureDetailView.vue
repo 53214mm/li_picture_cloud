@@ -89,7 +89,9 @@
             <!-- 操作按钮 -->
             <div class="actions">
               <button class="btn btn-outline" @click="showShare = true">分享</button>
-              <button v-if="canEdit" class="btn btn-outline" @click="openImageEditor">编辑图片</button>
+              <button v-if="canEdit" class="btn btn-outline" @click="openImageEditor">
+                {{ canCollaborate ? '协同编辑' : '编辑图片' }}
+              </button>
               <button class="btn btn-outline" @click="handleDownload">下载图片</button>
               <template v-if="canEdit">
                 <button class="btn btn-outline" @click="openEditModal">编辑信息</button>
@@ -117,6 +119,8 @@
     <ImageEditModal
       :visible="showImageEditor"
       :image-src="imageEditorSrc"
+      :picture-id="picture?.id"
+      :collaborative="canCollaborate"
       @close="showImageEditor = false"
       @save="onImageEditSave"
     />
@@ -185,6 +189,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getPictureVOById, editPicture, deletePicture, reviewPicture, getPictureTagCategory, uploadPicture } from '@/api/picture'
+import { getMyPicturePermissions } from '@/api/spaceUser'
 import ShareModal from '@/components/ShareModal.vue'
 import ImageEditModal from '@/components/ImageEditModal.vue'
 
@@ -200,6 +205,7 @@ const reviewing = ref(false)
 const showFullscreen = ref(false)
 const showShare = ref(false)
 const showImageEditor = ref(false)
+const permissions = ref([])
 // 通过后端代理加载 COS 图片，避免 Canvas 跨域 taint
 const imageEditorSrc = computed(() => {
   if (!picture.value?.url) return ''
@@ -215,8 +221,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 const canEdit = computed(() => {
   if (!userStore.isLoggedIn || !picture.value) return false
-  return userStore.isAdmin || picture.value.userId === userStore.currentUser?.id
+  return userStore.isAdmin || picture.value.userId === userStore.currentUser?.id || permissions.value.includes('picture:edit')
 })
+
+const canCollaborate = computed(() => permissions.value.includes('collaboration:edit'))
 
 const reviewClass = computed(() => {
   const s = picture.value?.reviewStatus
@@ -249,6 +257,13 @@ onMounted(async () => {
   loading.value = true
   try {
     picture.value = await getPictureVOById(id)
+    if (userStore.isLoggedIn && picture.value?.spaceId) {
+      try {
+        permissions.value = await getMyPicturePermissions(picture.value.id)
+      } catch {
+        permissions.value = []
+      }
+    }
   } catch {
     picture.value = null
   } finally {
