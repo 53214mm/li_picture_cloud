@@ -26,11 +26,4 @@ public interface UserConstant {
      */
     String ADMIN_ROLE = "admin";
 
-    /**
-     * 密码加密盐值
-     * <p>
-     * 与用户输入的密码拼接后再进行 MD5 摘要，增加暴力破解难度。
-     * 生产环境中应使用更安全的算法（如 BCrypt）。
-     */
-    String SALT = "liPictureCloud2026";
 }

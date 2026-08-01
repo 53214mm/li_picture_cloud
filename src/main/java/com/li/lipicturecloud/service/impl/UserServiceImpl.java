@@ -3,7 +3,6 @@ package com.li.lipicturecloud.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -21,12 +20,15 @@ import com.li.lipicturecloud.model.dto.user.UserUpdateRequest;
 import com.li.lipicturecloud.model.entity.User;
 import com.li.lipicturecloud.model.enums.UserRoleEnum;
 import com.li.lipicturecloud.model.vo.UserVO;
+import com.li.lipicturecloud.service.PasswordHashService;
 import com.li.lipicturecloud.service.UserService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+
+import jakarta.annotation.Resource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +45,9 @@ import static com.li.lipicturecloud.constant.UserConstant.SESSION_USER_KEY;
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         implements UserService {
+
+    @Resource
+    private PasswordHashService passwordHashService;
 
     // ============================================================
     // 账号与密码长度下限（注册时校验）
@@ -62,7 +67,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
      *   <li><b>参数校验</b> —— 账号、密码、确认密码均不能为空；长度需满足下限</li>
      *   <li><b>一致性校验</b> —— 两次输入的密码必须一致</li>
      *   <li><b>唯一性校验</b> —— 同一账号只能注册一次</li>
-     *   <li><b>密码加密</b> —— 明文加盐后做 MD5 摘要，得到密文存入数据库</li>
+     *   <li><b>密码加密</b> —— 使用 BCrypt 生成密码哈希并存入数据库</li>
      *   <li><b>持久化</b> —— 构造 User 实体并调用 MyBatis-Plus 的 save 方法写入数据库</li>
      *   <li><b>返回 ID</b> —— 返回数据库自增（或雪花算法）生成的主键</li>
      * </ol>
@@ -131,10 +136,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // ============================================================
         // 第 6 步：密码加密
         // ============================================================
-        // 加密规则（与登录时的加密规则完全一致）：
-        //   密文 = md5(原始密码 + 盐值)
-        // 盐值定义在 UserConstant.SALT，保证登录和注册使用同一套规则
-        String encryptedPassword = DigestUtil.md5Hex(userPassword + UserConstant.SALT);
+        String encryptedPassword = passwordHashService.encode(userPassword);
 
         // ============================================================
         // 第 7 步：构造用户实体并持久化
@@ -168,7 +170,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
      * <ol>
      *   <li><b>参数校验</b> —— 账号和密码均不能为空</li>
      *   <li><b>查询用户</b> —— 根据 userAccount 在数据库中查询用户记录</li>
-     *   <li><b>密码比对</b> —— 将前端传来的明文密码加盐后做 MD5 摘要，与数据库中的密文比对</li>
+     *   <li><b>密码比对</b> —— 使用 BCrypt 验证前端传来的明文密码</li>
      *   <li><b>写入会话</b> —— 密码验证通过后，将脱敏的 UserVO 存入 HttpSession</li>
      *   <li><b>返回结果</b> —— 返回 UserVO 给前端</li>
      * </ol>
@@ -212,12 +214,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // ============================================================
         // 第 3 步：密码比对
         // ============================================================
-        // 将用户输入的明文密码拼接盐值后做 MD5 摘要
-        // 加密规则：md5(原始密码 + 盐值)，盐值定义在 UserConstant.SALT
-        String encryptedPassword = DigestUtil.md5Hex(userPassword + UserConstant.SALT);
-
-        // 与数据库中存储的密文进行比对
-        if (!encryptedPassword.equals(user.getUserPassword())) {
+        if (!passwordHashService.matches(userPassword, user.getUserPassword())) {
             // 密码不匹配 —— 抛出业务异常
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号或密码错误");
         }
@@ -343,7 +340,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
      * <ol>
      *   <li>参数校验 —— 账号、密码不能为空且满足长度下限</li>
      *   <li>唯一性校验 —— 同一账号只能存在一次</li>
-     *   <li>密码加密 —— md5(明文 + 盐值)</li>
+     *   <li>密码加密 —— 使用 BCrypt 生成密码哈希</li>
      *   <li>构造实体 —— 填充账号、密文密码、可选个人信息、角色</li>
      *   <li>持久化 —— MyBatis-Plus save</li>
      *   <li>返回 ID</li>
@@ -379,7 +376,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
 
         // ---- 密码加密 ----
-        String encryptedPassword = DigestUtil.md5Hex(userPassword + UserConstant.SALT);
+        String encryptedPassword = passwordHashService.encode(userPassword);
 
         // ---- 构造 User 实体 ----
         User user = new User();
