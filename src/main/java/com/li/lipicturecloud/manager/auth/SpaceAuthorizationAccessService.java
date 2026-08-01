@@ -1,18 +1,17 @@
 package com.li.lipicturecloud.manager.auth;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.li.lipicturecloud.domain.space.SpaceMembership;
+import com.li.lipicturecloud.domain.space.SpaceMembershipRepository;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
 import com.li.lipicturecloud.manager.auth.model.SpaceAuthorizationResource;
 import com.li.lipicturecloud.model.entity.Picture;
 import com.li.lipicturecloud.model.entity.Space;
-import com.li.lipicturecloud.model.entity.SpaceUser;
 import com.li.lipicturecloud.model.entity.User;
 import com.li.lipicturecloud.model.enums.SpaceTypeEnum;
 import com.li.lipicturecloud.repository.PictureRepository;
 import com.li.lipicturecloud.service.SpaceService;
-import com.li.lipicturecloud.service.SpaceUserService;
 import com.li.lipicturecloud.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
@@ -26,20 +25,20 @@ public class SpaceAuthorizationAccessService {
     private final UserService userService;
     private final SpaceService spaceService;
     private final PictureRepository pictureRepository;
-    private final SpaceUserService spaceUserService;
+    private final SpaceMembershipRepository membershipRepository;
 
     public SpaceAuthorizationAccessService(
             AuthorizationManager authorizationManager,
             UserService userService,
             SpaceService spaceService,
             PictureRepository pictureRepository,
-            SpaceUserService spaceUserService
+            SpaceMembershipRepository membershipRepository
     ) {
         this.authorizationManager = authorizationManager;
         this.userService = userService;
         this.spaceService = spaceService;
         this.pictureRepository = pictureRepository;
-        this.spaceUserService = spaceUserService;
+        this.membershipRepository = membershipRepository;
     }
 
     public void check(String permission, Long spaceId, Long pictureId, Long spaceUserId,
@@ -81,8 +80,8 @@ public class SpaceAuthorizationAccessService {
                 : AuthorizationSubject.user(loginUser.getId());
 
         if (spaceUserId != null) {
-            SpaceUser targetMembership = requireSpaceUser(spaceUserId);
-            spaceId = targetMembership.getSpaceId();
+            SpaceMembership targetMembership = requireMembership(spaceUserId);
+            spaceId = targetMembership.spaceId();
         }
         if (pictureId != null) {
             Picture picture = pictureRepository.findById(pictureId).orElse(null);
@@ -108,22 +107,17 @@ public class SpaceAuthorizationAccessService {
                     subject, SpaceAuthorizationResource.privateSpace(space.getUserId()));
         }
 
-        SpaceUser membership = findMembership(spaceId, loginUser.getId());
-        String role = membership == null ? null : membership.getSpaceRole();
+        SpaceMembership membership = findMembership(spaceId, loginUser.getId());
+        String role = membership == null ? null : membership.role().value();
         return authorizationManager.getPermissions(subject, SpaceAuthorizationResource.teamSpace(role));
     }
 
-    private SpaceUser requireSpaceUser(Long spaceUserId) {
-        SpaceUser membership = spaceUserService.getById(spaceUserId);
-        if (membership == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "空间成员不存在");
-        }
-        return membership;
+    private SpaceMembership requireMembership(Long membershipId) {
+        return membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "空间成员不存在"));
     }
 
-    private SpaceUser findMembership(Long spaceId, Long userId) {
-        return spaceUserService.getOne(new LambdaQueryWrapper<SpaceUser>()
-                .eq(SpaceUser::getSpaceId, spaceId)
-                .eq(SpaceUser::getUserId, userId));
+    private SpaceMembership findMembership(Long spaceId, Long userId) {
+        return membershipRepository.findBySpaceAndUser(spaceId, userId).orElse(null);
     }
 }
