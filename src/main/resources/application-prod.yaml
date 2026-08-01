@@ -1,12 +1,31 @@
+cos:
+  client:
+    host: ${COS_HOST}
+    secretId: ${COS_SECRET_ID}
+    secretKey: ${COS_SECRET_KEY}
+    region: ${COS_REGION}
+    bucket: ${COS_BUCKET}
+
 spring:
   config:
     activate:
       on-profile: prod
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+    qianfan:
+      api-key: ${QIANFAN_API_KEY}
+      Bearer: ${QIANFAN_BEARER_TOKEN}
   session:
+    redis:
+      namespace: ${SESSION_REDIS_NAMESPACE:lipicturecloud:session:v1}
     cookie:
-      secure: true
+      secure: ${SESSION_COOKIE_SECURE:true}
       http-only: true
       same-site: lax
+
+mxai:
+  api-key: ${MXAI_API_KEY}
 
 mybatis-plus:
   configuration:
