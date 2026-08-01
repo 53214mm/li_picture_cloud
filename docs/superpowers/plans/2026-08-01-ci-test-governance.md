@@ -99,4 +99,3 @@ Expected: all commands pass with no whitespace errors or gallery-analysis files 
 - [ ] **Step 3: Commit**
 
 Commit message: `docs: define local verification workflow`
-
