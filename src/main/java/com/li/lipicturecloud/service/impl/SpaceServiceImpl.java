@@ -218,6 +218,19 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
     }
 
     @Override
+    public Space getOwnedPrivateSpace(Long userId) {
+        if (userId == null || userId <= 0) {
+            return null;
+        }
+        return lambdaQuery()
+                .eq(Space::getUserId, userId)
+                .eq(Space::getSpaceType, SpaceTypeEnum.PRIVATE.getValue())
+                .orderByAsc(Space::getCreateTime)
+                .last("LIMIT 1")
+                .one();
+    }
+
+    @Override
     public void checkSpaceAuth(User loginUser, Space space) {
         // 仅本人或管理员可编辑
         if (!space.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {

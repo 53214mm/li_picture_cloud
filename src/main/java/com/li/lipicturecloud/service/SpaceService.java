@@ -65,6 +65,14 @@ public interface SpaceService extends IService<Space> {
     long addSpace(SpaceAddRequest spaceAddRequest, User loginUser);
 
     /**
+     * 获取用户最早创建的私有空间。
+     *
+     * @param userId 用户 id
+     * @return 用户拥有的私有空间；不存在或用户 id 无效时返回 null
+     */
+    Space getOwnedPrivateSpace(Long userId);
+
+    /**
      * 检查空间权限
      * @param loginUser
      * @param space
