@@ -1,0 +1,23 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+  session:
+    cookie:
+      secure: true
+      http-only: true
+      same-site: lax
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+app:
+  collaboration:
+    allowed-origins: ${COLLABORATION_ALLOWED_ORIGINS}

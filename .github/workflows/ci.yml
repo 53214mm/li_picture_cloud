@@ -24,8 +24,15 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Test and package backend
-        run: ./mvnw -B -Dspring.profiles.active=test package
+      - name: Test, package, and report backend coverage
+        run: ./mvnw -B -Dspring.profiles.active=test verify
+
+      - name: Publish backend coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jacoco-report
+          path: target/site/jacoco
+          if-no-files-found: error
 
   frontend:
     name: Frontend
@@ -49,6 +56,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org
 
       - name: Lint frontend
         run: npm run lint
