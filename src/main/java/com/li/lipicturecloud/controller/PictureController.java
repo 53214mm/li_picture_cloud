@@ -13,6 +13,8 @@ import com.li.lipicturecloud.common.DeleteRequest;
 import com.li.lipicturecloud.common.ResultUtils;
 import com.li.lipicturecloud.config.CosClientConfig;
 import com.li.lipicturecloud.manager.CosManager;
+import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
+import com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConstant;
 import com.li.lipicturecloud.model.entity.Space;
 import com.li.lipicturecloud.service.SpaceService;
 import com.qcloud.cos.model.COSObject;
@@ -64,6 +66,8 @@ public class PictureController {
     private UserService userService;
     @Resource
     private SpaceService spaceService;
+    @Resource
+    private SpaceAuthorizationAccessService authorizationAccessService;
     @Resource
     private StringRedisTemplate stringRedisTemplate;
     @Resource
@@ -227,12 +231,10 @@ public class PictureController {
             pictureQueryRequest.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
             pictureQueryRequest.setNullSpaceId(true);
         }else {
-            User loginUser = userService.getLoginUserEntity(request);
             Space space = spaceService.getById(spaceId);
             ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR, "空间不存在");
-            if (!loginUser.getId().equals(space.getUserId())) {
-                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "没有空间权限");
-            }
+            authorizationAccessService.check(
+                    SpaceUserPermissionConstant.PICTURE_VIEW, spaceId, null, null, request);
         }
         // 查询数据库
         Page<Picture> picturePage = pictureService.page(new Page<>(current, size),
@@ -259,13 +261,11 @@ public class PictureController {
             pictureQueryRequest.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
             pictureQueryRequest.setNullSpaceId(true);
         } else {
-            // 私有空间：需要权限校验
-            User loginUser = userService.getLoginUserEntity(request);
+            // 空间图片：私有空间创建者或拥有查看权限的团队成员可访问
             Space space = spaceService.getById(spaceId);
             ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR, "空间不存在");
-            if (!loginUser.getId().equals(space.getUserId())) {
-                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "没有空间权限");
-            }
+            authorizationAccessService.check(
+                    SpaceUserPermissionConstant.PICTURE_VIEW, spaceId, null, null, request);
         }
 
         // 构造查询条件的 MD5 哈希作为缓存键（含版本号，版本递增时旧缓存自然失效）
