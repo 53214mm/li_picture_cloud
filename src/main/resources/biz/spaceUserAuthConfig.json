@@ -1,6 +1,21 @@
 {
   "permissions": [
     {
+      "key": "space:view",
+      "name": "查看空间",
+      "description": "查看空间基本信息"
+    },
+    {
+      "key": "space:edit",
+      "name": "编辑空间",
+      "description": "修改空间基本信息"
+    },
+    {
+      "key": "space:manage",
+      "name": "管理空间",
+      "description": "执行空间级管理操作"
+    },
+    {
       "key": "spaceUser:manage",
       "name": "成员管理",
       "description": "管理空间成员，添加或移除成员"
@@ -24,6 +39,16 @@
       "key": "picture:delete",
       "name": "删除图片",
       "description": "删除空间中的图片"
+    },
+    {
+      "key": "collaboration:join",
+      "name": "加入协同编辑",
+      "description": "加入团队空间图片的协同编辑会话"
+    },
+    {
+      "key": "collaboration:edit",
+      "name": "执行协同操作",
+      "description": "在协同会话中旋转或缩放图片"
     }
   ],
   "roles": [
@@ -31,6 +56,7 @@
       "key": "viewer",
       "name": "浏览者",
       "permissions": [
+        "space:view",
         "picture:view"
       ],
       "description": "查看图片"
@@ -39,10 +65,13 @@
       "key": "editor",
       "name": "编辑者",
       "permissions": [
+        "space:view",
         "picture:view",
         "picture:upload",
         "picture:edit",
-        "picture:delete"
+        "picture:delete",
+        "collaboration:join",
+        "collaboration:edit"
       ],
       "description": "查看图片、上传图片、修改图片、删除图片"
     },
@@ -50,11 +79,16 @@
       "key": "admin",
       "name": "管理员",
       "permissions": [
+        "space:view",
+        "space:edit",
+        "space:manage",
         "spaceUser:manage",
         "picture:view",
         "picture:upload",
         "picture:edit",
-        "picture:delete"
+        "picture:delete",
+        "collaboration:join",
+        "collaboration:edit"
       ],
       "description": "成员管理、查看图片、上传图片、修改图片、删除图片"
     }

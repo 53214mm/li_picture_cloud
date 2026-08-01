@@ -1,6 +1,12 @@
 package com.li.lipicturecloud.manager.auth.model;
 
 public interface SpaceUserPermissionConstant {
+    String SPACE_VIEW = "space:view";
+
+    String SPACE_EDIT = "space:edit";
+
+    String SPACE_MANAGE = "space:manage";
+
     /**
      * 空间用户管理权限
      */
@@ -25,4 +31,8 @@ public interface SpaceUserPermissionConstant {
      * 图片删除权限
      */
     String PICTURE_DELETE = "picture:delete";
+
+    String COLLABORATION_JOIN = "collaboration:join";
+
+    String COLLABORATION_EDIT = "collaboration:edit";
 }

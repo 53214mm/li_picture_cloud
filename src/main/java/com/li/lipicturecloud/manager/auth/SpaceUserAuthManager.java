@@ -37,7 +37,7 @@ public class SpaceUserAuthManager {
         if (role == null) {
             return new ArrayList<>();
         }
-        return role.getPermissions();
+        return List.copyOf(role.getPermissions());
     }
 
 }
