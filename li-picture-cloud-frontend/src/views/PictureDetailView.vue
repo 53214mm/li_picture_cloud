@@ -192,6 +192,8 @@ import { getPictureVOById, editPicture, deletePicture, reviewPicture, getPicture
 import { getMyPicturePermissions } from '@/api/spaceUser'
 import ShareModal from '@/components/ShareModal.vue'
 import ImageEditModal from '@/components/ImageEditModal.vue'
+import { getSpaceVOById } from '@/api/space'
+import { SPACE_TYPE } from '@/constants/space'
 
 const route = useRoute()
 const router = useRouter()
@@ -206,6 +208,7 @@ const showFullscreen = ref(false)
 const showShare = ref(false)
 const showImageEditor = ref(false)
 const permissions = ref([])
+const pictureSpaceType = ref(null)
 // 通过后端代理加载 COS 图片，避免 Canvas 跨域 taint
 const imageEditorSrc = computed(() => {
   if (!picture.value?.url) return ''
@@ -224,7 +227,10 @@ const canEdit = computed(() => {
   return userStore.isAdmin || picture.value.userId === userStore.currentUser?.id || permissions.value.includes('picture:edit')
 })
 
-const canCollaborate = computed(() => permissions.value.includes('collaboration:edit'))
+const canCollaborate = computed(() => (
+  pictureSpaceType.value === SPACE_TYPE.TEAM
+  && permissions.value.includes('collaboration:edit')
+))
 
 const reviewClass = computed(() => {
   const s = picture.value?.reviewStatus
@@ -259,9 +265,15 @@ onMounted(async () => {
     picture.value = await getPictureVOById(id)
     if (userStore.isLoggedIn && picture.value?.spaceId) {
       try {
-        permissions.value = await getMyPicturePermissions(picture.value.id)
+        const [permissionResult, spaceResult] = await Promise.all([
+          getMyPicturePermissions(picture.value.id),
+          getSpaceVOById(picture.value.spaceId)
+        ])
+        permissions.value = permissionResult
+        pictureSpaceType.value = spaceResult?.spaceType ?? null
       } catch {
         permissions.value = []
+        pictureSpaceType.value = null
       }
     }
   } catch {

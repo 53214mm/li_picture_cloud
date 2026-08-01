@@ -20,18 +20,21 @@
                 <span class="badge" :class="'level-' + space.spaceLevel">
                   {{ spaceLevelText(space.spaceLevel) }}
                 </span>
+                <span class="badge type">{{ spaceTypeText(space.spaceType) }}</span>
+                <span v-if="currentRole" class="badge role">{{ spaceRoleText(currentRole) }}</span>
               </div>
               <p class="space-meta" v-if="space.user">
                 创建者：{{ space.user.userName }} · {{ formatDate(space.createTime) }}
               </p>
             </div>
             <div class="header-actions">
-              <button v-if="isOwner" class="btn btn-primary btn-sm" @click="showUpload = !showUpload">
+              <button v-if="canUploadPictures" class="btn btn-primary btn-sm" @click="showUpload = !showUpload">
                 {{ showUpload ? '取消上传' : '+ 上传图片' }}
               </button>
-              <button v-if="isOwner" class="btn btn-outline btn-sm" @click="toggleBatchMode">
+              <button v-if="canEditPictures" class="btn btn-outline btn-sm" @click="toggleBatchMode">
                 {{ batchMode ? '退出批量' : '批量管理' }}
               </button>
+              <button v-if="canManageMembers" class="btn btn-outline btn-sm" @click="showMembers = true">成员管理</button>
               <router-link to="/spaces" class="btn btn-outline btn-sm">返回列表</router-link>
             </div>
           </div>
@@ -60,7 +63,8 @@
         </div>
 
         <!-- 上传面板 -->
-        <div v-if="showUpload && isOwner" class="upload-panel">
+        <div v-if="permissionError" class="permission-error">{{ permissionError }}</div>
+        <div v-if="showUpload && canUploadPictures" class="upload-panel">
           <div class="upload-tabs">
             <button
               :class="{ active: uploadMode === 'file' }"
@@ -97,7 +101,7 @@
             <input v-model="uploadName" class="input" placeholder="图片名称（可选）" style="max-width: 240px;" />
             <button
               class="btn btn-primary"
-              :disabled="!canUpload || uploading"
+              :disabled="!uploadReady || uploading"
               @click="handleUpload"
             >
               {{ uploading ? '上传中…' : '上传到空间' }}
@@ -134,8 +138,8 @@
           :current="currentPage"
           :page-size="12"
           :category-list="categoryList"
-          :empty-text="isOwner ? '空间暂无图片，点击上方按钮上传' : '空间暂无图片'"
-          :show-actions="isOwner && !batchMode"
+          :empty-text="canUploadPictures ? '空间暂无图片，点击上方按钮上传' : '空间暂无图片'"
+          :show-actions="(canEditPictures || canDeletePictures) && !batchMode"
           :selectable="batchMode"
           :selected-ids="selectedIds"
           @search="onSearch"
@@ -144,16 +148,16 @@
           @toggle-select="toggleSelect"
         >
           <template #toolbar-actions>
-            <span v-if="isOwner" class="hint-text">鼠标悬停图片查看快捷操作</span>
+            <span v-if="canEditPictures || canDeletePictures" class="hint-text">鼠标悬停图片查看快捷操作</span>
           </template>
           <template #actions="{ picture }">
-            <button class="action-btn" @click.stop="openEditDialog(picture)" title="编辑">
+            <button v-if="canEditPictures" class="action-btn" @click.stop="openEditDialog(picture)" title="编辑">
               <span class="action-icon">✏️</span>
             </button>
             <button class="action-btn share" @click.stop="openShare(picture)" title="分享">
               <span class="action-icon">🔗</span>
             </button>
-            <button class="action-btn danger" @click.stop="handleDeletePic(picture)" title="删除">
+            <button v-if="canDeletePictures" class="action-btn danger" @click.stop="handleDeletePic(picture)" title="删除">
               <span class="action-icon">🗑️</span>
             </button>
           </template>
@@ -177,6 +181,15 @@
       :image-src="uploadPreview"
       @close="showFileEditor = false"
       @save="onFileEditSave"
+    />
+
+    <SpaceMemberPanel
+      v-if="showMembers && canManageMembers"
+      :space-id="spaceId"
+      :creator-id="space.userId"
+      :current-user-id="userStore.currentUser?.id"
+      :can-manage="canManageMembers"
+      @close="showMembers = false"
     />
 
     <!-- 编辑图片弹窗 -->
@@ -227,7 +240,10 @@ import request from '@/api/request'
 import PictureList from '@/components/PictureList.vue'
 import ShareModal from '@/components/ShareModal.vue'
 import ImageEditModal from '@/components/ImageEditModal.vue'
-import { spaceLevelText, formatSize, formatDate } from '@/constants/space'
+import SpaceMemberPanel from '@/components/space/SpaceMemberPanel.vue'
+import { getMySpacePermissions, listMyTeamSpaces } from '@/api/spaceUser'
+import { SPACE_ROLE, SPACE_TYPE, spaceLevelText, spaceRoleText, spaceTypeText, formatSize, formatDate } from '@/constants/space'
+import { hasPermission } from '@/utils/spaceAccess'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -238,7 +254,15 @@ const spaceId = computed(() => route.params.id)
 // 空间信息
 const space = ref(null)
 const loading = ref(true)
-const isOwner = computed(() => space.value?.userId === userStore.currentUser?.id)
+const permissions = ref([])
+const permissionError = ref('')
+const currentRole = ref('')
+const showMembers = ref(false)
+const canViewPictures = computed(() => hasPermission(permissions.value, 'picture:view'))
+const canUploadPictures = computed(() => hasPermission(permissions.value, 'picture:upload'))
+const canEditPictures = computed(() => hasPermission(permissions.value, 'picture:edit'))
+const canDeletePictures = computed(() => hasPermission(permissions.value, 'picture:delete'))
+const canManageMembers = computed(() => hasPermission(permissions.value, 'spaceUser:manage'))
 
 // 图片列表
 const pictures = ref([])
@@ -264,7 +288,7 @@ const uploadError = ref('')
 const uploadSuccess = ref(false)
 const showFileEditor = ref(false)
 
-const canUpload = computed(() => {
+const uploadReady = computed(() => {
   if (uploadMode.value === 'file') return !!uploadFile.value
   return !!urlInput.value.trim()
 })
@@ -345,13 +369,22 @@ onMounted(async () => {
 
   try {
     space.value = await getSpaceVOById(spaceId.value)
+    permissions.value = await getMySpacePermissions(spaceId.value)
+    if (space.value.spaceType === SPACE_TYPE.TEAM) {
+      if (String(space.value.userId) === String(userStore.currentUser?.id)) {
+        currentRole.value = SPACE_ROLE.ADMIN
+      } else {
+        const memberships = await listMyTeamSpaces()
+        currentRole.value = memberships.find((item) => String(item.spaceId) === String(spaceId.value))?.spaceRole || ''
+      }
+    }
   } catch (e) {
-    console.error('加载空间失败', e)
+    permissionError.value = e.message || '加载空间权限失败'
   } finally {
     loading.value = false
   }
 
-  loadPictures()
+  if (canViewPictures.value) loadPictures()
 })
 
 async function loadPictures() {
