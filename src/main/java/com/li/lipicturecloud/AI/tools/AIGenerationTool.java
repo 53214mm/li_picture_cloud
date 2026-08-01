@@ -18,7 +18,7 @@ public class AIGenerationTool {
 
     private final AiPictureSaveService saveService;
 
-    @Tool(description = "将图片 URL 下载并上传到当前用户的私有空间。MCP 生成图片后调用此方法保存。")
+    @Tool(description = "仅当用户明确提供外部图片 URL 并要求保存时，将图片上传到当前用户的私有空间。")
     public String saveToMySpace(
             @ToolParam(description = "要保存的图片 URL") String imageUrl,
             @ToolParam(description = "图片名称（可选）") String name) {

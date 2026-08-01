@@ -10,7 +10,7 @@ public class PasswordHashService {
 
     private static final int BCRYPT_MAX_PASSWORD_BYTES = 72;
     private static final String PASSWORD_TOO_LONG_MESSAGE = "密码不能超过 72 个 UTF-8 字节";
-    private static final String BCRYPT_COST_12_PATTERN = "^\\$2[ayb]\\$12\\$.*";
+    private static final String BCRYPT_COST_12_PATTERN = "^\\$2[ayb]\\$12\\$[./A-Za-z0-9]{53}$";
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(12);
 

@@ -54,6 +54,7 @@ public class PicCloudApp {
             5. **重要**：当工具返回图片 URL 时，用 Markdown 图片语法展示：`![描述](图片URL)`
             6. 搜索图片时，将图片缩略图以 Markdown 格式直接展示给用户浏览
             7. 生成图片获得返回链接后，主动展示并告知用户图片已自动保存到空间
+            8. MCP 生图结果由后端自动保存，不要再次调用 saveToMySpace；该工具只处理用户明确提供的外部图片 URL
             """;
 
     public PicCloudApp(@Qualifier("dashScopeChatModel") ChatModel dashscopeChatModel,
