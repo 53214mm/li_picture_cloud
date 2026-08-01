@@ -11,6 +11,7 @@
     "dev": "vite",
     "lint": "eslint . --max-warnings 0",
     "build": "vite build",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
