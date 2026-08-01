@@ -4,7 +4,7 @@
       <div class="page-header">
         <div>
           <h1>空间管理</h1>
-          <p class="subtitle">私有空间为图片提供独立存储区域，拥有专属容量配额和权限控制。</p>
+          <p class="subtitle">查看自己创建的私有空间和团队空间，管理容量与基础信息。</p>
         </div>
         <div class="header-right">
           <router-link to="/space/my" class="btn btn-outline btn-sm">我的空间</router-link>
@@ -32,6 +32,7 @@
               <span class="badge" :class="'level-' + sp.spaceLevel">
                 {{ spaceLevelText(sp.spaceLevel) }}
               </span>
+              <span class="badge type">{{ spaceTypeText(sp.spaceType) }}</span>
               <span v-if="sp.userId === userStore.currentUser?.id" class="badge mine">我的</span>
             </div>
 
@@ -123,7 +124,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { listSpaceVOByPage, editSpace, updateSpace, deleteSpace } from '@/api/space'
-import { spaceLevelText, formatSize, formatDate } from '@/constants/space'
+import { spaceLevelText, spaceTypeText, formatSize, formatDate } from '@/constants/space'
 
 const userStore = useUserStore()
 
