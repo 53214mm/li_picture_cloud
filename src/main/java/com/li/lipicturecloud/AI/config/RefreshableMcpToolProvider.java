@@ -46,6 +46,9 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
     @Value("${spring.ai.mcp.client.sse.connections.mxai-mcp-server.url}")
     private String mcpUrl;
 
+    @Value("${app.mcp.enabled:true}")
+    private boolean enabled;
+
     @Resource
     private McpSyncHttpClientRequestCustomizer mcpAuthCustomizer;
     @Resource
@@ -90,6 +93,9 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
 
     @Override
     public ToolCallback[] getToolCallbacks() {
+        if (!enabled) {
+            return new ToolCallback[0];
+        }
         if (System.currentTimeMillis() - lastRefreshTime < CACHE_TTL_MS
                 && cachedCallbacks.length > 0) {
             return cachedCallbacks;

@@ -1,0 +1,50 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:li_picture_cloud;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  session:
+    store-type: none
+  data:
+    redis:
+      repositories:
+        enabled: false
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaEmbeddingAutoConfiguration
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+      - org.springframework.ai.mcp.client.common.autoconfigure.McpToolCallbackAutoConfiguration
+  ai:
+    dashscope:
+      api-key: test-key
+    qianfan:
+      api-key: test-key
+      Bearer: test-token
+    mcp:
+      client:
+        enabled: false
+        sse:
+          connections:
+            mxai-mcp-server:
+              url: http://127.0.0.1:1
+
+cos:
+  client:
+    host: http://127.0.0.1
+    secretId: test-secret-id
+    secretKey: test-secret-key
+    region: ap-test
+    bucket: test-bucket
+
+mxai:
+  api-key: test-key
+
+app:
+  mcp:
+    enabled: false
+
+server:
+  servlet:
+    context-path: /api
