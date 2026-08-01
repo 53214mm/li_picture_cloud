@@ -1,16 +1,16 @@
 package com.li.lipicturecloud.manager.auth;
 
+import com.li.lipicturecloud.domain.picture.PictureAsset;
+import com.li.lipicturecloud.domain.picture.PictureAssetRepository;
 import com.li.lipicturecloud.domain.space.SpaceMembership;
 import com.li.lipicturecloud.domain.space.SpaceMembershipRepository;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
 import com.li.lipicturecloud.manager.auth.model.SpaceAuthorizationResource;
-import com.li.lipicturecloud.model.entity.Picture;
 import com.li.lipicturecloud.model.entity.Space;
 import com.li.lipicturecloud.model.entity.User;
 import com.li.lipicturecloud.model.enums.SpaceTypeEnum;
-import com.li.lipicturecloud.repository.PictureRepository;
 import com.li.lipicturecloud.service.SpaceService;
 import com.li.lipicturecloud.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,14 +24,14 @@ public class SpaceAuthorizationAccessService {
     private final AuthorizationManager authorizationManager;
     private final UserService userService;
     private final SpaceService spaceService;
-    private final PictureRepository pictureRepository;
+    private final PictureAssetRepository pictureRepository;
     private final SpaceMembershipRepository membershipRepository;
 
     public SpaceAuthorizationAccessService(
             AuthorizationManager authorizationManager,
             UserService userService,
             SpaceService spaceService,
-            PictureRepository pictureRepository,
+            PictureAssetRepository pictureRepository,
             SpaceMembershipRepository membershipRepository
     ) {
         this.authorizationManager = authorizationManager;
@@ -84,15 +84,15 @@ public class SpaceAuthorizationAccessService {
             spaceId = targetMembership.spaceId();
         }
         if (pictureId != null) {
-            Picture picture = pictureRepository.findById(pictureId).orElse(null);
+            PictureAsset picture = pictureRepository.findAssetById(pictureId).orElse(null);
             if (picture == null) {
                 throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "图片不存在");
             }
-            if (picture.getSpaceId() == null) {
+            if (picture.isPublic()) {
                 return authorizationManager.getPermissions(
-                        subject, SpaceAuthorizationResource.publicPicture(picture.getUserId()));
+                        subject, SpaceAuthorizationResource.publicPicture(picture.ownerId()));
             }
-            spaceId = picture.getSpaceId();
+            spaceId = picture.spaceId();
         }
         if (spaceId == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "必须指定权限资源");

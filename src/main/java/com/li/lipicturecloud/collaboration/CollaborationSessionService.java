@@ -2,6 +2,10 @@ package com.li.lipicturecloud.collaboration;
 
 import com.li.lipicturecloud.collaboration.model.CollaborationCommand;
 import com.li.lipicturecloud.collaboration.model.CollaborationState;
+import com.li.lipicturecloud.domain.collaboration.CollaborationAction;
+import com.li.lipicturecloud.domain.collaboration.CollaborationSession;
+import com.li.lipicturecloud.domain.collaboration.CollaborationSnapshot;
+import com.li.lipicturecloud.domain.collaboration.StaleCollaborationVersionException;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -11,10 +15,6 @@ import java.util.concurrent.atomic.LongAdder;
 
 @Service
 public class CollaborationSessionService {
-
-    private static final double MIN_SCALE = 0.25;
-    private static final double MAX_SCALE = 4.0;
-    private static final double SCALE_STEP = 0.1;
 
     private final Map<Long, PictureSession> sessions = new ConcurrentHashMap<>();
     private final LongAdder appliedCommands = new LongAdder();
@@ -54,15 +54,15 @@ public class CollaborationSessionService {
     }
 
     private final class PictureSession {
-        private CollaborationState state;
+        private final CollaborationSession domainSession;
         private final Map<String, CollaborationState> processedCommands = new HashMap<>();
 
         private PictureSession(Long pictureId) {
-            state = CollaborationState.initial(pictureId);
+            domainSession = CollaborationSession.start(pictureId);
         }
 
         private synchronized CollaborationState current() {
-            return state;
+            return toState(domainSession.snapshot());
         }
 
         private synchronized CollaborationState apply(CollaborationCommand command) {
@@ -71,27 +71,24 @@ public class CollaborationSessionService {
                 duplicateCommands.increment();
                 return existing;
             }
-            if (command.baseVersion() != state.version()) {
+            CollaborationState state;
+            try {
+                CollaborationSnapshot snapshot = domainSession.apply(
+                        CollaborationAction.valueOf(command.operation().name()), command.baseVersion());
+                state = toState(snapshot);
+            } catch (StaleCollaborationVersionException exception) {
                 versionConflicts.increment();
-                throw new CollaborationVersionConflictException(command.baseVersion(), state.version());
+                throw new CollaborationVersionConflictException(
+                        exception.expectedVersion(), exception.actualVersion());
             }
-
-            int rotation = state.rotation();
-            double scale = state.scale();
-            switch (command.operation()) {
-                case ROTATE_LEFT -> rotation = Math.floorMod(rotation - 90, 360);
-                case ROTATE_RIGHT -> rotation = Math.floorMod(rotation + 90, 360);
-                case ZOOM_IN -> scale = Math.min(MAX_SCALE, round(scale + SCALE_STEP));
-                case ZOOM_OUT -> scale = Math.max(MIN_SCALE, round(scale - SCALE_STEP));
-            }
-            state = new CollaborationState(state.pictureId(), rotation, scale, state.version() + 1);
             processedCommands.put(command.commandId(), state);
             appliedCommands.increment();
             return state;
         }
 
-        private double round(double value) {
-            return Math.round(value * 100.0) / 100.0;
+        private CollaborationState toState(CollaborationSnapshot snapshot) {
+            return new CollaborationState(
+                    snapshot.pictureId(), snapshot.rotation(), snapshot.scale(), snapshot.version());
         }
     }
 }
