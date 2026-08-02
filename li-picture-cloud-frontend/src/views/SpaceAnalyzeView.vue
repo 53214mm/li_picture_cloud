@@ -78,6 +78,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import VChart from 'vue-echarts'
 import { useUserStore } from '@/stores/user'
 import { listMySpaces } from '@/api/space'
+import { SPACE_TYPE } from '@/constants/space'
 import {
   getSpaceUsageAnalyze, getSpaceCategoryAnalyze, getSpaceTagAnalyze,
   getSpaceSizeAnalyze, getSpaceUserAnalyze, getSpaceRankAnalyze
@@ -116,7 +117,11 @@ async function setScope(s) {
 }
 
 async function loadMySpaces() {
-  try { mySpaces.value = (await listMySpaces()).records || [] } catch { mySpaces.value = [] }
+  try {
+    const spaces = (await listMySpaces(userStore.currentUser?.id)).records || []
+    // Prefer the personal space when the user also belongs to team spaces.
+    mySpaces.value = [...spaces].sort((a, b) => Number(a.spaceType !== SPACE_TYPE.PRIVATE) - Number(b.spaceType !== SPACE_TYPE.PRIVATE))
+  } catch { mySpaces.value = [] }
 }
 
 async function loadAll() {

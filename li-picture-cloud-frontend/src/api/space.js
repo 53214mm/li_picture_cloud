@@ -1,4 +1,5 @@
 import request from './request'
+import { buildMySpaceQuery } from '@/utils/spaceAccess'
 
 /** 创建空间 */
 export function addSpace(data) {
@@ -42,8 +43,8 @@ export function listSpaceVOByPage(data) {
 
 /** 获取空间级别列表 */
 /** 获取当前用户的空间列表 */
-export function listMySpaces() {
-  return listSpaceVOByPage({ current: 1, pageSize: 10 })
+export function listMySpaces(userId) {
+  return listSpaceVOByPage(buildMySpaceQuery(userId))
 }
 
 export function listSpaceLevel() {

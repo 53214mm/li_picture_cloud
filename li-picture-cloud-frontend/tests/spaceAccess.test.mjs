@@ -2,11 +2,20 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   buildSpaceCreatePayload,
+  buildMySpaceQuery,
   collaborationMode,
   groupMySpaces,
   hasPermission,
   normalizePermissions
 } from '../src/utils/spaceAccess.js'
+
+test('scopes gallery analysis space lookup to the current user', () => {
+  assert.deepEqual(buildMySpaceQuery(42), {
+    current: 1,
+    pageSize: 20,
+    userId: 42
+  })
+})
 import {
   SPACE_ROLE,
   SPACE_TYPE,

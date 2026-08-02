@@ -47,3 +47,8 @@ export function buildSpaceCreatePayload(form) {
     spaceType: form.spaceType
   }
 }
+
+/** Build the user-scoped query used by gallery analysis. */
+export function buildMySpaceQuery(userId) {
+  return { current: 1, pageSize: 20, userId }
+}
