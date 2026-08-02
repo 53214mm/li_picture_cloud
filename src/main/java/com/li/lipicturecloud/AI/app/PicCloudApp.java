@@ -108,11 +108,8 @@ public class PicCloudApp {
         ToolCallback[] mcpCallbacks = refreshableMcpToolProvider.getToolCallbacks();
         // ★ 包装 MCP 回调：在 call() 执行前注入用户上下文
         //    绕过 reactor 线程 ThreadLocal 传播问题
-        for (int i = 0; i < mcpCallbacks.length; i++) {
-            mcpCallbacks[i] = new UserContextToolCallback(mcpCallbacks[i], currentUser);
-        }
-        if (mcpCallbacks.length > 0) {
-            combined.addAll(Arrays.asList(mcpCallbacks));
+        for (ToolCallback mcpCallback : mcpCallbacks) {
+            combined.add(bindMcpCallback(mcpCallback, currentUser));
         }
 
         return chatClient.prompt()
@@ -128,6 +125,10 @@ public class PicCloudApp {
      * 包装 ToolCallback，在 call() 执行前设置 UserContextHolder。
      * 用于解决 reactor 线程池中 ThreadLocal 无法传播的问题。
      */
+    static ToolCallback bindMcpCallback(ToolCallback delegate, User user) {
+        return new UserContextToolCallback(delegate, user);
+    }
+
     private record UserContextToolCallback(ToolCallback delegate, User user) implements ToolCallback {
         @Override
         public ToolDefinition getToolDefinition() {

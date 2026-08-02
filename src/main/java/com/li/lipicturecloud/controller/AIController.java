@@ -2,6 +2,7 @@ package com.li.lipicturecloud.controller;
 
 import com.li.lipicturecloud.AI.app.PicCloudApp;
 import com.li.lipicturecloud.AI.chatMemory.RedisBasedChatMemory;
+import com.li.lipicturecloud.AI.AiRequestIntent;
 import com.li.lipicturecloud.annotation.AuthCheck;
 import com.li.lipicturecloud.annotation.RateLimit;
 import com.li.lipicturecloud.model.entity.User;
@@ -72,10 +73,12 @@ public class AIController {
         String scopedChatId = loginUser.getId() + ":" + chatId;
 
         SseEmitter emitter = new SseEmitter(480000L);
-        // ★ 先发一条提示，避免 50s+ 工具等待期间前端零反馈
-        try {
-            emitter.send(SseEmitter.event().data("正在处理您的请求，图片生成可能需要 1-2 分钟...\n\n"));
-        } catch (IOException ignored) {}
+        // 只有明确的生图请求才提示生成耗时，普通聊天不应出现误导性文案。
+        if (AiRequestIntent.isImageGenerationRequest(message)) {
+            try {
+                emitter.send(SseEmitter.event().data("正在处理您的请求，图片生成可能需要 1-2 分钟...\n\n"));
+            } catch (IOException ignored) {}
+        }
         picCloudApp.doChatStream(message, scopedChatId, loginUser).subscribe(
             chunk -> {
                 try { emitter.send(SseEmitter.event().data(chunk)); } catch (IOException e) {
