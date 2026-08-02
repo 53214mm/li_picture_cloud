@@ -70,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { use } from 'echarts/core'
 import { PieChart, BarChart, LineChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
@@ -213,10 +213,16 @@ function formatSize(bytes) {
   return (bytes / 1073741824).toFixed(2) + ' GB'
 }
 
-onMounted(async () => {
+// App.vue loads the current user asynchronously. The previous onMounted call
+// could run first, query all spaces without userId, and never retry after login
+// state became available.
+const loadedUserId = ref(null)
+watch(() => userStore.currentUser?.id, async (userId) => {
+  if (!userId || loadedUserId.value === userId) return
+  loadedUserId.value = userId
   await loadMySpaces()
-  loadAll()
-})
+  if (scope.value === 'space') loadAll()
+}, { immediate: true })
 </script>
 
 <style scoped>
