@@ -500,4 +500,3 @@ git push origin main
 ```
 
 Expected: the final commit contains only the simulation guide and README navigation; all earlier workbook commits are pushed with it.
-
