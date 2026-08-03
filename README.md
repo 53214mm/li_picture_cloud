@@ -205,6 +205,8 @@ docker compose --env-file .env up -d --build
 
 ## 文档导航
 
+- [Java 后端校招面试十天冲刺指南](docs/interview/00-冲刺使用指南.md)
+
 - [团队空间与协同编辑使用指南](docs/round-15-team-space-guide.md)
 - [密码与 AI 安全治理指南](docs/round-16-password-ai-security-guide.md)
 - [用户种子数据指南](docs/round-17-user-seed-guide.md)
@@ -217,4 +219,3 @@ docker compose --env-file .env up -d --build
 - COS、DashScope、百度千帆和 MCP 服务依赖使用者自行准备有效凭证，外部服务不可用时对应功能会受到影响。
 - ShardingSphere 提供可选的静态与动态分表配置；默认运行方式不强制开启分表。
 - 当前代码已经对授权、协同等核心领域做了局部边界整理，完整 DDD 架构迁移仍属于后续演进方向，不作为已完成成果展示。
-
