@@ -36,7 +36,23 @@ import java.util.stream.Collectors;
 import static com.li.lipicturecloud.constant.UserConstant.SESSION_USER_KEY;
 
 /**
- * 自定义权限加载接口实现类
+ * Sa-Token 的自定义“权限码加载器”。
+ *
+ * <p>当代码通过空间账号体系（{@link StpKit#SPACE}）请求 Sa-Token 校验权限时，
+ * Sa-Token 会回调 {@link #getPermissionList(Object, String)}，询问当前账号拥有哪些权限码。
+ * 本类随后从当前 HTTP 请求中推断正在操作的空间、图片或成员关系，再返回
+ * viewer/editor/admin 对应的权限列表。</p>
+ *
+ * <p>阅读时要把它和新的统一授权门面区分开：</p>
+ * <ul>
+ *     <li>本类服务于 Sa-Token 的 {@code StpInterface} 回调，需要从请求 URL、参数和 body 推断资源；</li>
+ *     <li>{@link SpaceAuthorizationAccessService} 由注解、Service 或 WebSocket 显式传入资源 ID，
+ *     再统一解析资源并完成授权。</li>
+ * </ul>
+ *
+ * <p>两条路径使用相同的团队角色权限配置，但入口和上下文来源不同。
+ * 理解权限主链时可以先掌握 {@code SpacePermission → SpaceAuthorizationAccessService}，
+ * 再阅读本类的请求推断过程。</p>
  */
 @Component    // 保证此类被 SpringBoot 扫描，完成 Sa-Token 的自定义权限验证扩展
 public class StpInterfaceImpl implements StpInterface {
@@ -55,19 +71,25 @@ public class StpInterfaceImpl implements StpInterface {
     private String contextPath;
 
     /**
-     * 返回一个账号所拥有的权限码集合
+     * 返回当前空间账号针对“本次请求资源”所拥有的权限码集合。
+     *
+     * <p>这里返回的不是用户在整个系统中永远拥有的权限，而是结合当前请求资源计算出的权限。
+     * 同一个用户在不同团队空间可能角色不同，因此结果也可能不同。</p>
+     *
+     * @param loginId Sa-Token 当前登录账号 ID
+     * @param loginType 账号体系；本类只为空间账号体系提供权限
      */
     @Override
     public List<String> getPermissionList(Object loginId, String loginType) {
-        // 判断 loginType，仅对类型为 "space" 进行权限校验
+        // 同一个项目可以注册多种 Sa-Token 账号体系；本实现只处理名为 space 的那一套。
         if (!StpKit.SPACE_TYPE.equals(loginType)) {
             return new ArrayList<>();
         }
-        // 管理员权限，表示权限校验通过
+        // admin 角色拥有配置文件中最完整的空间权限。后续所有“完整放行”都复用这份列表。
         List<String> ADMIN_PERMISSIONS = spaceUserAuthManager.getPermissionsByRole(SpaceRoleEnum.ADMIN.getValue());
-        // 获取上下文对象
+        // Sa-Token 回调只给 loginId，没有直接给 spaceId/pictureId，所以必须从当前 HTTP 请求还原资源上下文。
         SpaceUserAuthContext authContext = getAuthContextByRequest();
-        // 如果所有字段都为空，表示查询公共图库，可以通过
+        // 没有任何空间资源上下文时，当前实现按无需细分资源的请求处理，返回完整权限集合。
         if (isAllFieldsNull(authContext)) {
             return ADMIN_PERMISSIONS;
         }
@@ -77,19 +99,19 @@ public class StpInterfaceImpl implements StpInterface {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "用户未登录");
         }
         Long userId = loginUser.getId();
-        // 优先从上下文中获取 SpaceUser 对象
+        // 如果调用方已经提供完整 SpaceUser，上下文已经包含团队角色，可直接做“角色 → 权限码”映射。
         SpaceUser spaceUser = authContext.getSpaceUser();
         if (spaceUser != null) {
             return spaceUserAuthManager.getPermissionsByRole(spaceUser.getSpaceRole());
         }
-        // 如果有 spaceUserId，必然是团队空间，通过数据库查询 SpaceUser 对象
+        // 成员管理接口常只携带目标 SpaceUser.id：先找到目标所属空间，再查询“当前登录用户”在该空间的角色。
         Long spaceUserId = authContext.getSpaceUserId();
         if (spaceUserId != null) {
             spaceUser = spaceUserService.getById(spaceUserId);
             if (spaceUser == null) {
                 throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "未找到空间用户信息");
             }
-            // 取出当前登录用户对应的 spaceUser
+            // 注意：授权判断使用的是当前登录用户的成员关系，而不是被编辑/删除的目标成员角色。
             SpaceUser loginSpaceUser = spaceUserService.lambdaQuery()
                     .eq(SpaceUser::getSpaceId, spaceUser.getSpaceId())
                     .eq(SpaceUser::getUserId, userId)
@@ -97,15 +119,15 @@ public class StpInterfaceImpl implements StpInterface {
             if (loginSpaceUser == null) {
                 return new ArrayList<>();
             }
-            // 这里会导致管理员在私有空间没有权限，可以再查一次库处理
+            // 当前分支按团队成员关系返回权限；没有成员关系时默认拒绝。
             return spaceUserAuthManager.getPermissionsByRole(loginSpaceUser.getSpaceRole());
         }
-        // 如果没有 spaceUserId，尝试通过 spaceId 或 pictureId 获取 Space 对象并处理
+        // 没有成员关系 ID 时，继续尝试从 spaceId 或 pictureId 还原资源归属。
         Long spaceId = authContext.getSpaceId();
         if (spaceId == null) {
-            // 如果没有 spaceId，通过 pictureId 获取 Picture 对象和 Space 对象
+            // 图片接口通常只有 pictureId；先查图片，才能知道它属于公共图库还是某个空间。
             Long pictureId = authContext.getPictureId();
-            // 图片 id 也没有，则默认通过权限校验
+            // 连图片 ID 也没有时，当前实现按无需资源细分的请求处理。
             if (pictureId == null) {
                 return ADMIN_PERMISSIONS;
             }
@@ -117,7 +139,7 @@ public class StpInterfaceImpl implements StpInterface {
                 throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "未找到图片信息");
             }
             spaceId = picture.getSpaceId();
-            // 公共图库，仅本人或管理员可操作
+            // spaceId 为空表示公共图片：上传者/平台管理员可管理，其他用户只能查看。
             if (spaceId == null) {
                 if (picture.getUserId().equals(userId) || userService.isAdmin(loginUser)) {
                     return ADMIN_PERMISSIONS;
@@ -127,21 +149,20 @@ public class StpInterfaceImpl implements StpInterface {
                 }
             }
         }
-        // 获取 Space 对象
+        // 已经得到 spaceId，读取空间所有者和空间类型，进入个人/团队两套规则。
         Space space = spaceService.getById(spaceId);
         if (space == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "未找到空间信息");
         }
-        // 根据 Space 类型判断权限
+        // 个人空间没有 viewer/editor 成员模型，只允许空间所有者或平台管理员操作。
         if (space.getSpaceType() == SpaceTypeEnum.PRIVATE.getValue()) {
-            // 私有空间，仅本人或管理员有权限
             if (space.getUserId().equals(userId) || userService.isAdmin(loginUser)) {
                 return ADMIN_PERMISSIONS;
             } else {
                 return new ArrayList<>();
             }
         } else {
-            // 团队空间，查询 SpaceUser 并获取角色和权限
+            // 团队空间必须查询当前用户在当前空间中的成员关系，再按角色加载权限码。
             spaceUser = spaceUserService.lambdaQuery()
                     .eq(SpaceUser::getSpaceId, spaceId)
                     .eq(SpaceUser::getUserId, userId)
@@ -198,6 +219,8 @@ public class StpInterfaceImpl implements StpInterface {
      *   </li>
      * </ol>
      *
+     * <p>这个方法只负责“从请求猜出资源 ID”，不负责决定用户是否有权限。</p>
+     *
      * @return 包含请求参数和业务 ID 映射的权限校验上下文
      * @throws RuntimeException 如果 JSON 请求体读取失败
      */
@@ -207,7 +230,7 @@ public class StpInterfaceImpl implements StpInterface {
         String contentType = request.getHeader(Header.CONTENT_TYPE.getValue());
         SpaceUserAuthContext authRequest;
 
-        // ② 根据请求方式从不同位置提取参数
+        // ② 根据 Content-Type 从请求体或查询/表单参数中恢复 SpaceUserAuthContext。
         if (ContentType.JSON.getValue().equals(contentType)) {
             // POST JSON：body → JSON 反序列化 → SpaceUserAuthContext
             try {
@@ -224,7 +247,7 @@ public class StpInterfaceImpl implements StpInterface {
             authRequest = BeanUtil.toBean(flatMap, SpaceUserAuthContext.class);
         }
 
-        // ③ URL 前缀 → 业务 ID 映射
+        // ③ URL 前缀 → 业务 ID 映射。因为多个 DTO 都使用通用字段 id，需要结合模块名判断其真实含义。
         //   不同接口的通用参数都叫 "id"，但含义不同：
         //   /picture/delete?id=123  → 123 是图片 ID
         //   /space/delete?id=456    → 456 是空间 ID
