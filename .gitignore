@@ -69,3 +69,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Codex / Superpowers isolated worktrees
+.worktrees/
