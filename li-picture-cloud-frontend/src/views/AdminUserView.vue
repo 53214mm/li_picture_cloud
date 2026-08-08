@@ -31,16 +31,16 @@
         </thead>
         <tbody>
           <tr v-for="u in users" :key="u.id">
-            <td class="id-cell">{{ u.id }}</td>
-            <td>{{ u.userAccount }}</td>
-            <td>{{ u.userName }}</td>
-            <td>
+            <td class="id-cell" data-label="ID">{{ u.id }}</td>
+            <td data-label="账号">{{ u.userAccount }}</td>
+            <td data-label="昵称">{{ u.userName }}</td>
+            <td data-label="角色">
               <span class="role-badge" :class="u.userRole === 'admin' ? 'role-admin' : 'role-user'">
                 {{ u.userRole === 'admin' ? '管理员' : '用户' }}
               </span>
             </td>
-            <td>{{ formatDate(u.createTime) }}</td>
-            <td class="action-cell">
+            <td data-label="创建时间">{{ formatDate(u.createTime) }}</td>
+            <td class="action-cell" data-label="操作">
               <button class="btn-sm-text" @click="openEdit(u)">编辑</button>
               <button class="btn-sm-text danger" @click="handleDelete(u.id)">删除</button>
             </td>
@@ -258,4 +258,25 @@ function formatDate(d) {
 .field { display: flex; flex-direction: column; gap: 0.375rem; }
 .field span { font-size: 0.8125rem; font-weight: 600; }
 .form-error { padding: 0.5rem 0.75rem; background: #FFF0EF; color: var(--red); font-size: 0.8125rem; font-weight: 500; }
+
+@media (max-width: 767px) {
+  .admin-page { padding-block: 2rem 3rem; }
+  .admin-header { align-items: stretch; flex-direction: column; gap: 1rem; }
+  .admin-header h1 { font-size: 1.75rem; }
+  .admin-header .btn { width: 100%; }
+  .toolbar { display: grid; grid-template-columns: 1fr; }
+  .toolbar .input { max-width: none !important; }
+  .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+  .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .table tr { margin-bottom: 1rem; padding: 0.5rem 1rem; border: 2px solid var(--gray-200); }
+  .table td { display: grid; grid-template-columns: minmax(6.5rem, 35%) 1fr; gap: 0.75rem; padding: 0.75rem 0; overflow-wrap: anywhere; }
+  .table td::before { content: attr(data-label); color: var(--gray-600); font-size: 0.75rem; font-weight: 700; }
+  .id-cell { max-width: none; }
+  .action-cell { align-items: center; }
+  .btn-sm-text { min-height: 44px; padding-inline: 0.75rem; }
+  .pagination { gap: 0.75rem; flex-wrap: wrap; }
+  .jumper { display: none; }
+  .modal-overlay { align-items: flex-end; }
+  .modal { max-height: 90dvh; overflow-y: auto; padding: 1.5rem 1rem max(1rem, env(safe-area-inset-bottom)); border-inline: 0; border-bottom: 0; }
+}
 </style>

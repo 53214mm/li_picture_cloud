@@ -95,20 +95,20 @@
         </thead>
         <tbody>
           <tr v-for="pic in pictures" :key="pic.id">
-            <td>
+            <td data-label="缩略图">
               <img :src="pic.thumbnailUrl || pic.url" class="thumb" :alt="pic.name" />
             </td>
-            <td>
+            <td data-label="名称">
               <router-link :to="'/picture/' + pic.id" class="pic-link">{{ pic.name || '(无名称)' }}</router-link>
             </td>
-            <td>{{ pic.user?.userName || '-' }}</td>
-            <td>
+            <td data-label="上传者">{{ pic.user?.userName || '-' }}</td>
+            <td data-label="审核状态">
               <span class="review-badge" :class="reviewClass(pic.reviewStatus)">
                 {{ reviewLabel(pic.reviewStatus) }}
               </span>
             </td>
-            <td class="date-cell">{{ formatDate(pic.createTime) }}</td>
-            <td class="action-cell">
+            <td class="date-cell" data-label="上传时间">{{ formatDate(pic.createTime) }}</td>
+            <td class="action-cell" data-label="操作">
               <template v-if="pic.reviewStatus === 0">
                 <button class="btn-sm-text primary" @click="quickReview(pic.id, 1)">通过</button>
                 <button class="btn-sm-text danger" @click="promptReject(pic.id)">拒绝</button>
@@ -426,4 +426,29 @@ function formatDate(d) {
 .jump-input:focus { border-color: var(--black); }
 .btn-jump { padding: 0.25rem 0.625rem; font-size: 0.75rem; font-weight: 600; border: 1.5px solid var(--black); background: var(--white); cursor: pointer; }
 .btn-jump:hover { background: var(--black); color: var(--white); }
+
+@media (max-width: 767px) {
+  .admin-page { padding-block: 2rem 3rem; }
+  .admin-header { align-items: stretch; flex-direction: column; gap: 1rem; }
+  .admin-header h1 { font-size: 1.75rem; }
+  .header-tabs { width: 100%; overflow-x: auto; }
+  .tab-btn { flex: 0 0 auto; min-height: 44px; }
+  .batch-panel { padding: 0.75rem; }
+  .batch-row, .toolbar { align-items: stretch; flex-direction: column; }
+  .batch-row .input, .toolbar .input { max-width: none !important; }
+  .date-sep { display: none; }
+  .result-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+  .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .table tr { margin-bottom: 1rem; padding: 0.5rem 1rem; border: 2px solid var(--gray-200); }
+  .table td { display: grid; grid-template-columns: minmax(6.5rem, 35%) 1fr; gap: 0.75rem; padding: 0.75rem 0; overflow-wrap: anywhere; }
+  .table td::before { content: attr(data-label); color: var(--gray-600); font-size: 0.75rem; font-weight: 700; }
+  .table .empty-cell { display: block; text-align: center; }
+  .table .empty-cell::before { content: none; }
+  .thumb { width: min(7rem, 100%); }
+  .action-cell { align-items: center; flex-wrap: wrap; }
+  .btn-sm-text { min-height: 44px; padding-inline: 0.75rem; }
+  .pagination { gap: 0.75rem; flex-wrap: wrap; }
+  .jumper { display: none; }
+}
 </style>

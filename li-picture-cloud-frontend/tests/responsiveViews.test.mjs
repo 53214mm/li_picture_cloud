@@ -51,3 +51,15 @@ test('space and AI surfaces define phone layouts', () => {
   assert.match(read('src/components/space/SpaceMemberPanel.vue'), /width:\s*100%/)
   assert.match(read('src/components/AiAgentPanel.vue'), /overflow-x:\s*auto|flex-wrap:\s*wrap/)
 })
+
+test('admin tables and analytics have phone contracts', () => {
+  const users = read('src/views/AdminUserView.vue')
+  const pictures = read('src/views/PictureManageView.vue')
+  const analyze = read('src/views/SpaceAnalyzeView.vue')
+  assert.match(users, /data-label="账号"/)
+  assert.match(pictures, /data-label="审核状态"/)
+  assert.match(users, /@media \(max-width: 767px\)/)
+  assert.match(pictures, /@media \(max-width: 767px\)/)
+  assert.match(analyze, /@media \(max-width: 767px\)/)
+  assert.match(analyze, /grid-template-columns:\s*1fr/)
+})

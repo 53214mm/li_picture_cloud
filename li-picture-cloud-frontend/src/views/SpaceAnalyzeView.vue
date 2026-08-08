@@ -255,4 +255,26 @@ watch(() => userStore.currentUser?.id, async (userId) => {
 .chart-box .hint { color: var(--gray-400); text-align: center; padding-top: 6rem; font-size: 0.875rem; }
 
 .echarts { width: 100%; height: 300px; }
+
+@media (max-width: 1023px) {
+  .charts-grid { grid-template-columns: 1fr; }
+  .chart-box.full-width { grid-column: auto; }
+}
+
+@media (max-width: 767px) {
+  .analyze-page { padding: 2rem 1rem 3rem; }
+  .page-title { font-size: 1.75rem; }
+  .toolbar { align-items: stretch; gap: 0.75rem; }
+  .scope-tabs, .time-tabs { display: flex; width: 100%; overflow-x: auto; }
+  .scope-tabs button, .time-tabs button { min-height: 44px; flex: 1 0 auto; }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+  .card { padding: 1rem; }
+  .card-value { font-size: 1.5rem; overflow-wrap: anywhere; }
+  .chart-box { min-height: 280px; padding: 1rem 0.75rem; }
+  .echarts { height: 260px; }
+}
+
+@media (max-width: 480px) {
+  .cards { grid-template-columns: 1fr; }
+}
 </style>
