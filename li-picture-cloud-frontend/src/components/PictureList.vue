@@ -266,4 +266,27 @@ function formatDate(d) {
 .jump-input:focus { border-color: var(--black); }
 .btn-jump { padding: 0.25rem 0.625rem; font-size: 0.75rem; font-weight: 600; border: 1.5px solid var(--black); background: var(--white); cursor: pointer; }
 .btn-jump:hover { background: var(--black); color: var(--white); }
+
+@media (max-width: 767px) {
+  .toolbar-row, .search-box-inline { width: 100%; }
+  .search-box-inline { max-width: none; }
+  .filter-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filter-select { max-width: none; }
+  .gallery-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 1rem; }
+  .card-check input[type="checkbox"] { width: 28px; height: 28px; }
+  .action-btn { width: 44px; height: 44px; }
+  .pagination { gap: 0.75rem; margin-top: 2rem; }
+}
+
+@media (max-width: 480px) {
+  .search-box-inline { flex-direction: column; }
+  .filter-row, .gallery-grid { grid-template-columns: 1fr; }
+  .jumper { display: none; }
+}
+
+@media (hover: none) {
+  .card-actions { opacity: 1; }
+  .gallery-card:hover { transform: none; box-shadow: none; }
+  .gallery-card:hover .card-img { transform: none; }
+}
 </style>

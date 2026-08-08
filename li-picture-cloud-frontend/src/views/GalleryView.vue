@@ -286,4 +286,22 @@ function formatDate(d) {
 .jump-input:focus { border-color: var(--black); }
 .btn-jump { padding: 0.25rem 0.625rem; font-size: 0.75rem; font-weight: 600; border: 1.5px solid var(--black); background: var(--white); cursor: pointer; }
 .btn-jump:hover { background: var(--black); color: var(--white); }
+
+@media (max-width: 767px) {
+  .gallery-page { padding-block: 2rem 3rem; }
+  .gallery-header h1 { font-size: 1.75rem; }
+  .search-box-inline { width: 100%; }
+  .search-box-inline .input { min-width: 0; max-width: none; }
+  .filter-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filter-select { max-width: none; }
+  .gallery-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 1rem; }
+  .pagination { gap: 0.75rem; margin-top: 2rem; flex-wrap: wrap; }
+  .pagination > span:not(.jumper) { flex-basis: 100%; text-align: center; order: -1; }
+}
+
+@media (max-width: 480px) {
+  .filter-row, .gallery-grid { grid-template-columns: 1fr; }
+  .search-box-inline { flex-direction: column; }
+  .jumper { display: none; }
+}
 </style>

@@ -135,8 +135,14 @@ const mosaicItems = [
 .cta-inner p { color: var(--gray-400); margin-bottom: 2rem; font-size: 1.125rem; }
 .btn-lg { padding: 1rem 3rem; font-size: 1rem; }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
+  .section { padding-block: 3rem; }
+  .section-title { font-size: 1.625rem; }
+  .section-header { align-items: flex-start; gap: 1rem; }
   .features-grid { grid-template-columns: 1fr; }
+  .feature-card { padding: 1.5rem; }
   .mosaic-grid { grid-template-columns: repeat(2, 1fr); }
+  .cta-inner h2 { font-size: 2rem; }
+  .btn-lg { width: 100%; }
 }
 </style>

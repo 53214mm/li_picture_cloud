@@ -110,4 +110,11 @@ async function handleRegister() {
 .auth-footer { text-align: center; margin-top: 2rem; font-size: 0.875rem; color: var(--gray-600); }
 .auth-footer a { font-weight: 600; text-decoration: underline; }
 .auth-footer a:hover { color: var(--red); }
+
+@media (max-width: 767px) {
+  .auth-page { min-height: calc(100dvh - 3.75rem); padding: 1rem; }
+  .auth-card { padding: 2rem 1.25rem; }
+  .auth-header { margin-bottom: 1.5rem; }
+  .auth-header h1 { font-size: 1.75rem; }
+}
 </style>

@@ -132,4 +132,20 @@ function handleSearch() {
   display: grid; grid-template-columns: 3fr 1fr 1fr 3fr;
   height: 6px; width: 100%; margin-top: auto;
 }
+
+@media (max-width: 767px) {
+  .hero { min-height: auto; }
+  .hero-content { padding-block: 3rem 2rem; }
+  .hero-title { font-size: clamp(2.5rem, 13vw, 4.5rem); }
+  .hero-desc { margin-bottom: 1.75rem; font-size: 1rem; }
+  .search-box { width: 100%; }
+  .search-input { min-width: 0; padding: 0.875rem 1rem; font-size: 1rem; }
+  .search-btn { min-height: 48px; padding-inline: 1.25rem; }
+  .tag { min-height: 44px; }
+}
+
+@media (max-width: 480px) {
+  .search-box { flex-direction: column; }
+  .search-btn { justify-content: center; padding-block: 0.75rem; }
+}
 </style>
