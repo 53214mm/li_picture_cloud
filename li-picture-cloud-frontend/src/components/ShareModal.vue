@@ -4,7 +4,7 @@
       <div class="share-card">
         <div class="share-header">
           <h2>分享图片</h2>
-          <button class="close-btn" @click="close">&times;</button>
+          <button class="close-btn" aria-label="关闭分享弹窗" @click="close">&times;</button>
         </div>
 
         <!-- 图片预览 -->
@@ -135,4 +135,16 @@ async function copyLink() {
 }
 .qrcode-img { width: 180px; height: 180px; border: 4px solid var(--white); }
 .qr-hint { font-size: 0.75rem; color: var(--gray-400); }
+
+@media (max-width: 767px) {
+  .share-overlay { align-items: flex-end; padding-top: 1rem; }
+  .share-card {
+    max-width: none; max-height: min(92dvh, 44rem); padding: 1.25rem 1rem max(1rem, env(safe-area-inset-bottom));
+    border-inline: 0; border-bottom: 0;
+  }
+  .close-btn { width: 44px; height: 44px; }
+  .link-row { flex-direction: column; }
+  .link-row .btn { width: 100%; }
+  .qrcode-img { width: min(180px, 55vw); height: min(180px, 55vw); }
+}
 </style>

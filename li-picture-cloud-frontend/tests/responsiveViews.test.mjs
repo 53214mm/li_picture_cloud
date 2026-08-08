@@ -21,3 +21,17 @@ test('public views define phone layouts', () => {
   assert.match(read('src/components/PictureList.vue'), /@media \(hover: none\)/)
   assert.match(read('src/views/GalleryView.vue'), /grid-template-columns:\s*1fr/)
 })
+
+test('picture workflows define phone-safe modals and editor regions', () => {
+  for (const file of [
+    'views/PictureDetailView.vue',
+    'views/PictureUploadView.vue',
+    'components/ShareModal.vue',
+    'components/ImageEditModal.vue',
+    'components/ImageEditor.vue'
+  ]) {
+    assert.match(read(`src/${file}`), /@media \(max-width: 767px\)/, file)
+  }
+  assert.match(read('src/components/ImageEditor.vue'), /overflow-x:\s*auto|flex-wrap:\s*wrap/)
+  assert.match(read('src/components/ImageEditModal.vue'), /safe-area-inset-bottom/)
+})

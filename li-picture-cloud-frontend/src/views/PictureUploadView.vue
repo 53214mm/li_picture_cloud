@@ -302,4 +302,13 @@ function formatSize(bytes) {
 }
 .form-success a { font-weight: 600; text-decoration: underline; }
 .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
+
+@media (max-width: 767px) {
+  .upload-page { min-height: calc(100dvh - 3.75rem); align-items: flex-start; padding: 1rem 0; }
+  .upload-card { padding: 2rem 1.25rem; }
+  .upload-card h1 { font-size: 1.75rem; }
+  .drop-zone { padding: 1.5rem 1rem; }
+  .form-actions { flex-direction: column; }
+  .form-actions .btn { width: 100%; }
+}
 </style>

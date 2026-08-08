@@ -171,7 +171,7 @@
       >
         <div class="fullscreen-toolbar">
           <span class="fs-name">{{ picture?.name || '未命名' }}</span>
-          <button class="fs-close" @click="showFullscreen = false" title="退出全屏 (Esc)">✕</button>
+              <button class="fs-close" aria-label="退出全屏" @click="showFullscreen = false" title="退出全屏 (Esc)">✕</button>
         </div>
         <img
           :src="picture?.url"
@@ -503,7 +503,18 @@ function formatSize(bytes) {
   color: rgba(255,255,255,0.35); font-size: 0.8125rem;
 }
 
-@media (max-width: 768px) {
-  .detail-layout { grid-template-columns: 1fr; }
+@media (max-width: 767px) {
+  .detail-page { padding-block: 1.5rem 3rem; }
+  .back-btn { margin-bottom: 1.25rem; }
+  .detail-layout { grid-template-columns: 1fr; gap: 1.75rem; }
+  .pic-name { font-size: 1.75rem; overflow-wrap: anywhere; }
+  .meta-grid { grid-template-columns: 1fr; padding: 1rem; }
+  .actions, .review-btns { flex-wrap: wrap; }
+  .actions .btn, .review-btns .btn { flex: 1 1 9rem; }
+  .modal-overlay { align-items: flex-end; padding: 1rem 0 0; }
+  .modal { max-height: min(90dvh, 48rem); overflow-y: auto; padding: 1.5rem 1rem max(1rem, env(safe-area-inset-bottom)); }
+  .modal-actions { position: sticky; bottom: 0; background: var(--white); }
+  .fullscreen-toolbar { padding: max(0.75rem, env(safe-area-inset-top)) 1rem; }
+  .fs-hint { bottom: max(1rem, env(safe-area-inset-bottom)); }
 }
 </style>

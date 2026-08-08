@@ -4,7 +4,7 @@
       <div class="modal-panel">
         <div class="modal-header">
           <h2>{{ readOnly ? '观看协同' : '编辑图片' }}</h2>
-          <button class="close-btn" @click="handleCancel">&times;</button>
+          <button class="close-btn" aria-label="关闭图片编辑器" @click="handleCancel">&times;</button>
         </div>
 
         <div v-if="collaborative" class="collaboration-bar">
@@ -151,4 +151,17 @@ function handleCancel() {
 .connection-dot.connected { background: #1a7a2e; }
 .connection-dot.error { background: #c53030; }
 .operation-prompt { margin-left: auto; color: var(--gray-600); }
+
+@media (max-width: 767px) {
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal-panel { max-width: none; max-height: 94dvh; border-inline: 0; border-bottom: 0; }
+  .modal-header { padding: 0.75rem 1rem; }
+  .close-btn { width: 44px; height: 44px; }
+  .collaboration-bar { align-items: flex-start; flex-wrap: wrap; }
+  .operation-prompt { width: 100%; margin-left: 0; overflow-wrap: anywhere; }
+  .modal-footer { padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom)); }
+  .note { width: 100%; }
+  .footer-btns { width: 100%; }
+  .footer-btns .btn { flex: 1; }
+}
 </style>

@@ -283,4 +283,17 @@ defineExpose({ exportBlob, getImage: () => img })
 .crop-info {
   display: flex; align-items: center; gap: 0.75rem; font-size: 0.875rem; flex-wrap: wrap;
 }
+
+@media (max-width: 767px) {
+  .editor-root { min-height: 0; padding: 0.75rem; }
+  .editor-toolbar {
+    flex-wrap: nowrap; overflow-x: auto; padding-bottom: 0.375rem;
+    overscroll-behavior-inline: contain; scrollbar-width: thin;
+  }
+  .tool-btn, .tool-label, .zoom-slider, .zoom-val { flex: 0 0 auto; }
+  .tool-btn { min-height: 44px; }
+  .canvas-wrap { min-height: 180px; max-height: 52dvh; overflow-x: auto; overflow-y: auto; justify-content: flex-start; }
+  .crop-info { align-items: stretch; }
+  .crop-info .tool-btn { flex: 1 1 8rem; }
+}
 </style>
