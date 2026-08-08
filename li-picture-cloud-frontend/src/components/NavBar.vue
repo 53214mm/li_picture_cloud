@@ -34,8 +34,8 @@
       v-if="mobileOpen"
       class="mobile-nav-overlay"
       tabindex="-1"
-      @click.self="closeMobileNav"
-      @keydown.esc="closeMobileNav"
+      @click.self="closeMobileNav({ restoreFocus: true })"
+      @keydown.esc="closeMobileNav({ restoreFocus: true })"
     >
       <aside id="mobile-navigation" class="mobile-nav-drawer" aria-label="移动端主导航">
         <div class="mobile-nav-header">
@@ -43,7 +43,7 @@
             <span class="mobile-nav-kicker">LiPictureCloud</span>
             <strong>{{ userStore.isLoggedIn ? (userStore.currentUser?.userName || '已登录用户') : '访客' }}</strong>
           </div>
-          <button ref="closeButton" class="mobile-nav-close" type="button" aria-label="关闭导航菜单" @click="closeMobileNav">×</button>
+          <button ref="closeButton" class="mobile-nav-close" type="button" aria-label="关闭导航菜单" @click="closeMobileNav({ restoreFocus: true })">×</button>
         </div>
 
         <section v-for="group in navigationGroups" :key="group.id" class="mobile-nav-group">
@@ -53,7 +53,7 @@
               v-if="item.to"
               :to="item.to"
               class="mobile-nav-item"
-              @click="closeMobileNav"
+              @click="closeMobileNav({ restoreFocus: true })"
             >
               <span>{{ item.label }}</span><span aria-hidden="true">→</span>
             </router-link>
@@ -109,7 +109,7 @@ function closeMobileNav({ restoreFocus = false } = {}) {
 
 async function handleNavigationItem(item) {
   if (item.action === 'logout') await handleLogout()
-  closeMobileNav()
+  closeMobileNav({ restoreFocus: true })
 }
 
 async function handleLogout() {
@@ -132,7 +132,7 @@ function handleViewportChange(event) {
   if (event.matches) closeMobileNav()
 }
 
-const desktopMedia = window.matchMedia('(min-width: 768px)')
+const desktopMedia = window.matchMedia('(min-width: 1024px)')
 desktopMedia.addEventListener('change', handleViewportChange)
 
 onBeforeUnmount(() => {
@@ -167,10 +167,6 @@ onBeforeUnmount(() => {
 .mobile-nav-overlay { display: none; }
 
 @media (max-width: 1023px) {
-  .nav-links { gap: 0.875rem; font-size: 0.8125rem; }
-}
-
-@media (max-width: 767px) {
   .nav-inner { min-height: 3.75rem; }
   .logo { font-size: 1.0625rem; }
   .nav-links { display: none; }
@@ -202,5 +198,9 @@ onBeforeUnmount(() => {
   }
   .mobile-nav-item.router-link-active { background: var(--black); color: var(--white); }
   .mobile-nav-action.danger { margin-top: 0.5rem; border: 2px solid var(--red); color: var(--red); }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .mobile-nav-drawer { width: min(62vw, 28rem); }
 }
 </style>

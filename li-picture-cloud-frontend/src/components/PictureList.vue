@@ -49,7 +49,12 @@
         v-for="pic in pictures"
         :key="pic.id"
         class="gallery-card"
+        role="link"
+        tabindex="0"
+        :aria-label="`查看图片：${pic.name || '未命名'}`"
         @click="goDetail(pic.id)"
+        @keydown.enter.self="goDetail(pic.id)"
+        @keydown.space.self.prevent="goDetail(pic.id)"
       >
         <img
           :src="pic.thumbnailUrl || pic.url"
@@ -198,6 +203,7 @@ function formatDate(d) {
   transition: transform 0.3s, box-shadow 0.3s;
 }
 .gallery-card:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--black); }
+.gallery-card:focus-visible { outline: 3px solid var(--red); outline-offset: 3px; }
 .card-img {
   width: 100%; height: 100%;
   object-fit: cover;

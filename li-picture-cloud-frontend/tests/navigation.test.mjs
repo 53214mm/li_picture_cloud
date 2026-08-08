@@ -24,4 +24,7 @@ test('mobile drawer exposes accessible state and close controls', () => {
   assert.match(navSource, /aria-controls="mobile-navigation"/)
   assert.match(navSource, /@keydown\.esc/)
   assert.match(navSource, /class="mobile-nav-overlay"/)
+  assert.match(navSource, /closeMobileNav\(\{ restoreFocus: true \}\)/)
+  assert.match(navSource, /window\.matchMedia\('\(min-width: 1024px\)'\)/)
+  assert.match(navSource, /@media \(max-width: 1023px\)[\s\S]*\.nav-links \{ display: none;/)
 })

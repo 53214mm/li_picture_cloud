@@ -19,6 +19,9 @@ test('public views define phone layouts', () => {
     assert.match(read(`src/${file}`), /@media \(max-width: 767px\)/, file)
   }
   assert.match(read('src/components/PictureList.vue'), /@media \(hover: none\)/)
+  assert.match(read('src/components/PictureList.vue'), /role="link"/)
+  assert.match(read('src/components/PictureList.vue'), /@keydown\.enter\.self="goDetail\(pic\.id\)"/)
+  assert.match(read('src/components/PictureList.vue'), /@keydown\.space\.self\.prevent="goDetail\(pic\.id\)"/)
   assert.match(read('src/views/GalleryView.vue'), /grid-template-columns:\s*1fr/)
 })
 
