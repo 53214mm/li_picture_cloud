@@ -225,4 +225,12 @@ async function handleCreate() {
 @media (max-width: 640px) {
   .type-options { grid-template-columns: 1fr; }
 }
+@media (max-width: 767px) {
+  .create-page { min-height: calc(100dvh - 3.75rem); padding-block: 1rem 3rem; }
+  .form-card { padding: 2rem 1.25rem; }
+  .form-card h1 { font-size: 1.75rem; }
+  .level-stats { gap: 1rem; flex-wrap: wrap; }
+  .form-actions { flex-direction: column; }
+  .form-actions .btn { width: 100%; }
+}
 </style>

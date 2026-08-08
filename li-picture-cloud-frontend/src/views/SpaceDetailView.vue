@@ -612,4 +612,22 @@ async function handleDeletePic(pic) {
 .field { display: flex; flex-direction: column; gap: 0.375rem; }
 .field label { font-size: 0.8125rem; font-weight: 600; }
 .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem; }
+
+@media (max-width: 767px) {
+  .space-detail-page { padding-block: 2rem 3rem; }
+  .title-row { align-items: flex-start; flex-wrap: wrap; }
+  .title-row h1 { font-size: 1.75rem; overflow-wrap: anywhere; }
+  .header-actions { width: 100%; flex-wrap: wrap; }
+  .header-actions .btn { flex: 1 1 9rem; }
+  .space-meter, .upload-form-row { align-items: stretch; flex-direction: column; gap: 0.75rem; }
+  .upload-panel { padding: 1rem; }
+  .upload-form-row .input { max-width: none !important; }
+  .batch-toolbar { align-items: stretch; flex-direction: column; }
+  .batch-toolbar .input { max-width: none !important; }
+  .batch-error { margin-left: 0; }
+  .action-btn { width: 44px; height: 44px; }
+  .modal-overlay { align-items: flex-end; }
+  .modal-card { max-height: 90dvh; padding: 1.5rem 1rem max(1rem, env(safe-area-inset-bottom)); border-inline: 0; border-bottom: 0; }
+  .form-actions .btn { flex: 1; }
+}
 </style>

@@ -270,4 +270,19 @@ async function handleDelete(sp) {
 .field label { font-size: 0.8125rem; font-weight: 600; }
 .form-error { padding: 0.5rem 0.75rem; background: #FFF0EF; color: var(--red); font-size: 0.8125rem; }
 .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.25rem; }
+
+@media (max-width: 767px) {
+  .space-page { padding-block: 2rem 3rem; }
+  .page-header h1 { font-size: 1.75rem; }
+  .header-right { width: 100%; }
+  .header-right .btn { flex: 1; }
+  .space-card { flex-direction: column; padding: 1.25rem; }
+  .card-right { width: 100%; flex-wrap: wrap; }
+  .card-right .btn { flex: 1; }
+  .space-meter { flex-direction: column; gap: 0.75rem; }
+  .pagination { gap: 0.75rem; flex-wrap: wrap; }
+  .modal-overlay { align-items: flex-end; }
+  .modal-card { max-height: 90dvh; overflow-y: auto; padding: 1.5rem 1rem max(1rem, env(safe-area-inset-bottom)); border-inline: 0; border-bottom: 0; }
+  .form-actions .btn { flex: 1; }
+}
 </style>

@@ -163,4 +163,15 @@ function removeReason(member) {
   .member-row { align-items: flex-start; flex-direction: column; }
   .member-actions { width: 100%; }
 }
+@media (max-width: 767px) {
+  .member-panel { width: 100%; padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom)); border-left: 0; }
+  .close-btn { width: 44px; height: 44px; flex: 0 0 44px; }
+  .add-form { grid-template-columns: 1fr; }
+  .member-row { align-items: flex-start; flex-direction: column; }
+  .member-main { width: 100%; min-width: 0; }
+  .member-copy { min-width: 0; overflow-wrap: anywhere; }
+  .member-actions { width: 100%; flex-wrap: wrap; }
+  .role-select { width: auto; flex: 1 1 8rem; }
+  .member-actions .btn { flex: 1; }
+}
 </style>

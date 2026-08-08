@@ -37,4 +37,10 @@ const emit = defineEmits(['open'])
 .badge.role { background: var(--blue); }
 .card-meta { color: var(--gray-600); font-size: 0.875rem; }
 .usage { margin-top: auto; font-size: 0.8125rem; color: var(--gray-400); }
+
+@media (max-width: 767px) {
+  .space-card { min-height: 132px; padding: 1rem; }
+  .card-header { align-items: flex-start; flex-direction: column; }
+  .badges { justify-content: flex-start; }
+}
 </style>

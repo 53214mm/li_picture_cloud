@@ -306,4 +306,17 @@ function doSend(msg) {
 .markdown-body :deep(pre) { background: #1e1b2e; color: #e0dff0; padding: 0.75rem; border-radius: 8px; overflow-x: auto; margin: 0.5rem 0; }
 .markdown-body :deep(pre code) { background: none; padding: 0; }
 .markdown-body :deep(strong) { font-weight: 600; }
+
+@media (max-width: 767px) {
+  .ai-panel { min-height: min(30rem, 70dvh); }
+  .quick-row { flex-wrap: nowrap; overflow-x: auto; padding-inline: 0.75rem; }
+  .quick-btn { min-height: 44px; flex: 0 0 auto; }
+  .chat-area { padding: 0.75rem; }
+  .bubble-user, .bubble-ai { max-width: 90%; }
+  .input-row { padding: 0.625rem 0.75rem max(0.625rem, env(safe-area-inset-bottom)); }
+  .chat-input { min-width: 0; font-size: 1rem; }
+  .send-btn { width: 44px; height: 44px; }
+  .markdown-body :deep(table) { display: block; max-width: 100%; overflow-x: auto; }
+  .markdown-body :deep(pre) { max-width: 100%; }
+}
 </style>

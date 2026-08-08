@@ -151,5 +151,13 @@ function openSpace(id) {
 .ai-card { border: 2px solid var(--black); height: 520px; overflow: hidden; background: var(--white); }
 .btn-sm { padding: 0.375rem 1rem; font-size: 0.75rem; }
 @media (max-width: 900px) { .space-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 600px) { .space-grid { grid-template-columns: 1fr; } }
+@media (max-width: 767px) {
+  .my-space-page { padding-block: 2rem 3rem; }
+  .page-header { margin-bottom: 2rem; }
+  .page-header h1 { font-size: 1.75rem; }
+  .page-header > .btn { width: 100%; }
+  .space-grid { grid-template-columns: 1fr; }
+  .owned-error { align-items: stretch; flex-direction: column; }
+  .ai-card { height: min(70dvh, 40rem); min-height: 30rem; }
+}
 </style>
