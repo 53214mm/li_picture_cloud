@@ -36,7 +36,7 @@ spring:
       host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
       timeout: 5000
-      password: ${REDIS_PASSWORD}
+      password: ${REDIS_PASSWORD:}
   session:
     store-type: redis
     timeout: 2592000          # 30天（秒）
