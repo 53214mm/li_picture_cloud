@@ -367,12 +367,12 @@ ON picture(spaceId, isDelete, createTime);
 
 ## 进入 Day 2 前的复习清单
 
-- [ ] 不看答案，完成一次 90 秒项目介绍。
-- [ ] 画出 `user`、`space`、`space_user` 的关系，并解释关联表存在的原因。
-- [ ] 口述 `(spaceId, userId)` 联合唯一索引如何解决并发重复。
-- [ ] 画出图片详情从 Vue 到 MySQL 再返回的完整请求链。
-- [ ] 用一句话分别解释 DTO、Entity、VO。
-- [ ] 解释 `(spaceId, isDelete, createTime)` 联合索引为何仍可能回表。
-- [ ] 不看答案讲一遍 B+Tree、HashMap put 和 ArrayList 选型。
+- [x] 不看答案，完成一次 90 秒项目介绍。
+- [x] 画出 `user`、`space`、`space_user` 的关系，并解释关联表存在的原因。
+- [x] 口述 `(spaceId, userId)` 联合唯一索引如何解决并发重复。
+- [x] 画出图片详情从 Vue 到 MySQL 再返回的完整请求链。
+- [x] 用一句话分别解释 DTO、Entity、VO。
+- [x] 解释 `(spaceId, isDelete, createTime)` 联合索引为何仍可能回表。
+- [x] 不看答案讲一遍 B+Tree、HashMap put 和 ArrayList 选型。
 
 全部完成后再进入 Day 2：图片上传、腾讯 COS 与数据库一致性、事务边界和图库分析排错。
