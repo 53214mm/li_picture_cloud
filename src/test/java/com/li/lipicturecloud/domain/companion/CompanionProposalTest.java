@@ -75,4 +75,78 @@ class CompanionProposalTest {
         assertThat(proposal.withId(51L).id()).isEqualTo(51L);
         assertThatThrownBy(() -> proposal.withId(0L)).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void restoreRebuildsPersistedProposal() {
+        CompanionProposal restored = CompanionProposal.restore(51L, 11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("12.00"), "正常文案",
+                ProposalStatus.SUPPRESSED, "SCOLDED", 3L, NOW, NOW.plusSeconds(60));
+
+        assertThat(restored.id()).isEqualTo(51L);
+        assertThat(restored.status()).isEqualTo(ProposalStatus.SUPPRESSED);
+        assertThat(restored.gateResult()).isEqualTo("SCOLDED");
+        assertThat(restored.revision()).isEqualTo(3L);
+        assertThatThrownBy(() -> CompanionProposal.restore(0L, 11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"), "正常文案",
+                ProposalStatus.PENDING, null, 0L, NOW, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void constructorRejectsInvalidStates() {
+        assertThatThrownBy(() -> new CompanionProposal(-1L, 11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"), "正常文案",
+                ProposalStatus.PENDING, null, 0L, NOW, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CompanionProposal(null, 0L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"), "正常文案",
+                ProposalStatus.PENDING, null, 0L, NOW, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CompanionProposal.pending(11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, null, "正常文案", NOW))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> CompanionProposal.pending(11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"), null, NOW))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new CompanionProposal(null, 11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"), "正常文案",
+                ProposalStatus.SUPPRESSED, null, 0L, NOW, NOW))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new CompanionProposal(null, 11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"), "正常文案",
+                ProposalStatus.PENDING, "不应存在", 0L, NOW, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CompanionProposal(null, 11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"), "正常文案",
+                ProposalStatus.SUPPRESSED, "   ", 0L, NOW, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CompanionProposal(null, 11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"), "正常文案",
+                ProposalStatus.SUPPRESSED, "原因超长".repeat(20), 0L, NOW, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CompanionProposal(null, 11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"), "正常文案",
+                ProposalStatus.PENDING, null, 0L, NOW, NOW.minusSeconds(1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CompanionProposal(null, 11L, 7L,
+                null, new BigDecimal("1.00"), "正常文案",
+                ProposalStatus.PENDING, null, 0L, NOW, NOW))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new CompanionProposal(null, 11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"), "正常文案",
+                null, null, 0L, NOW, NOW))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new CompanionProposal(null, 11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"), "正常文案",
+                ProposalStatus.PENDING, null, 0L, null, NOW))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void pendingRejectsControlCharacters() {
+        assertThatThrownBy(() -> CompanionProposal.pending(11L, 7L,
+                ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("1.00"),
+                "带\u0000控制字符", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

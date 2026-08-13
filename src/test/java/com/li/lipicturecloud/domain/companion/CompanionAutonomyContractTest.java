@@ -54,4 +54,39 @@ class CompanionAutonomyContractTest {
                 LocalTime.NOON, LocalTime.NOON, 72, 0L))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void constructorRejectsInvalidIdentityAndNulls() {
+        assertThatThrownBy(() -> new CompanionAutonomyContract(-1L, 11L, 7L, false,
+                LocalTime.NOON, LocalTime.NOON, 72, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CompanionAutonomyContract(null, 0L, 7L, false,
+                LocalTime.NOON, LocalTime.NOON, 72, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CompanionAutonomyContract(null, 11L, 0L, false,
+                LocalTime.NOON, LocalTime.NOON, 72, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CompanionAutonomyContract(null, 11L, 7L, false,
+                null, LocalTime.NOON, 72, 0L))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new CompanionAutonomyContract(null, 11L, 7L, false,
+                LocalTime.NOON, null, 72, 0L))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new CompanionAutonomyContract(null, 11L, 7L, false,
+                LocalTime.NOON, LocalTime.NOON, -1, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CompanionAutonomyContract.initial(0L, 7L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CompanionAutonomyContract.initial(11L, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void withIdGuardsItsTransition() {
+        CompanionAutonomyContract contract = CompanionAutonomyContract.initial(11L, 7L);
+
+        assertThat(contract.withId(51L).id()).isEqualTo(51L);
+        assertThatThrownBy(() -> contract.withId(0L)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> contract.withId(51L).withId(52L)).isInstanceOf(IllegalStateException.class);
+    }
 }
