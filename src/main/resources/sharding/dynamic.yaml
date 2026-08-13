@@ -33,6 +33,9 @@ rules:
       - primary.companion_feed_run
       - primary.companion_growth_record
       - primary.companion_vision_usage
+      - primary.companion_mood
+      - primary.companion_relationship
+      - primary.companion_memory
     defaultDataSource: primary
 
 props:

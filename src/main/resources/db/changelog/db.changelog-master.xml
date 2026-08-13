@@ -8,4 +8,6 @@
              relativeToChangelogFile="true"/>
     <include file="changes/2026-08-13-companion-visual-provider.xml"
              relativeToChangelogFile="true"/>
+    <include file="changes/2026-08-14-companion-mood-relationship-memory.xml"
+             relativeToChangelogFile="true"/>
 </databaseChangeLog>
