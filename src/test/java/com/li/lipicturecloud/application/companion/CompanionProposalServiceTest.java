@@ -87,7 +87,7 @@ class CompanionProposalServiceTest {
     @Test
     void activeProposalIsGeneratedWhenContractAllowsAndOpportunityExists() {
         Companion companion = persistedCompanion();
-        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
         when(contractRepository.createIfAbsent(companion.id(), 7L))
                 .thenAnswer(invocation -> CompanionAutonomyContract.initial(
                         invocation.getArgument(0), invocation.getArgument(1)).updated(
@@ -107,7 +107,7 @@ class CompanionProposalServiceTest {
     @Test
     void activeProposalIsBlockedWhenContractIsDisabled() {
         Companion companion = persistedCompanion();
-        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
 
         CompanionProposalView view = service.active(subject);
 
@@ -122,7 +122,7 @@ class CompanionProposalServiceTest {
         CompanionProposal pending = CompanionProposal.pending(companion.id(), 7L,
                 ProposalOpportunityType.WEEKLY_REVIEW, new BigDecimal("10.00"),
                 "这周你喂了我 3 次。想听我讲一段我们的故事吗？", NOW).withId(61L);
-        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
         when(proposalRepository.findActive(companion.id(), 5)).thenReturn(List.of(pending));
 
         CompanionProposalView view = service.active(subject);

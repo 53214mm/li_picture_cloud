@@ -100,7 +100,9 @@ public class CompanionProposalService {
 
     @Transactional
     public CompanionProposalView active(AuthorizationSubject subject) {
-        Companion companion = requireCompanion(subject);
+        // 伙伴行锁串行化提案生成：并发访问不会产生两条 PENDING。
+        Companion companion = companionRepository.findByOwnerIdForUpdate(subject.userId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "请先唤醒伙伴"));
         CompanionProposal proposal = maybePropose(companion, subject, clock.instant());
         return proposal == null ? null : view(proposal);
     }
