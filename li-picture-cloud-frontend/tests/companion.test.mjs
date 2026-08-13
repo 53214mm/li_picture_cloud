@@ -7,6 +7,7 @@ import {
   beginFeedAttempt,
   buildCompanionPictureQuery,
   describeTrait,
+  parseSse,
   selectOldestPrivateSpace,
   shouldRetrySameFeedKey,
   traitPosition
@@ -206,4 +207,38 @@ test('a late bootstrap result cannot clobber an explicit login or logout', async
   gate.invalidate()
   if (gate.isCurrent(logoutCapture)) currentUser = { id: '7' }
   assert.equal(currentUser, null)
+})
+
+test('parses sse chunks across fragmented buffers and names events', () => {
+  const first = parseSse('data:你\n\ndata:好')
+  assert.deepEqual(first.parsed, [{ name: 'message', data: '你' }])
+  assert.equal(first.remainder, 'data:好')
+
+  const second = parseSse(first.remainder + '\n\nevent:done\ndata:\n\n')
+  assert.deepEqual(second.parsed, [
+    { name: 'message', data: '好' },
+    { name: 'done', data: '' }
+  ])
+  assert.equal(second.remainder, '')
+
+  const error = parseSse('event:error\ndata:伙伴走神了\n\n')
+  assert.deepEqual(error.parsed, [{ name: 'error', data: '伙伴走神了' }])
+})
+
+test('chat panel reuses the companion bubble and streams replies', async () => {
+  const chat = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionChatPanel.vue', import.meta.url)), 'utf8')
+  const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/CompanionView.vue', import.meta.url)), 'utf8')
+  const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/companion.js', import.meta.url)), 'utf8')
+  const utils = await readFile(fileURLToPath(new globalThis.URL('../src/utils/companion.js', import.meta.url)), 'utf8')
+
+  assert.match(chat, /CompanionMessageBubble/)
+  assert.match(chat, /streamCompanionChat/)
+  assert.match(chat, /listCompanionChatHistory/)
+  assert.match(chat, /role === 'COMPANION'/)
+  assert.match(chat, /user-bubble/)
+  assert.match(page, /CompanionChatPanel/)
+  assert.match(api, /\/companion\/chat\/history/)
+  assert.match(utils, /parseSse/)
+  assert.match(utils, /\/companion\/chat\/stream/)
+  assert.match(utils, /credentials: 'include'/)
 })

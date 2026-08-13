@@ -11,3 +11,6 @@ export const correctCompanionMemory = (id, content) =>
   request.post(`/companion/memories/${id}/correct`, { content })
 export const dismissCompanionMemory = id => request.post(`/companion/memories/${id}/dismiss`)
 export const deleteCompanionMemory = id => request.delete(`/companion/memories/${id}`)
+
+export const listCompanionChatHistory = (limit = 50) =>
+  request.get('/companion/chat/history', { params: { limit } })

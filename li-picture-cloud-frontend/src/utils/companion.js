@@ -74,3 +74,66 @@ export function formatSignedDelta(value) {
   const amount = Number(value)
   return `${amount > 0 ? '+' : ''}${amount.toFixed(2)}`
 }
+
+/**
+ * 把 SSE 文本缓冲切分为已解析事件与剩余缓冲。
+ * SseEmitter 输出形如 `data:chunk\n\n` 或 `event:done\ndata:\n\n`。
+ */
+export function parseSse(buffer) {
+  const parsed = []
+  let remainder = String(buffer)
+  while (true) {
+    const boundary = remainder.indexOf('\n\n')
+    if (boundary === -1) break
+    const block = remainder.slice(0, boundary)
+    remainder = remainder.slice(boundary + 2)
+    let name = 'message'
+    let data = ''
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) name = line.slice(6).trim()
+      else if (line.startsWith('data:')) data += `${line.slice(5).replace(/^ /, '')}\n`
+    }
+    if (data.endsWith('\n')) data = data.slice(0, -1)
+    parsed.push({ name, data })
+  }
+  return { parsed, remainder }
+}
+
+/**
+ * 流式发送一条伙伴消息；回调 onChunk 逐段接收伙伴回复。
+ */
+export async function streamCompanionChat(message, { onChunk, onError, onDone } = {}) {
+  const response = await fetch('/api/companion/chat/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ message })
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw Object.assign(new Error(body?.message || '伙伴暂时没法回应，请稍后再试'),
+      { status: response.status })
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const { parsed, remainder } = parseSse(buffer)
+    buffer = remainder
+    for (const event of parsed) {
+      if (event.name === 'error') {
+        onError?.(new Error(event.data || '伙伴暂时没法回应，请稍后再试'))
+        return
+      }
+      if (event.name === 'done') {
+        onDone?.()
+        return
+      }
+      if (event.data) onChunk?.(event.data)
+    }
+  }
+  onDone?.()
+}
