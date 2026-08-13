@@ -59,9 +59,11 @@ PENDING / CONFIRMED / DISMISSED ──invalidate──▶ INVALIDATED（终态�
 
 - 读取记忆列表（`GET /companion/memories`）时执行**惰性失效**：
   1. 取出活跃记忆（`PENDING/CONFIRMED/DISMISSED`）涉及的 `pictureId` 去重集合；
-  2. 对每个图片调用 `authorization.checkForUser(PICTURE_VIEW, pictureId, subjectId)`；
+  2. 对每个图片调用 `authorization.checkForUser(PICTURE_VIEW, pictureId, subjectId)`，同一图片只检查一次；
   3. `NOT_FOUND` 或 `NO_AUTH` 的记忆在同一事务内 CAS 置为 `INVALIDATED(invalidatedReason=PICTURE_UNAVAILABLE)`；
   4. `INVALIDATED`/`DELETED` 记忆不返回内容原文，只返回状态与原因。
+- **转移端点同样守门**：`confirm/correct/dismiss/delete` 在操作前校验来源图片；
+  已撤权的记忆直接拒绝操作且不返回内容，避免绕过列表路径读出撤权内容。
 - 失效只影响单条记忆，不阻塞列表读取；后续可用事件驱动替换为主动传播，接口保持稳定。
 
 ## 3. 数据模型（MySQL / H2）

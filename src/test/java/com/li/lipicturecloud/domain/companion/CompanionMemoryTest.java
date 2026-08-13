@@ -92,6 +92,12 @@ class CompanionMemoryTest {
                 MemorySourceType.VISUAL, "包含 http://example.com 链接的记忆", bd("0.5"), NOW))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, "包含 https://example.com 链接的记忆", bd("0.5"), NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, "包含 www.example.com 链接的记忆", bd("0.5"), NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 101L, 21L,
                 MemorySourceType.VISUAL, "首行\u0000控制字符", bd("0.5"), NOW))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 101L, 21L,
@@ -107,10 +113,105 @@ class CompanionMemoryTest {
         assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 101L, 21L,
                 MemorySourceType.VISUAL, "正常的记忆文案", new BigDecimal("1.01"), NOW))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, "正常的记忆文案", new BigDecimal("-0.01"), NOW))
+                .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new CompanionMemory(null, 11L, 7L, 101L, 21L,
                 MemorySourceType.VISUAL, "内容", "内容", bd("0.5"),
                 MemoryStatus.CONFIRMED, "不应存在的理由", 0L, NOW, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CompanionMemory(null, 11L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, "内容", "内容", bd("0.5"),
+                MemoryStatus.INVALIDATED, null, 0L, NOW, NOW))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new CompanionMemory(null, 11L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, "内容", "内容", bd("0.5"),
+                MemoryStatus.INVALIDATED, "   ", 0L, NOW, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CompanionMemory(null, 11L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, "内容", "内容", bd("0.5"),
+                MemoryStatus.INVALIDATED, "原因超长".repeat(30), 0L, NOW, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updatedTimeCannotBeBeforeCreatedTime() {
+        assertThatThrownBy(() -> new CompanionMemory(null, 11L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, "内容", "内容", bd("0.5"),
+                MemoryStatus.PENDING, null, 0L, NOW, NOW.minusSeconds(1)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void idempotentTransitionsReturnTheSameInstance() {
+        CompanionMemory confirmed = candidate().confirm(NOW);
+        assertThat(confirmed.confirm(NOW.plusSeconds(1))).isSameAs(confirmed);
+
+        CompanionMemory dismissed = confirmed.dismiss(NOW.plusSeconds(2));
+        assertThat(dismissed.dismiss(NOW.plusSeconds(3))).isSameAs(dismissed);
+
+        CompanionMemory deleted = dismissed.delete(NOW.plusSeconds(4));
+        assertThat(deleted.delete(NOW.plusSeconds(5))).isSameAs(deleted);
+    }
+
+    @Test
+    void correctFromDismissedStateRestoresConfirmedStatus() {
+        CompanionMemory dismissed = candidate().dismiss(NOW);
+
+        CompanionMemory corrected = dismissed.correct("伙伴重新想起：那是安静的清晨。", NOW.plusSeconds(60));
+
+        assertThat(corrected.status()).isEqualTo(MemoryStatus.CONFIRMED);
+        assertThat(corrected.originalContent()).isEqualTo(dismissed.originalContent());
+    }
+
+    @Test
+    void candidateValidationCoversIdentityAndNulls() {
+        assertThatThrownBy(() -> CompanionMemory.candidate(0L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, "正常的记忆文案", bd("0.5"), NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 0L, 21L,
+                MemorySourceType.VISUAL, "正常的记忆文案", bd("0.5"), NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 101L, 0L,
+                MemorySourceType.VISUAL, "正常的记忆文案", bd("0.5"), NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 101L, 21L,
+                null, "正常的记忆文案", bd("0.5"), NOW))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, null, bd("0.5"), NOW))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, "正常的记忆文案", null, NOW))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> CompanionMemory.candidate(11L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, "正常的记忆文案", bd("0.5"), null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void withIdGuardsItsTransition() {
+        CompanionMemory memory = candidate();
+
+        assertThat(memory.withId(51L).id()).isEqualTo(51L);
+        assertThatThrownBy(() -> memory.withId(0L)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> memory.withId(51L).withId(52L)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> CompanionMemory.restore(0L, 11L, 7L, 101L, 21L,
+                MemorySourceType.VISUAL, "内容", "内容", bd("0.5"),
+                MemoryStatus.PENDING, null, 0L, NOW, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void pictureIdIsOptionalAndActiveStatusIsDetectable() {
+        CompanionMemory withoutPicture = CompanionMemory.candidate(11L, 7L, null, 21L,
+                MemorySourceType.VISUAL, "伙伴记得一段没有具体图片的感受。", bd("0.5"), NOW);
+
+        assertThat(withoutPicture.pictureId()).isNull();
+        assertThat(withoutPicture.active()).isTrue();
+        assertThat(withoutPicture.exposesContent()).isTrue();
+        assertThat(withoutPicture.delete(NOW).active()).isFalse();
+        assertThat(withoutPicture.delete(NOW).exposesContent()).isFalse();
     }
 
     private static CompanionMemory candidate() {

@@ -96,6 +96,103 @@ class CompanionMoodTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void rejectsNegativeImpactByClampingToZero() {
+        CompanionMood mood = new CompanionMood(null, 11L,
+                bd("3.00"), bd("3.00"), bd("3.00"), bd("3.00"), bd("3.00"),
+                1L, NOW);
+
+        CompanionMood after = mood.apply(new MoodImpact(
+                bd("-15.00"), bd("-15.00"), bd("-15.00"), bd("-15.00"), bd("-15.00")), NOW, rules);
+
+        assertThat(after.energy()).isEqualByComparingTo("0.00");
+        assertThat(after.joy()).isEqualByComparingTo("0.00");
+        assertThat(after.loneliness()).isEqualByComparingTo("0.00");
+        assertThat(after.inspiration()).isEqualByComparingTo("0.00");
+        assertThat(after.irritation()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void applyDecaysFirstThenAppliesImpactInOneRevisionStep() {
+        CompanionMood mood = new CompanionMood(null, 11L,
+                bd("30.00"), bd("10.00"), bd("0.00"), bd("0.00"), bd("0.00"),
+                2L, NOW);
+
+        CompanionMood after = mood.apply(new MoodImpact(
+                bd("4.00"), bd("0.00"), bd("0.00"), bd("0.00"), bd("0.00")),
+                NOW.plusSeconds(2 * 3600L), rules);
+
+        // 先衰减 2 小时（-10），再叠加 +4。
+        assertThat(after.energy()).isEqualByComparingTo("24.00");
+        assertThat(after.joy()).isEqualByComparingTo("0.00");
+        assertThat(after.revision()).isEqualTo(3L);
+    }
+
+    @Test
+    void clockDriftIntoTheFutureSkipsDecay() {
+        CompanionMood mood = new CompanionMood(null, 11L,
+                bd("30.00"), bd("0.00"), bd("0.00"), bd("0.00"), bd("0.00"),
+                1L, NOW);
+
+        CompanionMood decayed = mood.decayed(NOW.minusSeconds(60), rules);
+
+        assertThat(decayed).isSameAs(mood);
+    }
+
+    @Test
+    void sameValuesComparisonIgnoresRevisionAndTime() {
+        CompanionMood mood = new CompanionMood(null, 11L,
+                bd("10.00"), bd("5.00"), bd("0.00"), bd("0.00"), bd("0.00"), 1L, NOW);
+        CompanionMood other = new CompanionMood(51L, 11L,
+                bd("10.00"), bd("5.00"), bd("0.00"), bd("0.00"), bd("0.00"), 9L,
+                NOW.plusSeconds(3600));
+
+        assertThat(mood.sameValuesAs(other)).isTrue();
+        assertThat(other.sameValuesAs(CompanionMood.neutral(11L, NOW))).isFalse();
+    }
+
+    @Test
+    void withIdAndRestoreGuardTheirTransitions() {
+        CompanionMood mood = CompanionMood.neutral(11L, NOW);
+
+        assertThat(mood.withId(51L).id()).isEqualTo(51L);
+        assertThatThrownBy(() -> mood.withId(0L)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> mood.withId(51L).withId(52L)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> CompanionMood.restore(0L, 11L,
+                bd("0"), bd("0"), bd("0"), bd("0"), bd("0"), 0L, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CompanionMood(-1L, 11L,
+                bd("0"), bd("0"), bd("0"), bd("0"), bd("0"), 0L, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CompanionMood.neutral(11L, null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void restoreRebuildsAPersistedMood() {
+        CompanionMood restored = CompanionMood.restore(51L, 11L,
+                bd("12.34"), bd("5.00"), bd("1.00"), bd("0.50"), bd("0.00"),
+                7L, NOW.plusSeconds(120));
+
+        assertThat(restored.id()).isEqualTo(51L);
+        assertThat(restored.energy()).isEqualByComparingTo("12.34");
+        assertThat(restored.revision()).isEqualTo(7L);
+        assertThat(restored.updatedAt()).isEqualTo(NOW.plusSeconds(120));
+    }
+
+    @Test
+    void impactAboveCapIsBoundedInBothDirections() {
+        CompanionMood mood = CompanionMood.neutral(11L, NOW);
+
+        CompanionMood positive = mood.apply(new MoodImpact(
+                bd("50.00"), bd("0.00"), bd("0.00"), bd("0.00"), bd("0.00")), NOW, rules);
+        assertThat(positive.energy()).isEqualByComparingTo("15.00");
+
+        CompanionMood negative = positive.apply(new MoodImpact(
+                bd("-50.00"), bd("0.00"), bd("0.00"), bd("0.00"), bd("0.00")), NOW, rules);
+        assertThat(negative.energy()).isEqualByComparingTo("0.00");
+    }
+
     private static BigDecimal bd(String value) {
         return new BigDecimal(value);
     }
