@@ -54,6 +54,18 @@
 
 轮换 `DASHSCOPE_API_KEY` 时：先在密钥管理系统中创建新 key，更新运行环境并滚动重启 backend，确认健康检查和一次受控喂养成功后，再撤销旧 key。不要把 key 写进 `.env.example`、图片描述、浏览器控制台或成长记录。
 
+真实 Provider 冒烟测试默认跳过，只允许操作者在当前终端临时提供 key。它只发送仓库内的公开素材，不打印模型原文或凭证：
+
+```powershell
+$env:COMPANION_VISION_LIVE_TEST = 'true'
+$env:DASHSCOPE_API_KEY = '由操作者在当前终端临时提供'
+.\scripts\mvnw-java21.ps1 "-Dtest=DashScopeVisionLiveSmokeTest" test
+Remove-Item Env:\DASHSCOPE_API_KEY
+Remove-Item Env:\COMPANION_VISION_LIVE_TEST
+```
+
+自动化代理和 CI 不得代填、读取或回显这个 key；CI 只运行本地 HTTP stub。
+
 ## 数据与一致性
 
 伙伴核心使用四张表：
@@ -111,7 +123,21 @@ npx playwright install chromium chromium-headless-shell
 npm run test:e2e
 ```
 
-浏览器 E2E 使用独立 H2、真实 Spring Boot HTTP 栈、真实登录会话和 Chromium；本地执行前要保证 `127.0.0.1:6379` 有无密码 Redis。
+浏览器 E2E 使用独立 H2、真实 Spring Boot HTTP 栈、真实登录会话和 Chromium；本地执行前要保证
+`127.0.0.1:6379` 的 Redis 可用。无密码实例可直接运行；若本地 Redis 启用了密码，仅在当前终端设置
+`REDIS_PASSWORD` 后运行测试，不要把密码写进仓库。
+
+## 发布前人工隐私与钱包审核
+
+每次启用真实视觉策略前，由审核人逐项签字：
+
+1. 浏览器/服务抓包只出现发往配置 DashScope endpoint 的视觉请求。
+2. 请求不包含 COS Secret、永久签名参数、对象存储管理凭证或其他用户图片。
+3. 应用日志、数据库和指标不含 Data URL、原始模型 JSON、API key、图片 URL 或用户原始描述。
+4. 同一用户第 11 次视觉调用在模型出站前被拦截；失败与降级不退还已经预占的次数。
+5. 401/403 凭证错误不会降级；超时、429、5xx 和无效结构只按白名单降级并记录安全原因码。
+6. 撤销图片或空间权限后，新的调用和旧幂等键回放都不能向无权主体返回成长结果。
+7. 喂养前后来源图片的 ID、名称、URL、空间、审核状态和删除状态完全一致。
 
 ## 明确未包含
 

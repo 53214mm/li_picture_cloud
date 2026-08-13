@@ -640,6 +640,13 @@ git status --short --branch
 
 不要自动合并 `main`。推送功能分支后由人工查看差异、CI 和钱包/隐私清单，再决定是否创建 PR。
 
+## Execution Status（2026-08-13）
+
+- Tasks 1–7 已实现并按功能单元提交。
+- Task 8 的本地 HTTP stub、默认禁用 Live smoke、前端披露 E2E、CI 约束、完整后端/前端/Bundle/Compose 门禁均已完成。
+- Live smoke 未由自动化代理调用真实服务；它需要操作者临时提供 key。
+- “人工隐私与钱包审核”仍是发布前人工门禁，不能由自动化测试代签。
+
 ## Self-Review Result
 
 - Spec coverage：观察与成长分离、最小披露、真实模式、显式降级、权限复验、来源审计均有对应任务。
