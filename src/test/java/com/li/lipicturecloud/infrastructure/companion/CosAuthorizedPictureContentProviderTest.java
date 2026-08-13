@@ -95,6 +95,22 @@ class CosAuthorizedPictureContentProviderTest {
     }
 
     @Test
+    void finalOutboundCheckRejectsAnObjectAddressChangeEvenWhenVersionWasNotUpdated() {
+        Picture original = picture("https://assets.example.test/gallery/photo.jpg", Instant.EPOCH);
+        Picture replaced = picture("https://assets.example.test/gallery/replaced.jpg", Instant.EPOCH);
+        when(pictures.findById(PICTURE_ID)).thenReturn(Optional.of(original), Optional.of(original),
+                Optional.of(replaced));
+        when(cos.getObject("gallery/photo.jpg")).thenReturn(cosObject(jpegBytes()));
+
+        AuthorizedPictureContent content = provider.load(reference, 32L);
+
+        assertThatThrownBy(() -> provider.verifyStillAuthorized(reference, content))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("图片状态已变化或无权访问");
+        verify(authorization, times(3)).checkForUser(PICTURE_VIEW, PICTURE_ID, SUBJECT_ID);
+    }
+
+    @Test
     void stopsAtTheByteLimitInsteadOfReadingAnUnboundedObject() {
         Picture picture = picture("https://assets.example.test/gallery/photo.png", Instant.EPOCH);
         when(pictures.findById(PICTURE_ID)).thenReturn(Optional.of(picture));

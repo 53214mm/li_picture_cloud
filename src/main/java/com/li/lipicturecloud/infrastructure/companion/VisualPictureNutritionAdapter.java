@@ -95,6 +95,8 @@ public final class VisualPictureNutritionAdapter implements PictureNutritionAnal
             }
             // 加载失败时尚未出站，不扣平台额度；成功加载后立即预占，任何 Provider 结果都不退款。
             quota.reserve(picture.subject().userId(), LocalDate.now(clock.withZone(SHANGHAI)), dailyLimit);
+            // 紧贴外发前再检查一次，避免下载后的分享撤销、移动或替换使旧字节越过权限边界。
+            contents.verifyStillAuthorized(picture, content);
             return visualNutrition(visual.observe(content));
         } catch (RuntimeException exception) {
             if (exception instanceof VisionSafeFailure failure && FALLBACK_CODES.contains(failure.safeCode())) {
@@ -102,6 +104,12 @@ public final class VisualPictureNutritionAdapter implements PictureNutritionAnal
             }
             throw exception;
         }
+    }
+
+    @Override
+    public PictureNutrition analyzeFamiliar(AuthorizedPictureRef picture) {
+        Objects.requireNonNull(picture, "picture");
+        return metadataFallback(picture, "SKIPPED_FAMILIAR");
     }
 
     private PictureNutrition visualNutrition(VisualObservationCandidate candidate) {

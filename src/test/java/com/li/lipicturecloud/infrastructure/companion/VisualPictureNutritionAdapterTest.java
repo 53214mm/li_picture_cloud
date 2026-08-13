@@ -79,6 +79,7 @@ class VisualPictureNutritionAdapterTest {
         InOrder order = inOrder(contents, quota, visual);
         order.verify(contents).load(picture, MAX_BYTES);
         order.verify(quota).reserve(7L, LocalDate.of(2026, 8, 14), DAILY_LIMIT);
+        order.verify(contents).verifyStillAuthorized(picture, content);
         order.verify(visual).observe(content);
         verify(metadata, never()).analyze(any());
     }
@@ -144,6 +145,26 @@ class VisualPictureNutritionAdapterTest {
                 quota, contents, visual, metadata, CLOCK, MAX_BYTES, DAILY_LIMIT).analyze(picture);
 
         assertThat(nutrition.provenance().fallbackReasonCode()).isEqualTo("VISION_IMAGE_TOO_LARGE");
+        verify(quota, never()).reserve(any(Long.class), any(LocalDate.class), any(Integer.class));
+        verify(visual, never()).observe(any());
+    }
+
+    @Test
+    void familiarPictureUsesExplicitMetadataSourceWithoutReadingPixelsOrSpendingQuota() {
+        VisionQuotaGuard quota = mock(VisionQuotaGuard.class);
+        AuthorizedPictureContentProvider contents = mock(AuthorizedPictureContentProvider.class);
+        VisualObservationProvider visual = mock(VisualObservationProvider.class);
+        MetadataPictureNutritionAdapter metadata = mock(MetadataPictureNutritionAdapter.class);
+        AuthorizedPictureRef picture = picture();
+        when(metadata.analyze(picture)).thenReturn(PictureNutrition.fromObservation(25L, TraitDelta.zero(),
+                Map.of(CompanionSkill.IMAGE_OBSERVATION, 8L), "未读取图片像素"));
+
+        PictureNutrition nutrition = new VisualPictureNutritionAdapter(
+                quota, contents, visual, metadata, CLOCK, MAX_BYTES, DAILY_LIMIT).analyzeFamiliar(picture);
+
+        assertThat(nutrition.provenance().actualMode()).isEqualTo(NutritionMode.METADATA_DETERMINISTIC);
+        assertThat(nutrition.provenance().fallbackReasonCode()).isEqualTo("SKIPPED_FAMILIAR");
+        verify(contents, never()).load(any(), any(Long.class));
         verify(quota, never()).reserve(any(Long.class), any(LocalDate.class), any(Integer.class));
         verify(visual, never()).observe(any());
     }

@@ -161,6 +161,45 @@ class CompanionFeedingCoordinatorTest {
     }
 
     @Test
+    void failedVisualRunCannotRestartWhenTheRequestedModelHasChanged() {
+        Companion companion = persistedCompanion();
+        FeedingRun failed = FeedingRun.processing(companion.id(), 7L, 102L, KEY, fingerprint(102L), CORRELATION,
+                NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK, "dashscope", "qwen3.6-flash", NOW)
+                .persistedAs(21L).failed("VISION_TIMEOUT", "本次没有消化成功", NOW.plusSeconds(1));
+        when(runRepository.findByKey(companion.id(), KEY)).thenReturn(Optional.of(failed));
+
+        assertThatThrownBy(() -> coordinator.reserve(companion, AuthorizationSubject.user(7L), 102L,
+                KEY, fingerprint(102L), CORRELATION, NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK,
+                "dashscope", "qwen-next"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode(), Throwable::getMessage)
+                .containsExactly(ErrorCode.PARAMS_ERROR.getCode(), "图片营养模式已变化，请重新发起喂养");
+
+        verify(runRepository, never()).restart(any(Long.class), any(Long.class), any());
+    }
+
+    @Test
+    void visualFallbackCanCompleteAndPersistsItsActualMetadataProvenance() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = FeedingRun.processing(companion.id(), 7L, 102L, KEY, fingerprint(102L), CORRELATION,
+                NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK, "dashscope", "qwen3.6-flash", NOW)
+                .persistedAs(21L);
+        PictureNutrition fallback = new PictureNutrition(31L, TraitDelta.zero(), Map.of(), "元数据降级",
+                NutritionProvenance.metadataFallback("VISION_TIMEOUT"));
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        when(companionRepository.save(any(), eq(companion.revision()))).thenReturn(true);
+        when(growthRepository.append(any())).thenAnswer(invocation ->
+                invocation.<GrowthRecord>getArgument(0).withId(31L));
+        when(runRepository.complete(run.id(), run.revision(), 31L, NOW)).thenReturn(true);
+
+        coordinator.complete(run, fallback);
+
+        verify(growthRepository).append(org.mockito.ArgumentMatchers.argThat(record ->
+                record.provenance().actualMode() == NutritionMode.METADATA_DETERMINISTIC
+                        && "VISION_TIMEOUT".equals(record.provenance().fallbackReasonCode())));
+    }
+
+    @Test
     void completionReadsClockOnlyOnceForDailyBoundaryAndAuditTime() {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion, 102L);

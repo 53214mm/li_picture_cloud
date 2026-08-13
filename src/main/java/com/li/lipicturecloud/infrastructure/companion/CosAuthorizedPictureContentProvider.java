@@ -19,6 +19,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Date;
@@ -68,9 +71,28 @@ public class CosAuthorizedPictureContentProvider implements AuthorizedPictureCon
         authorization.checkForUser(PICTURE_VIEW, reference.pictureId(), reference.subject().userId());
         if (!before.equals(after)) {
             // 已下载的旧对象可能来自被移动、替换或删除前的版本，绝不继续外发。
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "图片状态已变化或无权访问");
+            throw stateChanged();
         }
-        return new AuthorizedPictureContent(before.pictureId(), before.resourceVersion(), mimeType, bytes);
+        return new AuthorizedPictureContent(before.pictureId(), before.resourceVersion(), mimeType,
+                resourceBinding(before.sourceUrl()), bytes);
+    }
+
+    @Override
+    public void verifyStillAuthorized(AuthorizedPictureRef reference, AuthorizedPictureContent content) {
+        Objects.requireNonNull(reference, "reference");
+        Objects.requireNonNull(content, "content");
+        if (reference.pictureId() != content.pictureId()) {
+            throw stateChanged();
+        }
+        PictureSnapshot current = snapshotOf(loadPicture(reference.pictureId()));
+        authorization.checkForUser(PICTURE_VIEW, reference.pictureId(), reference.subject().userId());
+        String mimeType = mimeTypeFor(objectKeyFromConfiguredHost(current.sourceUrl()));
+        if (current.pictureId() != content.pictureId()
+                || !current.resourceVersion().equals(content.resourceVersion())
+                || !resourceBinding(current.sourceUrl()).equals(content.resourceBinding())
+                || !mimeType.equals(content.mimeType())) {
+            throw stateChanged();
+        }
     }
 
     private Picture loadPicture(long pictureId) {
@@ -226,6 +248,22 @@ public class CosAuthorizedPictureContentProvider implements AuthorizedPictureCon
 
     private static VisionContentException unavailable() {
         return new VisionContentException("VISION_IMAGE_UNAVAILABLE", "图片内容无法用于视觉营养");
+    }
+
+    private static BusinessException stateChanged() {
+        return new BusinessException(ErrorCode.NO_AUTH_ERROR, "图片状态已变化或无权访问");
+    }
+
+    /**
+     * 只把资源地址变成短生命周期内用于比对的摘要，绝不将地址或对象键带出该 Provider。
+     */
+    private static String resourceBinding(String sourceUrl) {
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(sourceUrl.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
     }
 
     private static byte[] nonEmpty(byte[] bytes) {

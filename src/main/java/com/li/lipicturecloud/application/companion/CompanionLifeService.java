@@ -130,10 +130,15 @@ public class CompanionLifeService implements CompanionLife {
 
         PictureNutrition nutrition;
         try {
-            nutrition = analyzer.analyze(new AuthorizedPictureRef(command.subject(), command.pictureId()));
+            AuthorizedPictureRef picture = new AuthorizedPictureRef(command.subject(), command.pictureId());
+            // 已经完整喂养的图片只能结算熟悉度；视觉实现通过专用路径避开像素读取和平台额度。
+            boolean familiar = growthRepository.hasFullFeed(companion.id(), command.pictureId());
+            nutrition = familiar ? analyzer.analyzeFamiliar(picture) : analyzer.analyze(picture);
         } catch (RuntimeException error) {
             // 对外不给出底层异常；run 中只保存可安全展示的失败文案，源图片从不被修改或删除。
-            coordinator.fail(reservation.run(), "NUTRITION_FAILED", "本次没有消化成功，图片未被消耗");
+            String safeCode = error instanceof VisionSafeFailure failure
+                    ? failure.safeCode() : "NUTRITION_FAILED";
+            coordinator.fail(reservation.run(), safeCode, "本次没有消化成功，图片未被消耗");
             log.warn("companion_feed_nutrition_failed correlationId={} subjectId={} pictureId={} exceptionType={}",
                     reservation.run().correlationId(), command.subject().userId(), command.pictureId(),
                     error.getClass().getName());

@@ -24,4 +24,14 @@ public interface PictureNutritionAnalyzer {
     boolean contentUnderstood();
 
     PictureNutrition analyze(AuthorizedPictureRef picture);
+
+    /**
+     * 已完整喂养过同一图片时的低成本路径。
+     *
+     * <p>默认保持原有分析器行为；视觉实现会覆写为不读取像素、不调用 Provider 也不占视觉额度的
+     * 元数据营养。结算层仍决定实际是否只给熟悉度经验。</p>
+     */
+    default PictureNutrition analyzeFamiliar(AuthorizedPictureRef picture) {
+        return analyze(picture);
+    }
 }

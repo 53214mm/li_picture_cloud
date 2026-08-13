@@ -24,6 +24,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.sql.Connection;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConstant.PICTURE_VIEW;
@@ -144,13 +145,50 @@ class CompanionLifeServiceTest {
     }
 
     @Test
+    void safeVisionFailureKeepsItsCategoryForAuditWithoutLeakingProviderDetails() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = processingRun(companion);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
+                .thenReturn(FeedReservation.started(run));
+        when(analyzer.analyze(any())).thenThrow(new VisionProviderException("VISION_CREDENTIALS", "provider-token=secret"));
+
+        assertThatThrownBy(() -> service.feed(new FeedPictureCommand(subject, 102L, KEY)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("本次没有消化成功，图片未被消耗");
+
+        verify(coordinator).fail(run, "VISION_CREDENTIALS", "本次没有消化成功，图片未被消耗");
+    }
+
+    @Test
+    void familiarPictureUsesAnalyzerShortcutInsteadOfFullAnalysis() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = processingRun(companion);
+        PictureNutrition familiar = PictureNutrition.fromObservation(25L, TraitDelta.zero(), Map.of(), "元数据营养");
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
+                .thenReturn(FeedReservation.started(run));
+        when(growthRepository.hasFullFeed(companion.id(), 102L)).thenReturn(true);
+        when(analyzer.analyzeFamiliar(any())).thenReturn(familiar);
+
+        service.feed(new FeedPictureCommand(subject, 102L, KEY));
+
+        verify(analyzer).analyzeFamiliar(any());
+        verify(analyzer, never()).analyze(any());
+        verify(coordinator).complete(run, familiar);
+    }
+
+    @Test
     void disabledFeedingRejectsBeforeReservation() {
         properties.setFeedingEnabled(false);
 
         assertThatThrownBy(() -> service.feed(new FeedPictureCommand(subject, 102L, KEY)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("伙伴喂养已暂停");
-        verify(coordinator, never()).reserve(any(), any(), any(Long.class), any(), any(), any(), any(), any(Boolean.class));
+        verify(coordinator, never()).reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class));
     }
 
     @Test
