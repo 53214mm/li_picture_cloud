@@ -32,6 +32,7 @@ rules:
       - primary.companion_skill
       - primary.companion_feed_run
       - primary.companion_growth_record
+      - primary.companion_vision_usage
     defaultDataSource: primary
 
 props:

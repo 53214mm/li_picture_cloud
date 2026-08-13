@@ -14,6 +14,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Date;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
@@ -130,6 +131,16 @@ class CompanionSingleTableRoutingIntegrationTest {
         assertThat(value(connection, "SELECT reason FROM companion_growth_record WHERE id = ?", 8103L))
                 .isEqualTo("updated");
 
+        assertThat(update(connection, """
+                INSERT INTO companion_vision_usage (id, subjectId, usageDate, attempts, revision, createTime, updateTime)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, 8104L, COMPANION_ID, Date.valueOf("2026-08-13"), 1, 0L)).isEqualTo(1);
+        assertThat(update(connection, "UPDATE companion_vision_usage SET attempts = ? WHERE id = ?", 2, 8104L))
+                .isEqualTo(1);
+        assertThat(value(connection, "SELECT attempts FROM companion_vision_usage WHERE id = ?", 8104L))
+                .isEqualTo(2);
+
+        assertThat(update(connection, "DELETE FROM companion_vision_usage WHERE id = ?", 8104L)).isEqualTo(1);
         assertThat(update(connection, "DELETE FROM companion_growth_record WHERE id = ?", 8103L)).isEqualTo(1);
         assertThat(update(connection, "DELETE FROM companion_feed_run WHERE id = ?", 8102L)).isEqualTo(1);
         assertThat(update(connection, "DELETE FROM companion_skill WHERE id = ?", 8101L)).isEqualTo(1);

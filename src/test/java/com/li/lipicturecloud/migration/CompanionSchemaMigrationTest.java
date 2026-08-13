@@ -28,18 +28,19 @@ class CompanionSchemaMigrationTest {
             dataSource.setPassword("");
 
             update(dataSource);
-            assertCompanionTables(dataSource, 1);
+            assertCompanionTables(dataSource, 1, 1);
 
-            rollback(dataSource, 16);
-            assertCompanionTables(dataSource, 1);
+            rollback(dataSource, visualProviderChangeSetCount(dataSource));
+            // 视觉 migration 全部回滚后，初始伙伴四表仍在，后续加入的额度表已消失。
+            assertCompanionTables(dataSource, 1, 0);
             assertLegacyContentUnderstoodRemainsNotNull(dataSource);
 
             update(dataSource);
             rollback(dataSource);
-            assertCompanionTables(dataSource, 0);
+            assertCompanionTables(dataSource, 0, 0);
 
             update(dataSource);
-            assertCompanionTables(dataSource, 1);
+            assertCompanionTables(dataSource, 1, 1);
         }
     }
 
@@ -57,10 +58,32 @@ class CompanionSchemaMigrationTest {
 
             update(dataSource);
 
-            assertCompanionTables(dataSource, 1);
+            assertCompanionTables(dataSource, 1, 1);
             assertThat(jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM DATABASECHANGELOG WHERE ID = '20260813-10'", Integer.class))
                     .isEqualTo(1);
+        }
+    }
+
+    @Test
+    void rerunRecoversWhenMysqlCommittedVisionUsageDdlBeforeRecordingIt() throws Exception {
+        try (HikariDataSource dataSource = new HikariDataSource()) {
+            dataSource.setJdbcUrl("jdbc:h2:mem:companion_migration_resume_vision_usage;MODE=MySQL;DB_CLOSE_DELAY=-1");
+            dataSource.setUsername("sa");
+            dataSource.setPassword("");
+
+            update(dataSource);
+            JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+            assertThat(jdbcTemplate.update("DELETE FROM DATABASECHANGELOG WHERE ID IN ('20260813-17', '20260813-18')"))
+                    .isEqualTo(2);
+
+            update(dataSource);
+
+            assertCompanionTables(dataSource, 1, 1);
+            assertThat(jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM DATABASECHANGELOG
+                    WHERE ID IN ('20260813-17', '20260813-18')
+                    """, Integer.class)).isEqualTo(2);
         }
     }
 
@@ -210,7 +233,8 @@ class CompanionSchemaMigrationTest {
         }
     }
 
-    private static void assertCompanionTables(DataSource dataSource, int expectedCount) {
+    private static void assertCompanionTables(DataSource dataSource, int expectedCoreTableCount,
+                                              int expectedVisionUsageTableCount) {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         for (String table : List.of(
                 "companion", "companion_skill", "companion_feed_run", "companion_growth_record")) {
@@ -218,8 +242,13 @@ class CompanionSchemaMigrationTest {
                     SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
                     WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
                     """, Integer.class, table);
-            assertThat(count).as(table).isEqualTo(expectedCount);
+            assertThat(count).as(table).isEqualTo(expectedCoreTableCount);
         }
+        Integer visionUsageCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = 'companion_vision_usage'
+                """, Integer.class);
+        assertThat(visionUsageCount).as("companion_vision_usage").isEqualTo(expectedVisionUsageTableCount);
     }
 
     private static void insertLegacyRun(JdbcTemplate jdbcTemplate, long id, String nutritionMode) {
@@ -254,6 +283,13 @@ class CompanionSchemaMigrationTest {
                         'life-core-v1', '6f26d166-0a82-4d9f-8a61-6c21cf2e59d0',
                         'fef53056-2d9f-467d-9b1d-1afe9a6638fe', CURRENT_TIMESTAMP)
                 """, id, nutritionMode);
+    }
+
+    private static int visualProviderChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-13-companion-visual-provider.xml'
+                """, Integer.class);
     }
 
     private static void assertLegacyContentUnderstoodRemainsNotNull(DataSource dataSource) {
