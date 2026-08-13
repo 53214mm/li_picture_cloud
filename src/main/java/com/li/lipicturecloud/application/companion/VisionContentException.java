@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
  * <p>异常消息不能放对象 URL、图片字节或 COS 返回内容；后续适配器只按 {@link #safeCode()} 决定
  * 是否允许显式降级。</p>
  */
-public final class VisionContentException extends RuntimeException {
+public final class VisionContentException extends RuntimeException implements VisionSafeFailure {
 
     private static final Pattern SAFE_CODE = Pattern.compile("[A-Z0-9_]{3,80}");
 
@@ -20,6 +20,7 @@ public final class VisionContentException extends RuntimeException {
         this.safeCode = validateCode(safeCode);
     }
 
+    @Override
     public String safeCode() {
         return safeCode;
     }

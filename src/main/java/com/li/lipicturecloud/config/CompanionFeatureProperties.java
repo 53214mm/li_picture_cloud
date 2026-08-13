@@ -4,7 +4,9 @@ import com.li.lipicturecloud.domain.companion.NutritionMode;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.unit.DataSize;
 
+import java.net.URI;
 import java.time.Duration;
 
 @Getter
@@ -20,4 +22,12 @@ public class CompanionFeatureProperties {
     private boolean feedingEnabled = true;
     private Duration processingTimeout = Duration.ofMinutes(5);
     private NutritionMode nutritionMode = NutritionMode.METADATA_DETERMINISTIC;
+    /** DashScope OpenAI-compatible vision endpoint. Production config must explicitly override it. */
+    private URI visionEndpoint = URI.create("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
+    private String visionProvider = "dashscope";
+    private String visionModel = "qwen3.6-flash";
+    private String visionApiKey = "";
+    private Duration visionTimeout = Duration.ofSeconds(20);
+    private DataSize visionMaxBytes = DataSize.ofMegabytes(8);
+    private int visionDailyLimit = 10;
 }
