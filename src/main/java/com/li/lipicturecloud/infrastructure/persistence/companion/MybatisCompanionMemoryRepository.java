@@ -52,6 +52,8 @@ public class MybatisCompanionMemoryRepository implements CompanionMemoryReposito
     public List<CompanionMemory> findRecent(long companionId, int limit) {
         return memoryMapper.selectList(new LambdaQueryWrapper<CompanionMemoryEntity>()
                         .eq(CompanionMemoryEntity::getCompanionId, companionId)
+                        // 已删除的记忆不再出现在列表；失效记忆保留，让用户看到"来源不可用"。
+                        .ne(CompanionMemoryEntity::getStatus, MemoryStatus.DELETED.name())
                         .orderByDesc(CompanionMemoryEntity::getCreateTime)
                         .orderByDesc(CompanionMemoryEntity::getId)
                         .last("LIMIT " + boundedLimit(limit)))

@@ -122,6 +122,13 @@ class CompanionMoodMemoryPersistenceIntegrationTest {
         List<CompanionMemory> active = memoryRepository.findActive(602L, 10);
         assertThat(active).hasSize(1);
         assertThat(active.get(0).status()).isEqualTo(MemoryStatus.PENDING);
+
+        // 删除是终态且从列表消失；失效记忆仍保留在列表中。
+        CompanionMemory pending = recent.get(1);
+        memoryRepository.save(pending.delete(NOW.plusSeconds(180)), pending.revision());
+        assertThat(memoryRepository.findRecent(602L, 10)).hasSize(1);
+        assertThat(memoryRepository.findRecent(602L, 10).get(0).status())
+                .isEqualTo(MemoryStatus.INVALIDATED);
     }
 
     private static BigDecimal bd(String value) {

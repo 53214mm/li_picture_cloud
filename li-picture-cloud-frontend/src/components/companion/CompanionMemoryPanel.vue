@@ -172,7 +172,10 @@ function cancelCorrection() {
 
 function replaceMemory(updated) {
   const index = memories.value.findIndex(memory => memory.id === updated.id)
-  if (index !== -1) memories.value[index] = updated
+  if (index === -1) return
+  // 已删除的记忆直接从列表移除；其余状态原地更新徽章与文案。
+  if (updated.status === 'DELETED') memories.value.splice(index, 1)
+  else memories.value[index] = updated
 }
 
 function shortId(id) {
