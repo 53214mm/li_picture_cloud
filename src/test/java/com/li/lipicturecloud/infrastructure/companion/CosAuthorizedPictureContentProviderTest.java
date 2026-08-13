@@ -67,6 +67,20 @@ class CosAuthorizedPictureContentProviderTest {
     }
 
     @Test
+    void fallsBackToAnAuthorizedDerivedObjectWhenTheLegacyOriginalUrlIsMalformed() {
+        Picture picture = picture("https://assets.example.test//gallery/original.jpg", Instant.EPOCH);
+        picture.setUrl("https://assets.example.test/gallery/derived.webp");
+        when(pictures.findById(PICTURE_ID)).thenReturn(Optional.of(picture), Optional.of(picture));
+        when(cos.getObject("gallery/derived.webp")).thenReturn(cosObject(webpBytes()));
+
+        AuthorizedPictureContent content = provider.load(reference, 32L);
+
+        assertThat(content.mimeType()).isEqualTo("image/webp");
+        assertThat(content.bytes()).containsExactly(webpBytes());
+        verify(cos).getObject("gallery/derived.webp");
+    }
+
+    @Test
     void rechecksPermissionAndVersionAfterDownloadBeforeReturningBytes() {
         Picture before = picture("https://assets.example.test/gallery/photo.jpg", Instant.EPOCH);
         Picture moved = picture("https://assets.example.test/gallery/photo.jpg", Instant.EPOCH.plusSeconds(1));

@@ -25,6 +25,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -62,7 +63,8 @@ public class CosAuthorizedPictureContentProvider implements AuthorizedPictureCon
 
         PictureSnapshot before = snapshotOf(loadPicture(reference.pictureId()));
         authorization.checkForUser(PICTURE_VIEW, reference.pictureId(), reference.subject().userId());
-        String objectKey = objectKeyFromConfiguredHost(before.sourceUrl());
+        ObjectLocation location = preferredObjectLocation(before.originalUrl(), before.derivedUrl());
+        String objectKey = location.objectKey();
         String mimeType = mimeTypeFor(objectKey);
         byte[] bytes = downloadBounded(objectKey, maxBytes);
         validateMimeSignature(mimeType, bytes);
@@ -74,7 +76,7 @@ public class CosAuthorizedPictureContentProvider implements AuthorizedPictureCon
             throw stateChanged();
         }
         return new AuthorizedPictureContent(before.pictureId(), before.resourceVersion(), mimeType,
-                resourceBinding(before.sourceUrl()), bytes);
+                resourceBinding(location.url()), bytes);
     }
 
     @Override
@@ -86,10 +88,11 @@ public class CosAuthorizedPictureContentProvider implements AuthorizedPictureCon
         }
         PictureSnapshot current = snapshotOf(loadPicture(reference.pictureId()));
         authorization.checkForUser(PICTURE_VIEW, reference.pictureId(), reference.subject().userId());
-        String mimeType = mimeTypeFor(objectKeyFromConfiguredHost(current.sourceUrl()));
+        ObjectLocation location = preferredObjectLocation(current.originalUrl(), current.derivedUrl());
+        String mimeType = mimeTypeFor(location.objectKey());
         if (current.pictureId() != content.pictureId()
                 || !current.resourceVersion().equals(content.resourceVersion())
-                || !resourceBinding(current.sourceUrl()).equals(content.resourceBinding())
+                || !resourceBinding(location.url()).equals(content.resourceBinding())
                 || !mimeType.equals(content.mimeType())) {
             throw stateChanged();
         }
@@ -105,17 +108,24 @@ public class CosAuthorizedPictureContentProvider implements AuthorizedPictureCon
         if (pictureId == null || pictureId <= 0) {
             throw unavailable();
         }
-        String sourceUrl = preferredObjectUrl(picture);
         Instant resourceVersion = resourceVersion(picture.getUpdateTime());
-        return new PictureSnapshot(pictureId, sourceUrl, resourceVersion);
+        return new PictureSnapshot(pictureId, picture.getOriginalUrl(), picture.getUrl(), resourceVersion);
     }
 
-    private String preferredObjectUrl(Picture picture) {
-        if (hasText(picture.getOriginalUrl())) {
-            return picture.getOriginalUrl();
-        }
-        if (hasText(picture.getUrl())) {
-            return picture.getUrl();
+    private ObjectLocation preferredObjectLocation(String originalUrl, String derivedUrl) {
+        // 历史上传器可能把 originalUrl 写成带双斜杠的非法对象地址。只在同一图片记录中
+        // 选择第一个仍满足 COS 主机、规范 key 和支持格式约束的候选，不放宽任意 URL 边界。
+        for (String candidate : List.of(nullToEmpty(originalUrl), nullToEmpty(derivedUrl))) {
+            if (!hasText(candidate)) {
+                continue;
+            }
+            try {
+                String key = objectKeyFromConfiguredHost(candidate);
+                mimeTypeFor(key);
+                return new ObjectLocation(candidate, key);
+            } catch (VisionContentException ignored) {
+                // 尝试该图片记录中的下一种受控派生资源。
+            }
         }
         throw unavailable();
     }
@@ -246,6 +256,10 @@ public class CosAuthorizedPictureContentProvider implements AuthorizedPictureCon
         return value != null && !value.isBlank();
     }
 
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
     private static VisionContentException unavailable() {
         return new VisionContentException("VISION_IMAGE_UNAVAILABLE", "图片内容无法用于视觉营养");
     }
@@ -273,6 +287,9 @@ public class CosAuthorizedPictureContentProvider implements AuthorizedPictureCon
         return bytes;
     }
 
-    private record PictureSnapshot(long pictureId, String sourceUrl, Instant resourceVersion) {
+    private record ObjectLocation(String url, String objectKey) {
+    }
+
+    private record PictureSnapshot(long pictureId, String originalUrl, String derivedUrl, Instant resourceVersion) {
     }
 }

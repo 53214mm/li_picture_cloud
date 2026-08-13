@@ -52,22 +52,26 @@ public class MybatisFeedingRunRepository implements FeedingRunRepository {
                 && current.get().status() != FeedingRunStatus.PROCESSING)) {
             return false;
         }
-        return transition(runId, expectedRevision, current.get().status(), current.get().restarted(now));
+        return transition(runId, expectedRevision, current.get().status(),
+                current.get().restarted(notBeforePersistedUpdate(current.get(), now)));
     }
 
     @Override
     public boolean complete(long runId, long expectedRevision, long growthRecordId, Instant now) {
-        return transitionFromProcessing(runId, expectedRevision, run -> run.completed(growthRecordId, now));
+        return transitionFromProcessing(runId, expectedRevision,
+                run -> run.completed(growthRecordId, notBeforePersistedUpdate(run, now)));
     }
 
     @Override
     public boolean fail(long runId, long expectedRevision, String safeCode, String safeMessage, Instant now) {
-        return transitionFromProcessing(runId, expectedRevision, run -> run.failed(safeCode, safeMessage, now));
+        return transitionFromProcessing(runId, expectedRevision,
+                run -> run.failed(safeCode, safeMessage, notBeforePersistedUpdate(run, now)));
     }
 
     @Override
     public boolean reject(long runId, long expectedRevision, String safeCode, String safeMessage, Instant now) {
-        return transitionFromProcessing(runId, expectedRevision, run -> run.rejected(safeCode, safeMessage, now));
+        return transitionFromProcessing(runId, expectedRevision,
+                run -> run.rejected(safeCode, safeMessage, notBeforePersistedUpdate(run, now)));
     }
 
     private boolean transitionFromProcessing(long runId, long expectedRevision,
@@ -77,6 +81,13 @@ public class MybatisFeedingRunRepository implements FeedingRunRepository {
             return false;
         }
         return transition(runId, expectedRevision, FeedingRunStatus.PROCESSING, targetFactory.apply(current.get()));
+    }
+
+    private static Instant notBeforePersistedUpdate(FeedingRun current, Instant requested) {
+        Objects.requireNonNull(requested, "transition time");
+        // MySQL TIMESTAMP(0) may round a written fractional instant into the next second. The repository
+        // must not feed that storage artifact back as a false domain-level clock reversal.
+        return requested.isBefore(current.updatedAt()) ? current.updatedAt() : requested;
     }
 
     private boolean transition(long id, long expectedRevision, FeedingRunStatus source, FeedingRun target) {
