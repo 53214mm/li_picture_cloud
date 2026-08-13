@@ -200,6 +200,9 @@ public class CompanionLifeService implements CompanionLife {
         if (companion == null) {
             return new CompanionHomeView(null, assembler.nutritionStatus(), List.of());
         }
+        // 伙伴主页加载是"故事阅读"漏斗的代理事件，只记录已唤醒主体，避免把空页噪音计入漏斗。
+        log.info("companion_home_viewed subjectId={} companionId={} level={}",
+                subject.userId(), companion.id(), companion.level());
         CompanionView companionView = assembler.companion(companion);
         List<GrowthRecordView> growth = growthRepository.findRecent(companion.id(), 20)
                 .stream().map(assembler::growth).toList();
