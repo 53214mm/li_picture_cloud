@@ -33,19 +33,25 @@ import java.util.Set;
 /**
  * 百炼 OpenAI 兼容 Chat Completions 的最小视觉客户端。
  *
- * <p>该类只负责受控像素到结构化候选的转换；不写伙伴、经验、权限或额度，也不记录图片或
- * Provider 原文。模型返回的数据仍需由后续的平衡规则裁剪。</p>
+ * <p>该类只负责受控像素到结构化候选的转换；不写伙伴、经验、权限或额度，也不记录图片、
+ * HTTP 原文或供应商诊断信息。唯一允许进入成长档案的模型文字是经过严格 Schema 和长度校验的
+ * {@code companionMessage}；数值仍需由后续平衡规则裁剪。</p>
  */
 public final class DashScopeVisionClient implements VisualObservationProvider {
 
     static final int MAX_RESPONSE_BYTES = 64 * 1024;
-    private static final String PROMPT_VERSION = "companion-vision-v1";
-    private static final String RESULT_SCHEMA_VERSION = "visual-observation-v1";
-    private static final String SCHEMA_NAME = "companion_visual_observation_v1";
-    private static final String PROMPT = "Analyze this one image. Return only the requested JSON object. "
-            + "Do not include markdown, explanation, object identifiers, URLs, or copied text.";
+    private static final String PROMPT_VERSION = "companion-vision-v2";
+    private static final String RESULT_SCHEMA_VERSION = "visual-observation-v2";
+    private static final String SCHEMA_NAME = "companion_visual_observation_v2";
+    private static final String PROMPT = "Analyze this one image and return only the requested JSON object. "
+            + "Score each structured field from visible evidence. Write companionMessage in Simplified Chinese "
+            + "as a warm first-person mini-story spoken by a curious virtual companion. Explain which visible "
+            + "colors, composition, people, objects, mood, or motion cues led to the scores, while presenting "
+            + "imaginative details as feelings rather than facts. Use 40 to 120 Chinese characters. "
+            + "Do not include markdown, object identifiers, URLs, or copied text from the image.";
     private static final Set<String> REQUIRED_FIELDS = Set.of(
-            "mood", "sceneComplexity", "energy", "socialPresence", "motionPotential", "creativity", "confidence");
+            "mood", "sceneComplexity", "energy", "socialPresence", "motionPotential", "creativity", "confidence",
+            "companionMessage");
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
@@ -172,6 +178,10 @@ public final class DashScopeVisionClient implements VisualObservationProvider {
         boundedInteger(properties, "motionPotential");
         boundedInteger(properties, "creativity");
         properties.putObject("confidence").put("type", "number").put("minimum", 0).put("maximum", 1);
+        properties.putObject("companionMessage")
+                .put("type", "string")
+                .put("minLength", VisualObservationCandidate.MIN_MESSAGE_CODE_POINTS)
+                .put("maxLength", VisualObservationCandidate.MAX_MESSAGE_CODE_POINTS);
         return request;
     }
 
@@ -198,7 +208,8 @@ public final class DashScopeVisionClient implements VisualObservationProvider {
                     requiredBoolean(candidate, "socialPresence"),
                     requiredBoundedInteger(candidate, "motionPotential"),
                     requiredBoundedInteger(candidate, "creativity"),
-                    requiredConfidence(candidate));
+                    requiredConfidence(candidate),
+                    requiredText(candidate, "companionMessage"));
         } catch (VisionProviderException exception) {
             throw exception;
         } catch (JsonProcessingException | IllegalArgumentException exception) {

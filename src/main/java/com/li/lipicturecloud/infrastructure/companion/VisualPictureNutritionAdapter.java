@@ -134,7 +134,7 @@ public final class VisualPictureNutritionAdapter implements PictureNutritionAnal
             skills.put(CompanionSkill.EMOJI_CREATION, 4L + candidate.energy());
         }
         return new PictureNutrition(experience, traits, Map.copyOf(skills),
-                "伙伴从视觉模型对图片内容的结构化观察中获得了营养。",
+                candidate.companionMessage(),
                 NutritionProvenance.visual(visual.providerCode(), visual.modelCode(), visual.promptVersion(),
                         visual.resultSchemaVersion(), candidate.confidence()));
     }

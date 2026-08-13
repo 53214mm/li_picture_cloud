@@ -42,6 +42,8 @@ test('awakens a companion and recovers one private-picture feed without double g
   expect(keys[1]).toBe(keys[0])
   await expect(page.getByText('42 / 100 生命经验')).toBeVisible()
   await expect(page.getByText('+42 生命经验')).toBeVisible()
+  await expect(page.getByRole('group', { name: '伙伴说' }).first())
+    .toContainText('演示营养让伙伴练习了观察与叙事。')
   await expect(page.getByTestId('growth-trait-curiosity').first()).toContainText('+0.60')
   await expect(page.getByTestId('skill-IMAGE_OBSERVATION')).toContainText('18 / 100')
   await expect(page.getByTestId('skill-STORY_CREATION')).toContainText('12 / 100')
@@ -119,6 +121,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
   await expect(page.getByText('来源 dashscope / qwen3.6-flash')).toBeVisible()
   await expect(page.getByText('置信度 0.84')).toBeVisible()
+  await expect(page.getByRole('group', { name: '伙伴说' })).toHaveCount(2)
   await expect(page.getByRole('link', { name: '图片 #102' })).toHaveCount(2)
 
   await page.reload()

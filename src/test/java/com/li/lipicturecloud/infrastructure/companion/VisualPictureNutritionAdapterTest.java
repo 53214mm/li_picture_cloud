@@ -51,11 +51,12 @@ class VisualPictureNutritionAdapterTest {
         AuthorizedPictureContent content = jpegContent();
         when(contents.load(picture, MAX_BYTES)).thenReturn(content);
         when(visual.observe(content)).thenReturn(new VisualObservationCandidate(
-                VisualObservationCandidate.Mood.JOYFUL, 3, 3, true, 2, 4, new BigDecimal("0.84")));
+                VisualObservationCandidate.Mood.JOYFUL, 3, 3, true, 2, 4, new BigDecimal("0.84"),
+                "我像走进一场明亮的小冒险：画面里的层次让我忍不住多看几眼，热闹的气息也让我更想靠近这个世界。"));
         when(visual.providerCode()).thenReturn("dashscope");
         when(visual.modelCode()).thenReturn("qwen3.6-flash");
-        when(visual.promptVersion()).thenReturn("companion-vision-v1");
-        when(visual.resultSchemaVersion()).thenReturn("visual-observation-v1");
+        when(visual.promptVersion()).thenReturn("companion-vision-v2");
+        when(visual.resultSchemaVersion()).thenReturn("visual-observation-v2");
 
         PictureNutrition nutrition = new VisualPictureNutritionAdapter(
                 quota, contents, visual, metadata, CLOCK, MAX_BYTES, DAILY_LIMIT).analyze(picture);
@@ -70,6 +71,8 @@ class VisualPictureNutritionAdapterTest {
                 CompanionSkill.IMAGE_OBSERVATION, 27L,
                 CompanionSkill.STORY_CREATION, 14L,
                 CompanionSkill.EMOJI_CREATION, 7L));
+        assertThat(nutrition.reason()).isEqualTo(
+                "我像走进一场明亮的小冒险：画面里的层次让我忍不住多看几眼，热闹的气息也让我更想靠近这个世界。");
         assertThat(nutrition.provenance().actualMode()).isEqualTo(NutritionMode.VISUAL_MODEL);
         assertThat(nutrition.provenance().contentUnderstood()).isTrue();
         assertThat(nutrition.provenance().providerCode()).isEqualTo("dashscope");

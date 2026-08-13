@@ -18,7 +18,7 @@
             </div>
             <time :datetime="record.createdTime">{{ formatTime(record.createdTime) }}</time>
           </div>
-          <p class="reason">{{ record.reason }}</p>
+          <CompanionMessageBubble :message="record.reason" />
           <div v-if="traitChanges(record).length || skillChanges(record).length" class="delta-list">
             <span v-for="item in traitChanges(record)" :key="item.key"
                   :data-testid="`growth-trait-${item.key}`">
@@ -48,6 +48,7 @@
 <script setup>
 import { SKILL_LABEL, TRAIT_AXES } from '@/constants/companion'
 import { formatSignedDelta } from '@/utils/companion'
+import CompanionMessageBubble from '@/components/companion/CompanionMessageBubble.vue'
 
 defineProps({ records: { type: Array, required: true } })
 
@@ -95,7 +96,6 @@ function formatTime(value) {
 .event-heading strong, .experience { display: block; }
 .experience { color: var(--red); font-size: .78rem; font-weight: 800; }
 .event-heading time { color: var(--gray-600); font-size: .72rem; white-space: nowrap; }
-.reason { margin-top: .65rem; font-size: .88rem; }
 .delta-list, .event-meta { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .75rem; }
 .delta-list span { padding: .25rem .45rem; border: 1px solid var(--gray-400); background: var(--white); font-size: .72rem; }
 .event-meta { align-items: center; color: var(--gray-600); font-size: .7rem; }

@@ -63,16 +63,21 @@ class DashScopeVisionClientTest {
                 .andExpect(jsonPath("$.response_format.type").value("json_schema"))
                 .andExpect(jsonPath("$.response_format.json_schema.strict").value(true))
                 .andExpect(jsonPath("$.response_format.json_schema.schema.additionalProperties").value(false))
+                .andExpect(jsonPath("$.response_format.json_schema.schema.properties.companionMessage.minLength")
+                        .value(20))
+                .andExpect(jsonPath("$.response_format.json_schema.schema.properties.companionMessage.maxLength")
+                        .value(240))
                 .andRespond(withSuccess(validResponse(), MediaType.APPLICATION_JSON));
 
         VisualObservationCandidate candidate = client.observe(jpegContent());
 
         assertThat(candidate).isEqualTo(new VisualObservationCandidate(
-                VisualObservationCandidate.Mood.JOYFUL, 2, 3, true, 2, 3, new BigDecimal("0.84")));
+                VisualObservationCandidate.Mood.JOYFUL, 2, 3, true, 2, 3, new BigDecimal("0.84"),
+                "我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。"));
         assertThat(client.providerCode()).isEqualTo("dashscope");
         assertThat(client.modelCode()).isEqualTo("qwen3.6-flash");
-        assertThat(client.promptVersion()).isEqualTo("companion-vision-v1");
-        assertThat(client.resultSchemaVersion()).isEqualTo("visual-observation-v1");
+        assertThat(client.promptVersion()).isEqualTo("companion-vision-v2");
+        assertThat(client.resultSchemaVersion()).isEqualTo("visual-observation-v2");
         server.verify();
     }
 
@@ -150,7 +155,14 @@ class DashScopeVisionClientTest {
                 Arguments.of(responseContent("{\"mood\":\"JOYFUL\"}")),
                 Arguments.of(responseContent(validCandidateWithSuffix(",\"unexpected\":true"))),
                 Arguments.of(responseContent(validCandidateWithReplacement("\"energy\":3", "\"energy\":3.0"))),
-                Arguments.of(responseContent(validCandidateWithReplacement("\"confidence\":0.84", "\"confidence\":1.01"))));
+                Arguments.of(responseContent(validCandidateWithReplacement("\"confidence\":0.84", "\"confidence\":1.01"))),
+                Arguments.of(responseContent(validCandidateWithReplacement(
+                        "我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。", "太短了"))),
+                Arguments.of(responseContent(validCandidateWithReplacement(
+                        "我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。",
+                        "我在画面里发现了很多线索，更多故事请访问 https://example.test 查看。"))),
+                Arguments.of(responseContent(validCandidateWithReplacement(
+                        "我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。", "x".repeat(241)))));
     }
 
     private static AuthorizedPictureContent jpegContent() {
@@ -165,7 +177,8 @@ class DashScopeVisionClientTest {
     private static String validCandidate() {
         return """
                 {"mood":"JOYFUL","sceneComplexity":2,"energy":3,"socialPresence":true,
-                "motionPotential":2,"creativity":3,"confidence":0.84}
+                "motionPotential":2,"creativity":3,"confidence":0.84,
+                "companionMessage":"我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。"}
                 """;
     }
 

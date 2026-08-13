@@ -51,6 +51,7 @@ test('space and AI surfaces define phone layouts', () => {
     'views/CompanionView.vue',
     'components/companion/CompanionStats.vue',
     'components/companion/CompanionPicturePicker.vue',
+    'components/companion/CompanionMessageBubble.vue',
     'components/companion/CompanionGrowthTimeline.vue'
   ]) {
     assert.match(read(`src/${file}`), /@media \(max-width: 767px\)/, file)
