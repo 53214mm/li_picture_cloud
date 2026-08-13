@@ -41,7 +41,15 @@ app:
   companion:
     enabled: ${COMPANION_ENABLED:false}
     feeding-enabled: ${COMPANION_FEEDING_ENABLED:false}
-    nutrition-mode: ${COMPANION_NUTRITION_MODE}
+    # 生产不允许视觉策略静默使用本地默认值；每项都必须由部署者明确确认。
+    nutrition-policy: ${COMPANION_NUTRITION_POLICY}
+    vision-endpoint: ${COMPANION_VISION_ENDPOINT}
+    vision-provider: ${COMPANION_VISION_PROVIDER}
+    vision-model: ${COMPANION_VISION_MODEL}
+    vision-api-key: ${DASHSCOPE_API_KEY}
+    vision-timeout: ${COMPANION_VISION_TIMEOUT}
+    vision-max-bytes: ${COMPANION_VISION_MAX_BYTES}
+    vision-daily-limit: ${COMPANION_VISION_DAILY_LIMIT}
   collaboration:
     store: redis
     state-ttl: ${COLLABORATION_STATE_TTL:24h}

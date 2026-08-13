@@ -41,7 +41,13 @@ class DeploymentArtifactsTest {
                 "api-key: ${QIANFAN_API_KEY}",
                 "Bearer: ${QIANFAN_BEARER_TOKEN}",
                 "api-key: ${MXAI_API_KEY}",
-                "nutrition-mode: ${COMPANION_NUTRITION_MODE}");
+                "nutrition-policy: ${COMPANION_NUTRITION_POLICY}",
+                "vision-endpoint: ${COMPANION_VISION_ENDPOINT}",
+                "vision-provider: ${COMPANION_VISION_PROVIDER}",
+                "vision-model: ${COMPANION_VISION_MODEL}",
+                "vision-timeout: ${COMPANION_VISION_TIMEOUT}",
+                "vision-max-bytes: ${COMPANION_VISION_MAX_BYTES}",
+                "vision-daily-limit: ${COMPANION_VISION_DAILY_LIMIT}");
     }
 
     @Test
@@ -97,13 +103,25 @@ class DeploymentArtifactsTest {
                 "COMPANION_ENABLED: ${COMPANION_ENABLED:-false}",
                 "COMPANION_FEEDING_ENABLED: ${COMPANION_FEEDING_ENABLED:-false}",
                 "COMPANION_PROCESSING_TIMEOUT: ${COMPANION_PROCESSING_TIMEOUT:-5m}",
-                "COMPANION_NUTRITION_MODE: ${COMPANION_NUTRITION_MODE:?COMPANION_NUTRITION_MODE is required}",
+                "COMPANION_NUTRITION_POLICY: ${COMPANION_NUTRITION_POLICY:?COMPANION_NUTRITION_POLICY is required}",
+                "COMPANION_VISION_ENDPOINT: ${COMPANION_VISION_ENDPOINT:?COMPANION_VISION_ENDPOINT is required}",
+                "COMPANION_VISION_PROVIDER: ${COMPANION_VISION_PROVIDER:?COMPANION_VISION_PROVIDER is required}",
+                "COMPANION_VISION_MODEL: ${COMPANION_VISION_MODEL:?COMPANION_VISION_MODEL is required}",
+                "COMPANION_VISION_DAILY_LIMIT: ${COMPANION_VISION_DAILY_LIMIT:?COMPANION_VISION_DAILY_LIMIT is required}",
+                "COMPANION_VISION_TIMEOUT: ${COMPANION_VISION_TIMEOUT:?COMPANION_VISION_TIMEOUT is required}",
+                "COMPANION_VISION_MAX_BYTES: ${COMPANION_VISION_MAX_BYTES:?COMPANION_VISION_MAX_BYTES is required}",
                 "VITE_COMPANION_ENABLED: ${VITE_COMPANION_ENABLED:-false}");
         assertThat(environment).contains(
                 "COMPANION_ENABLED=false",
                 "COMPANION_FEEDING_ENABLED=false",
                 "COMPANION_PROCESSING_TIMEOUT=5m",
-                "COMPANION_NUTRITION_MODE=METADATA_DETERMINISTIC",
+                "COMPANION_NUTRITION_POLICY=METADATA_ONLY",
+                "COMPANION_VISION_ENDPOINT=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                "COMPANION_VISION_PROVIDER=dashscope",
+                "COMPANION_VISION_MODEL=qwen3.6-flash",
+                "COMPANION_VISION_DAILY_LIMIT=10",
+                "COMPANION_VISION_TIMEOUT=20s",
+                "COMPANION_VISION_MAX_BYTES=8MB",
                 "VITE_COMPANION_ENABLED=false");
     }
 

@@ -38,14 +38,14 @@ public class CompanionConfiguration {
      * Demo 与视觉/元数据实现分成互斥 Bean，测试和 E2E 无论是否设置真实 API key 都不会创建网络客户端。
      */
     @Bean
-    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-mode", havingValue = "DEMO_DETERMINISTIC")
+    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-policy", havingValue = "DEMO_ONLY")
     public PictureNutritionAnalyzer demoPictureNutritionAnalyzer() {
         return new DemoPictureNutritionAdapter();
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-mode",
-            havingValue = "METADATA_DETERMINISTIC", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-policy",
+            havingValue = "METADATA_ONLY", matchIfMissing = true)
     public PictureNutritionAnalyzer metadataPictureNutritionAnalyzer(PictureObservationProvider observations) {
         return new MetadataPictureNutritionAdapter(observations);
     }
@@ -54,14 +54,16 @@ public class CompanionConfiguration {
      * 只在显式视觉模式创建客户端；空 API key 会在这里快速失败，绝不静默降级成元数据模式。
      */
     @Bean
-    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-mode", havingValue = "VISUAL_MODEL")
+    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-policy",
+            havingValue = "VISUAL_WITH_METADATA_FALLBACK")
     public VisualObservationProvider dashScopeVisualObservationProvider(ObjectMapper objectMapper,
                                                                           CompanionFeatureProperties properties) {
         return DashScopeVisionClient.fromProperties(objectMapper, properties);
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-mode", havingValue = "VISUAL_MODEL")
+    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-policy",
+            havingValue = "VISUAL_WITH_METADATA_FALLBACK")
     public PictureNutritionAnalyzer visualPictureNutritionAnalyzer(CompanionFeatureProperties properties,
                                                                     PictureObservationProvider observations,
                                                                     VisionQuotaGuard quota,

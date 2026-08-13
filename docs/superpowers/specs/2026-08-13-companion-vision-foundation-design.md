@@ -26,11 +26,11 @@ GrowthRecord
 
 ### 2.2 三种信息必须明确区分
 
-- `DEMO_DETERMINISTIC`：只按图片 ID 选择固定档案，不读取图片信息。
-- `METADATA_DETERMINISTIC`：读取尺寸、格式、大小和用户填写的图库元数据，不读取图片像素。
-- 后续视觉模式：读取图片像素，必须记录 Provider、模型、置信度和内容理解状态。
+- `DEMO_ONLY` 请求策略：只按图片 ID 选择固定档案，不读取图片信息。
+- `METADATA_ONLY` 请求策略：读取尺寸、格式、大小和用户填写的图库元数据，不读取图片像素。
+- `VISUAL_WITH_METADATA_FALLBACK` 请求策略：读取图片像素，必须记录 Provider、模型、置信度和内容理解状态；允许的失败必须作为显式元数据降级保存。
 
-前端必须显示当前模式。元数据模式仍然是 `contentUnderstood=false`，不能用“AI 已看懂图片”之类的文案。
+前端必须显示实际来源而非仅显示当前策略。元数据来源仍然是 `contentUnderstood=false`，不能用“AI 已看懂图片”之类的文案。
 
 ### 2.3 Provider 不返回原始敏感内容
 
@@ -40,10 +40,10 @@ GrowthRecord
 
 ## 3. 配置与降级
 
-配置项为 `app.companion.nutrition-mode`：
+配置项为 `app.companion.nutrition-policy`：
 
-- 本地默认 `METADATA_DETERMINISTIC`；
-- 测试与浏览器 E2E 固定 `DEMO_DETERMINISTIC`，保证断言稳定；
+- 本地默认 `METADATA_ONLY`；
+- 测试固定 `METADATA_ONLY`、浏览器 E2E 固定 `DEMO_ONLY`，保证断言稳定；
 - 生产环境必须显式配置，且伙伴总开关仍默认关闭。
 
 未来视觉 Provider 不可用时，是否降级到元数据模式必须由显式策略决定，并在当次成长记录中保存实际使用的模式；禁止静默把失败的视觉分析伪装成成功理解。

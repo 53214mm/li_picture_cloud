@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import {
   applyFeedResult,
   beginFeedAttempt,
@@ -7,8 +9,7 @@ import {
   describeTrait,
   selectOldestPrivateSpace,
   shouldRetrySameFeedKey,
-  traitPosition,
-  nutritionModeLabel
+  traitPosition
 } from '../src/utils/companion.js'
 import {
   createAuthSessionGate,
@@ -25,10 +26,16 @@ test('keeps one idempotency key through ambiguous retries', () => {
   assert.equal(changed.idempotencyKey, 'feed-key-0000003')
 })
 
-test('labels disclosed nutrition modes without claiming metadata is visual understanding', () => {
-  assert.equal(nutritionModeLabel('DEMO_DETERMINISTIC'), '演示营养（确定性）')
-  assert.equal(nutritionModeLabel('METADATA_DETERMINISTIC'), '图片元数据营养（确定性）')
-  assert.equal(nutritionModeLabel('FUTURE_PROVIDER'), '图片营养')
+test('renders only the server-provided nutrition label and safe provenance fields', async () => {
+  const timeline = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionGrowthTimeline.vue', import.meta.url)), 'utf8')
+  const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/CompanionView.vue', import.meta.url)), 'utf8')
+
+  assert.match(timeline, /record\.nutritionLabel/)
+  assert.match(timeline, /record\.providerCode/)
+  assert.match(timeline, /record\.modelCode/)
+  assert.doesNotMatch(timeline, /nutritionModeLabel/)
+  assert.doesNotMatch(page, /nutritionModeLabel/)
+  assert.match(page, /每日视觉次数上限/)
 })
 
 test('applies the server result once and de-duplicates history', () => {

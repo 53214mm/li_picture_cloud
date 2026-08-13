@@ -81,7 +81,14 @@ app:
     enabled: ${COMPANION_ENABLED:true}
     feeding-enabled: ${COMPANION_FEEDING_ENABLED:true}
     processing-timeout: ${COMPANION_PROCESSING_TIMEOUT:5m}
-    nutrition-mode: ${COMPANION_NUTRITION_MODE:METADATA_DETERMINISTIC}
+    nutrition-policy: ${COMPANION_NUTRITION_POLICY:METADATA_ONLY}
+    vision-endpoint: ${COMPANION_VISION_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+    vision-provider: ${COMPANION_VISION_PROVIDER:dashscope}
+    vision-model: ${COMPANION_VISION_MODEL:qwen3.6-flash}
+    vision-api-key: ${DASHSCOPE_API_KEY:}
+    vision-timeout: ${COMPANION_VISION_TIMEOUT:20s}
+    vision-max-bytes: ${COMPANION_VISION_MAX_BYTES:8MB}
+    vision-daily-limit: ${COMPANION_VISION_DAILY_LIMIT:10}
   collaboration:
     store: ${COLLABORATION_STORE:redis}
     state-ttl: ${COLLABORATION_STATE_TTL:24h}

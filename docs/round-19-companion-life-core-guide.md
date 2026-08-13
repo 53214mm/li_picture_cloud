@@ -8,16 +8,19 @@
 
 ## 图片营养与内容理解边界
 
-当前支持两种确定性营养模式：
+当前支持三条请求策略。策略只说明一次喂养<strong>允许</strong>使用什么路径；每一条成长记录都会保存实际来源，页面据此显示是否真的理解了图片内容。
 
-- `METADATA_DETERMINISTIC`：默认模式。读取图片尺寸、格式、大小，以及“是否填写简介/分类”这些状态；不保存或传播原始文字，不读取像素，不调用视觉模型。
-- `DEMO_DETERMINISTIC`：测试和 E2E 模式。只根据图片 ID 选择固定档案，不读取任何图片信息。
+- `METADATA_ONLY`：默认策略。读取图片尺寸、格式、大小，以及“是否填写简介/分类”这些状态；不保存或传播原始文字，不读取像素，不调用视觉模型。
+- `DEMO_ONLY`：测试和 E2E 策略。只根据图片 ID 选择固定档案，不读取任何图片信息。
+- `VISUAL_WITH_METADATA_FALLBACK`：生产可选策略。仅在用户明确喂养、图片仍有 `PICTURE_VIEW` 权限且通过 COS 受控读取后，才将 JPEG、PNG 或 WEBP 像素发送给配置的视觉 Provider。默认每位用户每天最多 10 次；视觉服务超时、限流、不可用或返回无效结构时会明确降级为元数据营养，仍占用已预留的当日次数。凭证错误、权限问题和额度耗尽不会伪装成降级。
 
-所有 feeding run 和成长历史都会持久化实际模式。当前两种模式均为：
+视觉出站前会再次核对图片权限、资源版本和对象绑定。喂养不会移动、改名、删除或重标记来源图片，也不会存储图片字节、Data URL、原始模型回答或用户原始描述。
 
-- `contentUnderstood=false`
+所有 feeding run 和成长历史都会持久化请求策略与实际来源：
 
-前端会按模式显示“图片元数据营养（确定性）”或“演示营养（确定性）”，并持续显示“未进行图片内容理解”。不要把当前效果宣传为 AI 看懂了图片。
+- 视觉成功：显示 `Qwen 视觉营养 · 已分析图片内容`，并记录 Provider、模型、置信度和提示词/结构版本。
+- 元数据或演示：明确显示“未读取图片像素”或“未进行内容理解”。
+- 视觉降级：显示“视觉服务暂不可用，本次使用图片元数据营养”，不会把它宣传为内容理解。
 
 ## 本地体验
 
@@ -38,10 +41,18 @@
 | `COMPANION_ENABLED` | `false`（生产） | 注册伙伴后端服务与接口 |
 | `COMPANION_FEEDING_ENABLED` | `false`（生产） | 允许执行喂养 |
 | `COMPANION_PROCESSING_TIMEOUT` | `5m` | PROCESSING run 可被安全接管前的超时 |
-| `COMPANION_NUTRITION_MODE` | `METADATA_DETERMINISTIC` | 图片营养模式；测试可设为 `DEMO_DETERMINISTIC` |
+| `COMPANION_NUTRITION_POLICY` | `METADATA_ONLY` | 请求策略：`METADATA_ONLY`、`DEMO_ONLY` 或 `VISUAL_WITH_METADATA_FALLBACK` |
+| `COMPANION_VISION_ENDPOINT` | DashScope compatible endpoint | 视觉 Provider 的 HTTPS Chat Completions endpoint |
+| `COMPANION_VISION_PROVIDER` | `dashscope` | 审计中使用的视觉 Provider 标识 |
+| `COMPANION_VISION_MODEL` | `qwen3.6-flash` | 视觉模型标识 |
+| `COMPANION_VISION_DAILY_LIMIT` | `10` | 每个用户每天预占的视觉调用次数上限 |
+| `COMPANION_VISION_TIMEOUT` | `20s` | 一次视觉请求的总超时 |
+| `COMPANION_VISION_MAX_BYTES` | `8MB` | 单张可送模图片的大小上限 |
 | `VITE_COMPANION_ENABLED` | `false` | 构建时加入前端路由、导航和懒加载页面 |
 
-生产环境必须同时开启前端与后端开关。`VITE_COMPANION_ENABLED` 是构建时变量，修改后必须重新构建 web 镜像；只重启容器不会改变前端产物。默认生产构建和 Compose 均关闭此功能。
+生产环境必须同时开启前端与后端开关。生产 profile 会要求明确提供请求策略、视觉 Provider/模型、日额度、超时、最大字节数和 `DASHSCOPE_API_KEY`；不要依赖本地默认值。`VITE_COMPANION_ENABLED` 是构建时变量，修改后必须重新构建 web 镜像；只重启容器不会改变前端产物。默认生产构建和 Compose 均关闭此功能。
+
+轮换 `DASHSCOPE_API_KEY` 时：先在密钥管理系统中创建新 key，更新运行环境并滚动重启 backend，确认健康检查和一次受控喂养成功后，再撤销旧 key。不要把 key 写进 `.env.example`、图片描述、浏览器控制台或成长记录。
 
 ## 数据与一致性
 
@@ -49,8 +60,8 @@
 
 - `companion`：每个主体一行当前快照，使用 `revision` 做乐观锁。
 - `companion_skill`：按伙伴和技能码保存技能经验。
-- `companion_feed_run`：保存请求键、输入指纹、状态、失败摘要和原始结果引用。
-- `companion_growth_record`：只追加的成长事实，保存来源图片 ID、变化量、规则版本、营养模式和结果快照。
+- `companion_feed_run`：保存请求键、输入指纹、状态、失败摘要、请求策略和请求的 Provider/模型。
+- `companion_growth_record`：只追加的成长事实，保存来源图片 ID、变化量、规则版本、实际来源（Provider/模型/置信度/降级原因）和结果快照。
 
 唯一键保护“一主体一个伙伴”和“同伙伴同幂等键一个 run”。伙伴、技能、成长记录和 run 完成状态在一个事务中同成同败；同图并发先锁伙伴再计算。规则层还限制每日经验、单图影响、单次人格变化，并对重复图片 sharply diminish。日志与数据库只保留安全错误码/消息及 correlation ID，不保存 token、供应商响应正文或堆栈。
 
@@ -104,8 +115,8 @@ npm run test:e2e
 
 ## 明确未包含
 
-本轮没有实现真实视觉理解、长期记忆、主动行为、主动剧情、模型/MCP 控制中心、图片生成/融合、用户自带 token、平台额度、订阅/支付或极端属性剧情。元数据营养是视觉模型之前的基础层；现有技能码仍只是未来能力的扩展位。
+本轮没有实现长期记忆、主动行为、主动剧情、模型/MCP 控制中心、图片生成/融合、用户自带 token、平台额度、订阅/支付或极端属性剧情。现有技能码仍只是未来能力的扩展位。
 
 ## 生产发布警告
 
-不要把元数据或演示适配器公开宣传为 AI 图片理解。接入真实 Provider 前，仍需单独完成模型输出不可信校验、图片二次授权、凭证加密与撤销、隐私/数据保留策略、成本硬上限、CORS/来源控制，以及真实 MySQL、Redis、对象存储和更广泛浏览器 E2E。下一阶段边界见[伙伴图片观察基础层设计](superpowers/specs/2026-08-13-companion-vision-foundation-design.md)，生产冷启动与人工签字流程见[代码复审与人工验收手册](reviews/2026-08-13-companion-life-core-review-and-manual-checklist.md)。
+不要把元数据、演示或视觉降级公开宣传为 AI 图片理解。视觉调用已采用不可信输出校验、图片二次授权、成本硬上限和来源审计；生产发布仍需要落实凭证加密与撤销、隐私/数据保留策略、CORS/来源控制，以及真实 MySQL、Redis、对象存储和更广泛浏览器 E2E。下一阶段边界见[伙伴图片观察基础层设计](superpowers/specs/2026-08-13-companion-vision-foundation-design.md)，生产冷启动与人工签字流程见[代码复审与人工验收手册](reviews/2026-08-13-companion-life-core-review-and-manual-checklist.md)。

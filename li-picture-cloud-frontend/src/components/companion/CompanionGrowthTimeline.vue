@@ -33,8 +33,11 @@
               图片 #{{ shortId(record.sourcePictureId) }}
             </router-link>
             <span>规则 {{ record.balanceVersion }}</span>
-            <span>营养 {{ record.nutritionMode }}</span>
-            <span v-if="record.contentUnderstood === false" class="demo-badge">未进行内容理解</span>
+            <span data-testid="growth-nutrition-label">{{ record.nutritionLabel || '图片营养' }}</span>
+            <span v-if="record.providerCode && record.modelCode">来源 {{ record.providerCode }} / {{ record.modelCode }}</span>
+            <span v-if="record.confidence != null">置信度 {{ Number(record.confidence).toFixed(2) }}</span>
+            <span v-if="record.contentUnderstood" class="visual-badge">已分析图片内容</span>
+            <span v-else class="demo-badge">未进行内容理解</span>
           </div>
         </div>
       </li>
@@ -98,6 +101,7 @@ function formatTime(value) {
 .event-meta { align-items: center; color: var(--gray-600); font-size: .7rem; }
 .event-meta a { color: var(--blue); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
 .demo-badge { padding: .2rem .4rem; border: 1px solid var(--red); color: var(--red); font-weight: 700; }
+.visual-badge { padding: .2rem .4rem; border: 1px solid #075d2a; color: #075d2a; font-weight: 700; }
 @media (max-width: 767px) {
   .timeline-card > header, .timeline-list { padding-inline: 1.25rem; }
   .timeline-list { grid-template-columns: 1fr; }

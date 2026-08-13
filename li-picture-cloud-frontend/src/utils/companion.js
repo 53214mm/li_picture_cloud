@@ -74,9 +74,3 @@ export function formatSignedDelta(value) {
   const amount = Number(value)
   return `${amount > 0 ? '+' : ''}${amount.toFixed(2)}`
 }
-
-export function nutritionModeLabel(mode) {
-  if (mode === 'METADATA_DETERMINISTIC') return '图片元数据营养（确定性）'
-  if (mode === 'DEMO_DETERMINISTIC') return '演示营养（确定性）'
-  return '图片营养'
-}

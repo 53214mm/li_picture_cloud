@@ -58,7 +58,8 @@ class CompanionFeedingCoordinatorTest {
         runRepository = mock(FeedingRunRepository.class);
         PictureNutritionAnalyzer analyzer = mock(PictureNutritionAnalyzer.class);
         CompanionBalance balance = CompanionBalance.v1();
-        CompanionViewAssembler assembler = new CompanionViewAssembler(balance, analyzer);
+        CompanionViewAssembler assembler = new CompanionViewAssembler(balance, analyzer,
+                new CompanionFeatureProperties());
         coordinator = new CompanionFeedingCoordinator(companionRepository, growthRepository, runRepository,
                 balance, assembler, Clock.fixed(NOW, ZoneOffset.UTC), new CompanionFeatureProperties());
     }
@@ -200,13 +201,53 @@ class CompanionFeedingCoordinatorTest {
     }
 
     @Test
+    void viewExposesAStableVisualLabelWithoutLeakingProviderSecrets() {
+        CompanionFeatureProperties properties = new CompanionFeatureProperties();
+        properties.setVisionProvider("dashscope");
+        properties.setVisionModel("qwen3.6-flash");
+        properties.setVisionDailyLimit(10);
+        PictureNutritionAnalyzer analyzer = mock(PictureNutritionAnalyzer.class);
+        CompanionViewAssembler views = new CompanionViewAssembler(CompanionBalance.v1(), analyzer, properties);
+        Companion companion = persistedCompanion();
+        GrowthRecord record = new GrowthRecord(31L, 41L, companion.id(), 102L,
+                com.li.lipicturecloud.domain.companion.GrowthEventType.PICTURE_FED, 42L,
+                TraitDelta.zero(), Map.of(), companion, "观察完成",
+                NutritionProvenance.visual("dashscope", "qwen3.6-flash", "companion-vision-v1",
+                        "visual-observation-v1", new BigDecimal("0.82")),
+                "life-core-v1", KEY, CORRELATION, NOW);
+
+        assertThat(views.growth(record))
+                .extracting("nutritionLabel", "providerCode", "modelCode", "confidence", "fallbackReasonCode")
+                .containsExactly("Qwen 视觉营养 · 已分析图片内容", "dashscope", "qwen3.6-flash",
+                        new BigDecimal("0.82"), null);
+    }
+
+    @Test
+    void viewExposesFallbackAsMetadataRatherThanVisualUnderstanding() {
+        PictureNutritionAnalyzer analyzer = mock(PictureNutritionAnalyzer.class);
+        CompanionViewAssembler views = new CompanionViewAssembler(CompanionBalance.v1(), analyzer,
+                new CompanionFeatureProperties());
+        Companion companion = persistedCompanion();
+        GrowthRecord record = new GrowthRecord(31L, 41L, companion.id(), 102L,
+                com.li.lipicturecloud.domain.companion.GrowthEventType.PICTURE_FED, 42L,
+                TraitDelta.zero(), Map.of(), companion, "元数据观察",
+                NutritionProvenance.metadataFallback("VISION_TIMEOUT"),
+                "life-core-v1", KEY, CORRELATION, NOW);
+
+        assertThat(views.growth(record))
+                .extracting("nutritionLabel", "contentUnderstood", "fallbackReasonCode")
+                .containsExactly("视觉服务暂不可用，本次使用图片元数据营养", false, "VISION_TIMEOUT");
+    }
+
+    @Test
     void completionReadsClockOnlyOnceForDailyBoundaryAndAuditTime() {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion, 102L);
         Clock singleUseClock = mock(Clock.class);
         when(singleUseClock.instant()).thenReturn(NOW);
         PictureNutritionAnalyzer analyzer = mock(PictureNutritionAnalyzer.class);
-        CompanionViewAssembler localAssembler = new CompanionViewAssembler(CompanionBalance.v1(), analyzer);
+        CompanionViewAssembler localAssembler = new CompanionViewAssembler(CompanionBalance.v1(), analyzer,
+                new CompanionFeatureProperties());
         CompanionFeedingCoordinator local = new CompanionFeedingCoordinator(companionRepository,
                 growthRepository, runRepository, CompanionBalance.v1(), localAssembler,
                 singleUseClock, new CompanionFeatureProperties());

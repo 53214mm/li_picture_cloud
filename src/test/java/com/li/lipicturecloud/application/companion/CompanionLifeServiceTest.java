@@ -66,7 +66,7 @@ class CompanionLifeServiceTest {
         when(analyzer.policy()).thenReturn(NutritionPolicy.DEMO_ONLY);
         when(analyzer.mode()).thenReturn(NutritionMode.DEMO_DETERMINISTIC);
         when(analyzer.contentUnderstood()).thenReturn(false);
-        assembler = new CompanionViewAssembler(CompanionBalance.v1(), analyzer);
+        assembler = new CompanionViewAssembler(CompanionBalance.v1(), analyzer, properties);
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:companion_life_service;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         service = new CompanionLifeService(companionRepository, growthRepository, coordinator,

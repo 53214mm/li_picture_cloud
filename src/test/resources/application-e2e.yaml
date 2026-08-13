@@ -24,7 +24,7 @@ app:
     enabled: true
     feeding-enabled: true
     processing-timeout: 5m
-    nutrition-mode: DEMO_DETERMINISTIC
+    nutrition-policy: DEMO_ONLY
 
 server:
   port: 18124

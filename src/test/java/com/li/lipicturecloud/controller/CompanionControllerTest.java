@@ -56,7 +56,7 @@ class CompanionControllerTest {
     @Test
     void currentReturnsAnExplicitEmptyHomeWithoutAutoAwakening() throws Exception {
         when(companionLife.home(subject)).thenReturn(new CompanionHomeView(null,
-                new NutritionStatusView("DEMO_DETERMINISTIC", false,
+                new NutritionStatusView("DEMO_ONLY", "internal", "demo-v1", 0,
                         "仅根据图片 ID 选择固定营养档案，未读取图片内容，也未调用视觉模型。"),
                 List.of()));
 
@@ -64,7 +64,7 @@ class CompanionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.companion").value(nullValue()))
-                .andExpect(jsonPath("$.data.nutrition.contentUnderstood").value(false));
+                .andExpect(jsonPath("$.data.nutrition.policy").value("DEMO_ONLY"));
         verify(companionLife).home(subject);
         verify(companionLife, never()).awaken(any());
     }
@@ -93,7 +93,7 @@ class CompanionControllerTest {
     @Test
     void awakenUsesTheSessionSubject() throws Exception {
         when(companionLife.awaken(subject)).thenReturn(new CompanionHomeView(null,
-                new NutritionStatusView("DEMO_DETERMINISTIC", false, "演示"), List.of()));
+                new NutritionStatusView("DEMO_ONLY", "internal", "demo-v1", 0, "演示"), List.of()));
 
         mockMvc.perform(post("/companion/awaken"))
                 .andExpect(status().isOk())
