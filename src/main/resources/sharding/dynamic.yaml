@@ -36,6 +36,8 @@ rules:
       - primary.companion_mood
       - primary.companion_relationship
       - primary.companion_memory
+      - primary.companion_chat_message
+      - primary.companion_chat_usage
     defaultDataSource: primary
 
 props:

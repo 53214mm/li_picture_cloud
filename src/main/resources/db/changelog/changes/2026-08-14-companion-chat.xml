@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <!--
+      MySQL auto-commits DDL. The per-changeSet preconditions below mark an object
+      as ran when it already exists with the expected columns, so a crash between
+      DDL and DATABASECHANGELOG can be recovered. The global guard refuses a name
+      collision with an incomplete legacy table.
+    -->
+    <preConditions onFail="HALT" onError="HALT">
+        <and>
+            <or>
+                <not><tableExists tableName="companion_chat_message"/></not>
+                <and>
+                    <columnExists tableName="companion_chat_message" columnName="id"/>
+                    <columnExists tableName="companion_chat_message" columnName="companionId"/>
+                    <columnExists tableName="companion_chat_message" columnName="subjectId"/>
+                    <columnExists tableName="companion_chat_message" columnName="role"/>
+                    <columnExists tableName="companion_chat_message" columnName="content"/>
+                    <columnExists tableName="companion_chat_message" columnName="modelProvider"/>
+                    <columnExists tableName="companion_chat_message" columnName="modelCode"/>
+                    <columnExists tableName="companion_chat_message" columnName="createTime"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="companion_chat_usage"/></not>
+                <and>
+                    <columnExists tableName="companion_chat_usage" columnName="id"/>
+                    <columnExists tableName="companion_chat_usage" columnName="subjectId"/>
+                    <columnExists tableName="companion_chat_usage" columnName="usageDate"/>
+                    <columnExists tableName="companion_chat_usage" columnName="attempts"/>
+                    <columnExists tableName="companion_chat_usage" columnName="revision"/>
+                    <columnExists tableName="companion_chat_usage" columnName="createTime"/>
+                    <columnExists tableName="companion_chat_usage" columnName="updateTime"/>
+                </and>
+            </or>
+        </and>
+    </preConditions>
+
+    <changeSet id="20260814-11" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion_chat_message"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion_chat_message (
+    id BIGINT PRIMARY KEY,
+    companionId BIGINT NOT NULL,
+    subjectId BIGINT NOT NULL,
+    role VARCHAR(24) NOT NULL,
+    content VARCHAR(2000) NOT NULL,
+    modelProvider VARCHAR(64) NULL,
+    modelCode VARCHAR(64) NULL,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion_chat_message"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260814-12" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_companion_chat_history"
+                              tableName="companion_chat_message"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_companion_chat_history
+    ON companion_chat_message (companionId, createTime, id);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_companion_chat_history"
+                       tableName="companion_chat_message"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260814-13" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion_chat_usage"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion_chat_usage (
+    id BIGINT PRIMARY KEY,
+    subjectId BIGINT NOT NULL,
+    usageDate DATE NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_companion_chat_usage UNIQUE (subjectId, usageDate),
+    CONSTRAINT ck_companion_chat_usage_attempts CHECK (attempts >= 0)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion_chat_usage"/></rollback>
+    </changeSet>
+</databaseChangeLog>

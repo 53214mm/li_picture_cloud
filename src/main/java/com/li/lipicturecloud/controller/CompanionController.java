@@ -1,24 +1,32 @@
 package com.li.lipicturecloud.controller;
 
 import com.li.lipicturecloud.annotation.AuthCheck;
+import com.li.lipicturecloud.annotation.RateLimit;
+import com.li.lipicturecloud.application.companion.CompanionChatService;
 import com.li.lipicturecloud.application.companion.CompanionLife;
 import com.li.lipicturecloud.application.companion.CompanionMemoryService;
 import com.li.lipicturecloud.application.companion.FeedPictureCommand;
+import com.li.lipicturecloud.application.companion.view.ChatHistoryView;
 import com.li.lipicturecloud.application.companion.view.CompanionHomeView;
 import com.li.lipicturecloud.application.companion.view.CompanionMemoryListView;
 import com.li.lipicturecloud.application.companion.view.CompanionMemoryView;
 import com.li.lipicturecloud.application.companion.view.FeedPictureResult;
 import com.li.lipicturecloud.common.BaseResponse;
 import com.li.lipicturecloud.common.ResultUtils;
+import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.exception.ThrowUtils;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
+import com.li.lipicturecloud.model.dto.companion.CompanionChatRequest;
 import com.li.lipicturecloud.model.dto.companion.CompanionFeedRequest;
 import com.li.lipicturecloud.model.dto.companion.CompanionMemoryCorrectRequest;
 import com.li.lipicturecloud.model.entity.User;
 import com.li.lipicturecloud.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -29,6 +37,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
 
 @RestController
 @RequestMapping(value = "/companion", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -40,14 +51,18 @@ import org.springframework.web.bind.annotation.RestController;
  */
 public class CompanionController {
 
+    private static final Logger log = LoggerFactory.getLogger(CompanionController.class);
+
     private final CompanionLife companionLife;
     private final CompanionMemoryService memoryService;
+    private final CompanionChatService chatService;
     private final UserService userService;
 
     public CompanionController(CompanionLife companionLife, CompanionMemoryService memoryService,
-                               UserService userService) {
+                               CompanionChatService chatService, UserService userService) {
         this.companionLife = companionLife;
         this.memoryService = memoryService;
+        this.chatService = chatService;
         this.userService = userService;
     }
 
@@ -110,6 +125,56 @@ public class CompanionController {
     public BaseResponse<CompanionMemoryView> deleteMemory(@PathVariable("id") long memoryId,
                                                           HttpServletRequest request) {
         return ResultUtils.success(memoryService.delete(subject(request), memoryId));
+    }
+
+    @GetMapping("/chat/history")
+    @AuthCheck
+    public BaseResponse<ChatHistoryView> chatHistory(@RequestParam(defaultValue = "50") int limit,
+                                                     HttpServletRequest request) {
+        return ResultUtils.success(chatService.history(subject(request), limit));
+    }
+
+    @RateLimit(maxRequests = 20, windowSeconds = 60, message = "伙伴对话请求过于频繁，请稍后再试")
+    @PostMapping("/chat/stream")
+    @AuthCheck
+    public SseEmitter chatStream(@RequestBody CompanionChatRequest body,
+                                 HttpServletRequest request,
+                                 HttpServletResponse response) {
+        ThrowUtils.throwIf(body == null || body.getMessage() == null || body.getMessage().isBlank(),
+                ErrorCode.PARAMS_ERROR, "请输入想对伙伴说的话");
+        response.setHeader("X-Accel-Buffering", "no");
+        SseEmitter emitter = new SseEmitter(300000L);
+        AuthorizationSubject subject = subject(request);
+        chatService.chat(subject, body.getMessage()).subscribe(
+                chunk -> {
+                    try {
+                        emitter.send(SseEmitter.event().data(chunk));
+                    } catch (IOException error) {
+                        log.warn("companion_chat_sse_send_failed subjectId={}", subject.userId());
+                        emitter.completeWithError(error);
+                    }
+                },
+                error -> {
+                    log.warn("companion_chat_stream_error subjectId={} exceptionType={}",
+                            subject.userId(), error.getClass().getName());
+                    try {
+                        emitter.send(SseEmitter.event().name("error")
+                                .data(error instanceof BusinessException business
+                                        ? business.getMessage() : "伙伴暂时没法回应，请稍后再试"));
+                        emitter.complete();
+                    } catch (IOException ignored) {
+                        emitter.completeWithError(error);
+                    }
+                },
+                () -> {
+                    try {
+                        emitter.send(SseEmitter.event().name("done").data(""));
+                        emitter.complete();
+                    } catch (IOException error) {
+                        log.warn("companion_chat_sse_done_failed subjectId={}", subject.userId());
+                    }
+                });
+        return emitter;
     }
 
     private AuthorizationSubject subject(HttpServletRequest request) {

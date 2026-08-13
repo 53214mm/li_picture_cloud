@@ -1,5 +1,6 @@
 package com.li.lipicturecloud.controller;
 
+import com.li.lipicturecloud.application.companion.CompanionChatService;
 import com.li.lipicturecloud.application.companion.CompanionLife;
 import com.li.lipicturecloud.application.companion.CompanionMemoryService;
 import com.li.lipicturecloud.application.companion.FeedPictureCommand;
@@ -37,6 +38,7 @@ class CompanionControllerTest {
     private MockMvc mockMvc;
     private CompanionLife companionLife;
     private CompanionMemoryService memoryService;
+    private CompanionChatService chatService;
     private UserService userService;
     private AuthorizationSubject subject;
 
@@ -44,13 +46,15 @@ class CompanionControllerTest {
     void setUp() {
         companionLife = mock(CompanionLife.class);
         memoryService = mock(CompanionMemoryService.class);
+        chatService = mock(CompanionChatService.class);
         userService = mock(UserService.class);
         User loginUser = new User();
         loginUser.setId(7L);
         when(userService.getLoginUserEntity(any(HttpServletRequest.class))).thenReturn(loginUser);
         when(userService.isAdmin(loginUser)).thenReturn(false);
         subject = AuthorizationSubject.user(7L);
-        CompanionController controller = new CompanionController(companionLife, memoryService, userService);
+        CompanionController controller = new CompanionController(companionLife, memoryService,
+                chatService, userService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

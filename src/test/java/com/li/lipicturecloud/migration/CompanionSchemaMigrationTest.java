@@ -30,6 +30,13 @@ class CompanionSchemaMigrationTest {
             update(dataSource);
             assertCompanionTables(dataSource, 1, 1);
             assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+
+            rollback(dataSource, chatChangeSetCount(dataSource));
+            // 对话 migration 全部回滚后，其余伙伴表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 0);
 
             rollback(dataSource, moodMemoryChangeSetCount(dataSource));
             // 情绪/关系/记忆 migration 全部回滚后，视觉与初始伙伴表不受影响。
@@ -45,10 +52,12 @@ class CompanionSchemaMigrationTest {
             rollback(dataSource);
             assertCompanionTables(dataSource, 0, 0);
             assertMoodRelationshipMemoryTables(dataSource, 0);
+            assertChatTables(dataSource, 0);
 
             update(dataSource);
             assertCompanionTables(dataSource, 1, 1);
             assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
         }
     }
 
@@ -307,9 +316,27 @@ class CompanionSchemaMigrationTest {
                 """, Integer.class);
     }
 
+    private static int chatChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-14-companion-chat.xml'
+                """, Integer.class);
+    }
+
     private static void assertMoodRelationshipMemoryTables(DataSource dataSource, int expectedTableCount) {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         for (String table : List.of("companion_mood", "companion_relationship", "companion_memory")) {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
+                    """, Integer.class, table);
+            assertThat(count).as(table).isEqualTo(expectedTableCount);
+        }
+    }
+
+    private static void assertChatTables(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        for (String table : List.of("companion_chat_message", "companion_chat_usage")) {
             Integer count = jdbcTemplate.queryForObject("""
                     SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
                     WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
