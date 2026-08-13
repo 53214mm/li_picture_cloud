@@ -99,6 +99,11 @@ public class CompanionChatService {
         return new ChatHistoryView(List.copyOf(records));
     }
 
+    /**
+     * 额度预占与用户消息落库同事务提交；流式回复在事务外异步产生，
+     * 模型失败不退还额度（防滥用设计），也不会留下半截回复。
+     */
+    @org.springframework.transaction.annotation.Transactional
     public Flux<String> chat(AuthorizationSubject subject, String message) {
         Objects.requireNonNull(subject, "subject");
         String normalized = validateMessage(message);

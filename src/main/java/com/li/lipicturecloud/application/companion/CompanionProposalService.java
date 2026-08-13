@@ -202,11 +202,26 @@ public class CompanionProposalService {
             return;
         }
         Companion after = locked.applyFeedback(penalty, balance);
-        if (!companionRepository.save(after, locked.revision())) {
-            log.warn("companion_scold_trait_conflict subjectId={}", subject.userId());
-        } else {
+        if (companionRepository.save(after, locked.revision())) {
             log.info("companion_scold_trait_applied subjectId={} curiosityDelta={}",
                     subject.userId(), penalty.curiosity());
+            return;
+        }
+        // 与并发喂养 CAS 竞争失败时重读并重试一次；仍失败才静默丢弃（下次敲打会再评估）。
+        Companion current = companionRepository.findByOwnerIdForUpdate(subject.userId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "请先唤醒伙伴"));
+        TraitDelta retriedPenalty = new TraitDelta(
+                balance.applyTrait(current.traits().curiosity(), new BigDecimal("-0.50")),
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+        if (retriedPenalty.curiosity().signum() == 0) {
+            return;
+        }
+        Companion retried = current.applyFeedback(retriedPenalty, balance);
+        if (companionRepository.save(retried, current.revision())) {
+            log.info("companion_scold_trait_applied subjectId={} curiosityDelta={} retried=true",
+                    subject.userId(), retriedPenalty.curiosity());
+        } else {
+            log.warn("companion_scold_trait_conflict subjectId={}", subject.userId());
         }
     }
 

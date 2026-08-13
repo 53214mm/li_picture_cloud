@@ -125,4 +125,57 @@ CREATE TABLE companion_proposal_reaction (
         ]]></sql>
         <rollback><dropTable tableName="companion_proposal_reaction"/></rollback>
     </changeSet>
+
+    <changeSet id="20260814-25" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_companion_reaction_scold"
+                              tableName="companion_proposal_reaction"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_companion_reaction_scold
+    ON companion_proposal_reaction (subjectId, reactionType, createTime);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_companion_reaction_scold"
+                       tableName="companion_proposal_reaction"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260814-26" author="li-picture-cloud">
+        <!--
+          PENDING 部分唯一约束的生成列：只有 PENDING 状态写入 companionId，
+          其余状态写入自身 id（天然唯一），保证"同一伙伴最多一条 PENDING"。
+          应用层已有伙伴行锁串行化，这里只做数据库兜底。
+        -->
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><columnExists tableName="companion_proposal" columnName="pendingGuard"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE companion_proposal
+    ADD COLUMN pendingGuard BIGINT AS (
+        CASE WHEN status = 'PENDING' THEN companionId ELSE id END
+    );
+        ]]></sql>
+        <rollback>
+            <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE companion_proposal DROP COLUMN pendingGuard;
+            ]]></sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260814-27" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="uk_companion_proposal_pending"
+                              tableName="companion_proposal"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE companion_proposal
+    ADD CONSTRAINT uk_companion_proposal_pending UNIQUE (pendingGuard);
+        ]]></sql>
+        <rollback>
+            <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE companion_proposal DROP CONSTRAINT uk_companion_proposal_pending;
+            ]]></sql>
+        </rollback>
+    </changeSet>
 </databaseChangeLog>
