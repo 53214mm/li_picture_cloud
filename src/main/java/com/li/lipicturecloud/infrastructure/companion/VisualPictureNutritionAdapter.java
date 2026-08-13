@@ -9,6 +9,7 @@ import com.li.lipicturecloud.application.companion.VisualObservationProvider;
 import com.li.lipicturecloud.application.companion.VisionQuotaGuard;
 import com.li.lipicturecloud.application.companion.VisionSafeFailure;
 import com.li.lipicturecloud.domain.companion.CompanionSkill;
+import com.li.lipicturecloud.domain.companion.MoodImpact;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
 import com.li.lipicturecloud.domain.companion.NutritionPolicy;
 import com.li.lipicturecloud.domain.companion.NutritionProvenance;
@@ -136,7 +137,35 @@ public final class VisualPictureNutritionAdapter implements PictureNutritionAnal
         return new PictureNutrition(experience, traits, Map.copyOf(skills),
                 candidate.companionMessage(),
                 NutritionProvenance.visual(visual.providerCode(), visual.modelCode(), visual.promptVersion(),
-                        visual.resultSchemaVersion(), candidate.confidence()));
+                        visual.resultSchemaVersion(), candidate.confidence()),
+                moodImpact(candidate), candidate.companionMessage());
+    }
+
+    /**
+     * 把视觉候选的情绪线索映射成伙伴情绪影响；数值仍只是候选，最终由 {@code CompanionMoodRules} 截断。
+     */
+    private static MoodImpact moodImpact(VisualObservationCandidate candidate) {
+        BigDecimal energy = decimal("2.00").multiply(BigDecimal.valueOf(candidate.energy()));
+        BigDecimal joy = switch (candidate.mood()) {
+            case JOYFUL -> decimal("8.00");
+            case CALM -> decimal("3.00");
+            case MELANCHOLIC -> decimal("-5.00");
+            default -> BigDecimal.ZERO;
+        };
+        BigDecimal loneliness = switch (candidate.mood()) {
+            case JOYFUL -> decimal("-4.00");
+            case MELANCHOLIC -> decimal("7.00");
+            default -> BigDecimal.ZERO;
+        };
+        BigDecimal irritation = switch (candidate.mood()) {
+            case CALM -> decimal("-5.00");
+            case TENSE -> decimal("7.00");
+            default -> BigDecimal.ZERO;
+        };
+        BigDecimal energyFromTense = candidate.mood() == VisualObservationCandidate.Mood.TENSE
+                ? decimal("-4.00") : BigDecimal.ZERO;
+        return new MoodImpact(energy.add(energyFromTense), joy, loneliness,
+                decimal("2.00").multiply(BigDecimal.valueOf(candidate.creativity())), irritation);
     }
 
     private PictureNutrition metadataFallback(AuthorizedPictureRef picture, String safeCode) {
@@ -144,7 +173,8 @@ public final class VisualPictureNutritionAdapter implements PictureNutritionAnal
         return new PictureNutrition(metadataNutrition.requestedLifeExperience(), metadataNutrition.requestedTraitDelta(),
                 metadataNutrition.requestedSkillExperience(),
                 "视觉服务暂不可用，本次使用图片元数据营养。",
-                NutritionProvenance.metadataFallback(safeCode));
+                NutritionProvenance.metadataFallback(safeCode),
+                metadataNutrition.requestedMoodImpact(), null);
     }
 
     private static BigDecimal decimal(String value) {

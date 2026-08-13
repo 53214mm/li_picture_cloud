@@ -5,8 +5,10 @@ import com.li.lipicturecloud.application.companion.PictureNutritionAnalyzer;
 import com.li.lipicturecloud.application.companion.PictureObservation;
 import com.li.lipicturecloud.application.companion.PictureObservationProvider;
 import com.li.lipicturecloud.domain.companion.CompanionSkill;
+import com.li.lipicturecloud.domain.companion.MoodImpact;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
 import com.li.lipicturecloud.domain.companion.NutritionPolicy;
+import com.li.lipicturecloud.domain.companion.NutritionProvenance;
 import com.li.lipicturecloud.domain.companion.PictureNutrition;
 import com.li.lipicturecloud.domain.companion.TraitDelta;
 
@@ -85,8 +87,16 @@ public class MetadataPictureNutritionAdapter implements PictureNutritionAnalyzer
                 decimal("0.10"), decimal("0.00"),
                 decimal(observation.hasDescription() ? "0.15" : "0.00"),
                 decimal(observation.hasDescription() || observation.hasCategory() ? "0.35" : "0.05"));
-        return PictureNutrition.fromObservation(experience, traits, Map.copyOf(skills),
-                "伙伴从图片元数据中获得了基础营养；未分析图片像素或理解具体内容。");
+        MoodImpact moodImpact = new MoodImpact(
+                observation.sizeBytes() != null && observation.sizeBytes() >= 4L * 1024 * 1024
+                        ? decimal("2.00") : BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO,
+                (observation.hasDescription() ? decimal("2.00") : BigDecimal.ZERO)
+                        .add(observation.hasCategory() ? decimal("3.00") : BigDecimal.ZERO),
+                BigDecimal.ZERO);
+        return new PictureNutrition(experience, traits, Map.copyOf(skills),
+                "伙伴从图片元数据中获得了基础营养；未分析图片像素或理解具体内容。",
+                NutritionProvenance.metadata(), moodImpact, null);
     }
 
     private static BigDecimal decimal(String value) {

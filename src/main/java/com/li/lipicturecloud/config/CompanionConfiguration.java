@@ -29,6 +29,16 @@ public class CompanionConfiguration {
     }
 
     @Bean
+    public com.li.lipicturecloud.domain.companion.CompanionMoodRules companionMoodRules() {
+        return com.li.lipicturecloud.domain.companion.CompanionMoodRules.v1();
+    }
+
+    @Bean
+    public com.li.lipicturecloud.domain.companion.CompanionRelationshipRules companionRelationshipRules() {
+        return com.li.lipicturecloud.domain.companion.CompanionRelationshipRules.v1();
+    }
+
+    @Bean
     public Clock companionClock() {
         // 所有时间规则从这里获得时间，避免业务代码直接调用 Instant.now() 而难以复现边界测试。
         return Clock.systemUTC();

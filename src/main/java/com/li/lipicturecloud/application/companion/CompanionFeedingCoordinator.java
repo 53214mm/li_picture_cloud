@@ -4,17 +4,29 @@ import com.li.lipicturecloud.application.companion.view.FeedPictureResult;
 import com.li.lipicturecloud.config.CompanionFeatureProperties;
 import com.li.lipicturecloud.domain.companion.Companion;
 import com.li.lipicturecloud.domain.companion.CompanionBalance;
+import com.li.lipicturecloud.domain.companion.CompanionMemory;
+import com.li.lipicturecloud.domain.companion.CompanionMemoryRepository;
+import com.li.lipicturecloud.domain.companion.CompanionMood;
+import com.li.lipicturecloud.domain.companion.CompanionMoodRepository;
+import com.li.lipicturecloud.domain.companion.CompanionMoodRules;
+import com.li.lipicturecloud.domain.companion.CompanionRelationship;
+import com.li.lipicturecloud.domain.companion.CompanionRelationshipRepository;
+import com.li.lipicturecloud.domain.companion.CompanionRelationshipRules;
 import com.li.lipicturecloud.domain.companion.CompanionRepository;
 import com.li.lipicturecloud.domain.companion.FeedingContext;
 import com.li.lipicturecloud.domain.companion.FeedingGrowth;
 import com.li.lipicturecloud.domain.companion.FeedingRun;
 import com.li.lipicturecloud.domain.companion.FeedingRunRepository;
 import com.li.lipicturecloud.domain.companion.FeedingRunStatus;
+import com.li.lipicturecloud.domain.companion.GrowthEventType;
 import com.li.lipicturecloud.domain.companion.GrowthRecord;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
+import com.li.lipicturecloud.domain.companion.MemorySourceType;
+import com.li.lipicturecloud.domain.companion.MoodImpact;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
 import com.li.lipicturecloud.domain.companion.NutritionPolicy;
 import com.li.lipicturecloud.domain.companion.PictureNutrition;
+import com.li.lipicturecloud.domain.companion.RelationshipImpact;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
@@ -23,6 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
@@ -41,7 +54,12 @@ public class CompanionFeedingCoordinator {
     private final CompanionRepository companionRepository;
     private final GrowthRecordRepository growthRepository;
     private final FeedingRunRepository runRepository;
+    private final CompanionMoodRepository moodRepository;
+    private final CompanionRelationshipRepository relationshipRepository;
+    private final CompanionMemoryRepository memoryRepository;
     private final CompanionBalance balance;
+    private final CompanionMoodRules moodRules;
+    private final CompanionRelationshipRules relationshipRules;
     private final CompanionViewAssembler assembler;
     private final Clock clock;
     private final CompanionFeatureProperties properties;
@@ -49,14 +67,24 @@ public class CompanionFeedingCoordinator {
     public CompanionFeedingCoordinator(CompanionRepository companionRepository,
                                        GrowthRecordRepository growthRepository,
                                        FeedingRunRepository runRepository,
+                                       CompanionMoodRepository moodRepository,
+                                       CompanionRelationshipRepository relationshipRepository,
+                                       CompanionMemoryRepository memoryRepository,
                                        CompanionBalance balance,
+                                       CompanionMoodRules moodRules,
+                                       CompanionRelationshipRules relationshipRules,
                                        CompanionViewAssembler assembler,
                                        Clock clock,
                                        CompanionFeatureProperties properties) {
         this.companionRepository = companionRepository;
         this.growthRepository = growthRepository;
         this.runRepository = runRepository;
+        this.moodRepository = moodRepository;
+        this.relationshipRepository = relationshipRepository;
+        this.memoryRepository = memoryRepository;
         this.balance = balance;
+        this.moodRules = moodRules;
+        this.relationshipRules = relationshipRules;
         this.assembler = assembler;
         this.clock = clock;
         this.properties = properties;
@@ -136,11 +164,61 @@ public class CompanionFeedingCoordinator {
         GrowthRecord record = growthRepository.append(GrowthRecord.from(run.id(), locked.id(), run.pictureId(),
                 growth, nutrition.provenance(), run.idempotencyKey(),
                 run.correlationId(), now));
+        // 情绪、关系与记忆候选与成长在同一事务内原子提交：任何一步失败都整体回滚，重试保持幂等。
+        applyMood(locked, nutrition, now);
+        applyRelationship(locked, growth, now);
+        appendMemoryCandidate(locked, record, growth, nutrition, now);
         // run 也要 CAS：失败会让整个事务回滚，避免伙伴成长了却没有可重放的完成回执。
         if (!runRepository.complete(run.id(), run.revision(), record.id(), now)) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "喂养运行状态已变化，请重试");
         }
         return assembler.feedResult(record);
+    }
+
+    private void applyMood(Companion locked, PictureNutrition nutrition, Instant now) {
+        MoodImpact impact = nutrition.requestedMoodImpact();
+        if (impact == null || impact.isZero()) {
+            return;
+        }
+        CompanionMood mood = moodRepository.findByCompanionId(locked.id())
+                .orElseGet(() -> CompanionMood.neutral(locked.id(), now));
+        // apply 内部先按经过时间衰减再叠加影响，一次写入只推进一个 revision。
+        CompanionMood after = mood.apply(impact, now, moodRules);
+        if (mood.id() == null) {
+            moodRepository.insert(after);
+            return;
+        }
+        if (!moodRepository.save(after, mood.revision())) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "伙伴情绪状态已变化，请重试");
+        }
+    }
+
+    private void applyRelationship(Companion locked, FeedingGrowth growth, Instant now) {
+        RelationshipImpact impact = growth.eventType() == GrowthEventType.PICTURE_FED
+                ? relationshipRules.fullFeedImpact() : relationshipRules.revisitImpact();
+        CompanionRelationship relationship = relationshipRepository
+                .findByCompanionAndSubject(locked.id(), locked.ownerId())
+                .orElseGet(() -> relationshipRepository.createIfAbsent(locked.id(), locked.ownerId()));
+        CompanionRelationship after = relationship.apply(impact, relationshipRules);
+        if (!relationshipRepository.save(after, relationship.revision())) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "伙伴关系状态已变化，请重试");
+        }
+    }
+
+    private void appendMemoryCandidate(Companion locked, GrowthRecord record, FeedingGrowth growth,
+                                       PictureNutrition nutrition, Instant now) {
+        if (growth.eventType() != GrowthEventType.PICTURE_FED || !nutrition.hasMemorySeed()) {
+            return;
+        }
+        MemorySourceType sourceType = switch (nutrition.provenance().actualMode()) {
+            case VISUAL_MODEL -> MemorySourceType.VISUAL;
+            case DEMO_DETERMINISTIC -> MemorySourceType.DEMO;
+            default -> throw new IllegalStateException("记忆种子只能来自视觉理解或演示营养");
+        };
+        BigDecimal confidence = nutrition.provenance().confidence() == null
+                ? new BigDecimal("0.50") : nutrition.provenance().confidence();
+        memoryRepository.append(CompanionMemory.candidate(locked.id(), locked.ownerId(),
+                record.pictureId(), record.id(), sourceType, nutrition.memorySeed(), confidence, now));
     }
 
     private FeedReservation existingReservation(FeedingRun run, long pictureId, String fingerprint,
