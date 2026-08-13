@@ -1,5 +1,6 @@
 package com.li.lipicturecloud.config;
 
+import com.li.lipicturecloud.domain.companion.NutritionMode;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -18,4 +19,5 @@ public class CompanionFeatureProperties {
     private boolean enabled = true;
     private boolean feedingEnabled = true;
     private Duration processingTimeout = Duration.ofMinutes(5);
+    private NutritionMode nutritionMode = NutritionMode.METADATA_DETERMINISTIC;
 }

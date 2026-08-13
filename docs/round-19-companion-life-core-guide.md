@@ -6,14 +6,18 @@
 
 一次成功喂养会由后端统一计算并保存生命经验、等级、生命阶段、五条人格倾向、技能熟练度和成长历史。页面只展示服务端结果，不自行计算成长。重复使用同一个请求键只会重放第一次结果；同一图片换新键再次喂养只获得少量熟悉感。
 
-## 演示营养不是视觉 AI
+## 图片营养与内容理解边界
 
-当前 `DemoPictureNutritionAdapter` 只根据图片 ID 选择固定、可重复的营养档案：它不下载图片，不读取图片字节或内容，也不调用视觉模型。所有 feeding run 和成长历史都会持久化：
+当前支持两种确定性营养模式：
 
-- `nutritionMode=DEMO_DETERMINISTIC`
+- `METADATA_DETERMINISTIC`：默认模式。读取图片尺寸、格式、大小，以及“是否填写简介/分类”这些状态；不保存或传播原始文字，不读取像素，不调用视觉模型。
+- `DEMO_DETERMINISTIC`：测试和 E2E 模式。只根据图片 ID 选择固定档案，不读取任何图片信息。
+
+所有 feeding run 和成长历史都会持久化实际模式。当前两种模式均为：
+
 - `contentUnderstood=false`
 
-前端会持续显示“演示营养（确定性）”和“未进行内容理解”。这既是产品说明，也是审计边界。不要把当前效果宣传为 AI 看懂了图片。
+前端会按模式显示“图片元数据营养（确定性）”或“演示营养（确定性）”，并持续显示“未进行图片内容理解”。不要把当前效果宣传为 AI 看懂了图片。
 
 ## 本地体验
 
@@ -34,6 +38,7 @@
 | `COMPANION_ENABLED` | `false`（生产） | 注册伙伴后端服务与接口 |
 | `COMPANION_FEEDING_ENABLED` | `false`（生产） | 允许执行喂养 |
 | `COMPANION_PROCESSING_TIMEOUT` | `5m` | PROCESSING run 可被安全接管前的超时 |
+| `COMPANION_NUTRITION_MODE` | `METADATA_DETERMINISTIC` | 图片营养模式；测试可设为 `DEMO_DETERMINISTIC` |
 | `VITE_COMPANION_ENABLED` | `false` | 构建时加入前端路由、导航和懒加载页面 |
 
 生产环境必须同时开启前端与后端开关。`VITE_COMPANION_ENABLED` 是构建时变量，修改后必须重新构建 web 镜像；只重启容器不会改变前端产物。默认生产构建和 Compose 均关闭此功能。
@@ -99,8 +104,8 @@ npm run test:e2e
 
 ## 明确未包含
 
-本轮没有实现真实视觉理解、长期记忆、主动行为、主动剧情、模型/MCP 控制中心、图片生成/融合、用户自带 token、平台额度、订阅/支付或极端属性剧情。现有技能码只是未来能力的扩展位，本轮不会调用这些能力。
+本轮没有实现真实视觉理解、长期记忆、主动行为、主动剧情、模型/MCP 控制中心、图片生成/融合、用户自带 token、平台额度、订阅/支付或极端属性剧情。元数据营养是视觉模型之前的基础层；现有技能码仍只是未来能力的扩展位。
 
 ## 生产发布警告
 
-不要把演示适配器公开宣传为 AI 图片理解。接入真实 Provider 前，仍需单独完成模型输出不可信校验、图片二次授权、凭证加密与撤销、隐私/数据保留策略、成本硬上限、CORS/来源控制，以及真实 MySQL、Redis、对象存储和更广泛浏览器 E2E。生产冷启动与人工签字流程见[代码复审与人工验收手册](reviews/2026-08-13-companion-life-core-review-and-manual-checklist.md)。
+不要把元数据或演示适配器公开宣传为 AI 图片理解。接入真实 Provider 前，仍需单独完成模型输出不可信校验、图片二次授权、凭证加密与撤销、隐私/数据保留策略、成本硬上限、CORS/来源控制，以及真实 MySQL、Redis、对象存储和更广泛浏览器 E2E。下一阶段边界见[伙伴图片观察基础层设计](superpowers/specs/2026-08-13-companion-vision-foundation-design.md)，生产冷启动与人工签字流程见[代码复审与人工验收手册](reviews/2026-08-13-companion-life-core-review-and-manual-checklist.md)。

@@ -7,7 +7,8 @@ import {
   describeTrait,
   selectOldestPrivateSpace,
   shouldRetrySameFeedKey,
-  traitPosition
+  traitPosition,
+  nutritionModeLabel
 } from '../src/utils/companion.js'
 import {
   createAuthSessionGate,
@@ -22,6 +23,12 @@ test('keeps one idempotency key through ambiguous retries', () => {
   assert.deepEqual(first, { pictureId: '102', idempotencyKey: 'feed-key-0000001' })
   assert.equal(retry, first)
   assert.equal(changed.idempotencyKey, 'feed-key-0000003')
+})
+
+test('labels disclosed nutrition modes without claiming metadata is visual understanding', () => {
+  assert.equal(nutritionModeLabel('DEMO_DETERMINISTIC'), '演示营养（确定性）')
+  assert.equal(nutritionModeLabel('METADATA_DETERMINISTIC'), '图片元数据营养（确定性）')
+  assert.equal(nutritionModeLabel('FUTURE_PROVIDER'), '图片营养')
 })
 
 test('applies the server result once and de-duplicates history', () => {

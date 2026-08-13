@@ -49,6 +49,7 @@ app:
     enabled: true
     feeding-enabled: true
     processing-timeout: 5m
+    nutrition-mode: DEMO_DETERMINISTIC
   mcp:
     enabled: false
   collaboration:

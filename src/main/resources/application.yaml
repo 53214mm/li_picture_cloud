@@ -81,6 +81,7 @@ app:
     enabled: ${COMPANION_ENABLED:true}
     feeding-enabled: ${COMPANION_FEEDING_ENABLED:true}
     processing-timeout: ${COMPANION_PROCESSING_TIMEOUT:5m}
+    nutrition-mode: ${COMPANION_NUTRITION_MODE:METADATA_DETERMINISTIC}
   collaboration:
     store: ${COLLABORATION_STORE:redis}
     state-ttl: ${COLLABORATION_STATE_TTL:24h}

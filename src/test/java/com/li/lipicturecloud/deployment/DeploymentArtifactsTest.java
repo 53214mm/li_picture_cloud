@@ -40,7 +40,8 @@ class DeploymentArtifactsTest {
                 "api-key: ${DASHSCOPE_API_KEY}",
                 "api-key: ${QIANFAN_API_KEY}",
                 "Bearer: ${QIANFAN_BEARER_TOKEN}",
-                "api-key: ${MXAI_API_KEY}");
+                "api-key: ${MXAI_API_KEY}",
+                "nutrition-mode: ${COMPANION_NUTRITION_MODE}");
     }
 
     @Test
@@ -96,11 +97,13 @@ class DeploymentArtifactsTest {
                 "COMPANION_ENABLED: ${COMPANION_ENABLED:-false}",
                 "COMPANION_FEEDING_ENABLED: ${COMPANION_FEEDING_ENABLED:-false}",
                 "COMPANION_PROCESSING_TIMEOUT: ${COMPANION_PROCESSING_TIMEOUT:-5m}",
+                "COMPANION_NUTRITION_MODE: ${COMPANION_NUTRITION_MODE:?COMPANION_NUTRITION_MODE is required}",
                 "VITE_COMPANION_ENABLED: ${VITE_COMPANION_ENABLED:-false}");
         assertThat(environment).contains(
                 "COMPANION_ENABLED=false",
                 "COMPANION_FEEDING_ENABLED=false",
                 "COMPANION_PROCESSING_TIMEOUT=5m",
+                "COMPANION_NUTRITION_MODE=METADATA_DETERMINISTIC",
                 "VITE_COMPANION_ENABLED=false");
     }
 

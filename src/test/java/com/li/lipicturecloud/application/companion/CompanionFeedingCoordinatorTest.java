@@ -110,6 +110,37 @@ class CompanionFeedingCoordinatorTest {
     }
 
     @Test
+    void analysisProvenanceMustMatchTheModeBoundToTheRun() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = processingRun(companion, 102L);
+        PictureNutrition metadata = PictureNutrition.fromObservation(
+                40L, TraitDelta.zero(), Map.of(), "元数据营养");
+
+        assertThatThrownBy(() -> coordinator.complete(run, metadata))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("图片营养模式与喂养运行不一致");
+
+        verify(companionRepository, never()).findByOwnerIdForUpdate(any(Long.class));
+        verify(growthRepository, never()).append(any());
+    }
+
+    @Test
+    void failedRunCannotRestartUnderADifferentAnalyzerMode() {
+        Companion companion = persistedCompanion();
+        FeedingRun failed = processingRun(companion, 102L)
+                .failed("NUTRITION_FAILED", "分析失败", NOW.plusSeconds(1));
+        when(runRepository.findByKey(companion.id(), KEY)).thenReturn(Optional.of(failed));
+
+        assertThatThrownBy(() -> coordinator.reserve(companion, AuthorizationSubject.user(7L), 102L,
+                KEY, fingerprint(102L), CORRELATION, NutritionMode.METADATA_DETERMINISTIC, false))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode(), Throwable::getMessage)
+                .containsExactly(ErrorCode.PARAMS_ERROR.getCode(), "图片营养模式已变化，请重新发起喂养");
+
+        verify(runRepository, never()).restart(any(Long.class), any(Long.class), any());
+    }
+
+    @Test
     void completionReadsClockOnlyOnceForDailyBoundaryAndAuditTime() {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion, 102L);

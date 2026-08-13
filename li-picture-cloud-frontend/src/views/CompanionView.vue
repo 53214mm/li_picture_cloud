@@ -57,7 +57,7 @@
 
         <section class="nutrition-banner" aria-label="当前图片营养分析模式">
           <div>
-            <span class="nutrition-label">演示营养（确定性）</span>
+            <span class="nutrition-label">{{ nutritionModeLabel(home.nutrition?.mode) }}</span>
             <strong>{{ home.nutrition?.contentUnderstood ? '已进行图片内容理解' : '未进行图片内容理解' }}</strong>
           </div>
           <p>{{ home.nutrition?.notice }}</p>
@@ -129,6 +129,7 @@ import {
   applyFeedResult,
   beginFeedAttempt,
   buildCompanionPictureQuery,
+  nutritionModeLabel,
   selectOldestPrivateSpace,
   shouldRetrySameFeedKey
 } from '@/utils/companion'

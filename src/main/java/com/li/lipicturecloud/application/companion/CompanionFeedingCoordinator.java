@@ -79,7 +79,7 @@ public class CompanionFeedingCoordinator {
                 }
             }
         }
-        return existingReservation(found.orElseThrow(), pictureId, fingerprint);
+        return existingReservation(found.orElseThrow(), pictureId, fingerprint, mode, contentUnderstood);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -95,6 +95,10 @@ public class CompanionFeedingCoordinator {
     @Transactional(rollbackFor = Exception.class)
     public FeedPictureResult complete(FeedingRun run, PictureNutrition nutrition) {
         Objects.requireNonNull(nutrition, "nutrition");
+        if (nutrition.nutritionMode() != run.nutritionMode()
+                || nutrition.contentUnderstood() != run.contentUnderstood()) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "图片营养模式与喂养运行不一致");
+        }
         // 对同一伙伴加行锁，令不同图片的并发喂养也按顺序结算每日上限与重复图片规则。
         Companion locked = companionRepository.findByOwnerIdForUpdate(run.subjectId())
                 .filter(value -> Objects.equals(value.id(), run.companionId()))
@@ -118,7 +122,9 @@ public class CompanionFeedingCoordinator {
         return assembler.feedResult(record);
     }
 
-    private FeedReservation existingReservation(FeedingRun run, long pictureId, String fingerprint) {
+    private FeedReservation existingReservation(FeedingRun run, long pictureId, String fingerprint,
+                                                NutritionMode requestedMode,
+                                                boolean requestedContentUnderstood) {
         if (run.pictureId() != pictureId || !run.requestFingerprint().equals(fingerprint)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "幂等键已用于另一张图片");
         }
@@ -137,12 +143,17 @@ public class CompanionFeedingCoordinator {
         if (!restart) {
             return FeedReservation.inProgress(run);
         }
+        if (run.nutritionMode() != requestedMode
+                || run.contentUnderstood() != requestedContentUnderstood) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "图片营养模式已变化，请重新发起喂养");
+        }
         if (runRepository.restart(run.id(), run.revision(), now)) {
             return FeedReservation.started(run.restarted(now));
         }
         FeedingRun current = runRepository.findByKey(run.companionId(), run.idempotencyKey())
                 .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_ERROR, "喂养运行状态已变化，请重试"));
-        return existingReservation(current, pictureId, fingerprint);
+        return existingReservation(current, pictureId, fingerprint,
+                requestedMode, requestedContentUnderstood);
     }
 
     private void transitionTerminal(FeedingRun run, String safeCode, String safeMessage, boolean reject) {

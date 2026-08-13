@@ -60,9 +60,9 @@ class DomainValidationTest {
         Map<CompanionSkill, Long> negative = new HashMap<>();
         negative.put(CompanionSkill.EMOJI_CREATION, -1L);
 
-        assertThatThrownBy(() -> new PictureNutrition(1L, TraitDelta.zero(), nullKey, "picture"))
+        assertThatThrownBy(() -> PictureNutrition.demo(1L, TraitDelta.zero(), nullKey, "picture"))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new PictureNutrition(1L, TraitDelta.zero(), nullValue, "picture"))
+        assertThatThrownBy(() -> PictureNutrition.demo(1L, TraitDelta.zero(), nullValue, "picture"))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new FeedingGrowth(companion(), GrowthEventType.PICTURE_FED, 0L,
                 TraitDelta.zero(), negative, "growth", "life-core-v1"))

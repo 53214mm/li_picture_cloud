@@ -12,6 +12,7 @@ import com.li.lipicturecloud.domain.companion.CompanionSkill;
 import com.li.lipicturecloud.domain.companion.CompanionTraits;
 import com.li.lipicturecloud.domain.companion.GrowthEventType;
 import com.li.lipicturecloud.domain.companion.GrowthRecord;
+import com.li.lipicturecloud.domain.companion.NutritionMode;
 import com.li.lipicturecloud.domain.companion.TraitDelta;
 import org.springframework.stereotype.Component;
 
@@ -20,11 +21,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-@Component
 /**
  * 将领域对象转换成稳定的前端视图。
  * 规则名称、技能枚举和演示模式的披露都在这里收口，避免控制器泄漏持久化字段。
  */
+@Component
 public class CompanionViewAssembler {
 
     private final CompanionBalance balance;
@@ -63,9 +64,18 @@ public class CompanionViewAssembler {
     }
 
     public NutritionStatusView nutritionStatus() {
-        // 演示分析的限制是产品事实，必须随主页响应返回，不能只写在开发文档里。
+        // 图片分析的能力边界是产品事实，必须随主页响应返回，不能只写在开发文档里。
         return new NutritionStatusView(analyzer.mode().name(), analyzer.contentUnderstood(),
-                "仅根据图片 ID 选择固定营养档案，未读取图片内容，也未调用视觉模型。");
+                nutritionNotice(analyzer.mode()));
+    }
+
+    private String nutritionNotice(NutritionMode mode) {
+        return switch (mode) {
+            case DEMO_DETERMINISTIC -> "仅根据图片 ID 选择固定营养档案，未读取图片内容，也未调用视觉模型。";
+            case METADATA_DETERMINISTIC ->
+                    "根据尺寸、格式、大小和图库文字状态生成基础营养；未读取图片像素，也未调用视觉模型。"
+                            + "你填写的原文不会进入伙伴成长记录。";
+        };
     }
 
     private CompanionTraitsView traits(CompanionTraits value) {

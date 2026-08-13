@@ -28,7 +28,7 @@ class CompanionTest {
     @Test
     void appliesFullNutritionThroughBalanceCaps() {
         Companion companion = Companion.awaken(7L, balance).persistedAs(11L);
-        PictureNutrition nutrition = new PictureNutrition(
+        PictureNutrition nutrition = PictureNutrition.demo(
                 200L,
                 new TraitDelta(bd("5"), bd("0.4"), bd("0"), bd("0.2"), bd("0.3")),
                 Map.of(CompanionSkill.IMAGE_OBSERVATION, 80L),
@@ -158,12 +158,14 @@ class CompanionTest {
                 BigDecimal.ZERO, BigDecimal.ZERO)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new CompanionTraits(null, BigDecimal.ZERO, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO)).isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new PictureNutrition(1L, TraitDelta.zero(),
+        assertThatThrownBy(() -> PictureNutrition.demo(1L, TraitDelta.zero(),
                 Map.of(CompanionSkill.IMAGE_FUSION, -1L), "invalid"))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new PictureNutrition(1L, TraitDelta.zero(), null, "invalid"))
+        assertThatThrownBy(() -> PictureNutrition.demo(1L, TraitDelta.zero(), null, "invalid"))
                 .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new PictureNutrition(1L, TraitDelta.zero(), Map.of(), null))
+        assertThatThrownBy(() -> PictureNutrition.demo(1L, TraitDelta.zero(), Map.of(), null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new PictureNutrition(1L, TraitDelta.zero(), Map.of(), "invalid", null, false))
                 .isInstanceOf(NullPointerException.class);
     }
 
