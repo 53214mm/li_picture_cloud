@@ -194,10 +194,18 @@ public class CompanionFeedingCoordinator {
         // apply 内部先按经过时间衰减再叠加影响，一次写入只推进一个 revision。
         CompanionMood after = mood.apply(impact, now, moodRules);
         if (mood.id() == null) {
+            // 伙伴行锁已串行化同伙伴的并发喂养，此分支只是防御性插入。
             moodRepository.insert(after);
             return;
         }
-        if (!moodRepository.save(after, mood.revision())) {
+        if (moodRepository.save(after, mood.revision())) {
+            return;
+        }
+        // 与主页惰性衰减写回竞争失败时，重读最新值并重试一次；仍失败才让喂养整体回滚。
+        CompanionMood current = moodRepository.findByCompanionId(locked.id())
+                .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_ERROR, "伙伴情绪状态已变化，请重试"));
+        CompanionMood retried = current.apply(impact, now, moodRules);
+        if (!moodRepository.save(retried, current.revision())) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "伙伴情绪状态已变化，请重试");
         }
     }

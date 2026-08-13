@@ -10,6 +10,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.util.Date;
 import java.util.Objects;
 import java.util.Optional;
@@ -18,9 +19,12 @@ import java.util.Optional;
 public class MybatisCompanionRelationshipRepository implements CompanionRelationshipRepository {
 
     private final CompanionRelationshipMapper relationshipMapper;
+    private final Clock clock;
 
-    public MybatisCompanionRelationshipRepository(CompanionRelationshipMapper relationshipMapper) {
+    public MybatisCompanionRelationshipRepository(CompanionRelationshipMapper relationshipMapper,
+                                                  Clock clock) {
         this.relationshipMapper = relationshipMapper;
+        this.clock = clock;
     }
 
     @Override
@@ -66,7 +70,7 @@ public class MybatisCompanionRelationshipRepository implements CompanionRelation
                 .set("tacit", after.tacit())
                 .set("recentFeedback", after.recentFeedback())
                 .set("revision", after.revision())
-                .set("updateTime", new Date());
+                .set("updateTime", Date.from(clock.instant()));
         return relationshipMapper.update(null, update) == 1;
     }
 
@@ -89,7 +93,7 @@ public class MybatisCompanionRelationshipRepository implements CompanionRelation
         row.setRecentFeedback(relationship.recentFeedback());
         row.setRevision(relationship.revision());
         // 显式对齐创建与更新时间，避免数据库默认时钟与 JVM 时钟的微小偏差。
-        Date now = new Date();
+        Date now = Date.from(clock.instant());
         row.setCreateTime(now);
         row.setUpdateTime(now);
         return row;

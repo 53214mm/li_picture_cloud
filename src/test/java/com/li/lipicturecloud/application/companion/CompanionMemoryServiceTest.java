@@ -143,6 +143,22 @@ class CompanionMemoryServiceTest {
     }
 
     @Test
+    void transitionRejectsMemoryWhoseSourcePictureWasRevoked() {
+        Companion companion = persistedCompanion();
+        CompanionMemory memory = candidate(companion, 31L, 101L);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(memoryRepository.findById(31L)).thenReturn(Optional.of(memory));
+        doThrow(new BusinessException(ErrorCode.NO_AUTH_ERROR, "缺少权限"))
+                .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+
+        assertThatThrownBy(() -> service.confirm(subject, 31L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode())
+                .isEqualTo(ErrorCode.NOT_FOUND_ERROR.getCode());
+        verify(memoryRepository, never()).save(any(), anyLong());
+    }
+
+    @Test
     void infrastructureAuthorizationFailureDoesNotInvalidateMemories() {
         Companion companion = persistedCompanion();
         CompanionMemory memory = candidate(companion, 31L, 101L);

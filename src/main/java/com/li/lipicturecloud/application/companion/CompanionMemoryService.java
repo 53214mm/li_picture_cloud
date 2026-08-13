@@ -18,8 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 
 import static com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConstant.PICTURE_VIEW;
@@ -88,10 +90,22 @@ public class CompanionMemoryService {
 
     /**
      * 读取路径上的惰性失效传播：来源图片撤权或消失的记忆转为 INVALIDATED，内容不再对外展示。
+     * 同一来源图片的多条记忆只做一次授权检查。
      */
     private void invalidateRevoked(Companion companion, AuthorizationSubject subject) {
+        Set<Long> unavailablePictures = new HashSet<>();
         for (CompanionMemory memory : memoryRepository.findActive(companion.id(), MAX_ACTIVE_SCAN)) {
-            if (memory.pictureId() == null || !pictureUnavailable(memory.pictureId(), subject.userId())) {
+            if (memory.pictureId() == null) {
+                continue;
+            }
+            boolean unavailable = unavailablePictures.contains(memory.pictureId());
+            if (!unavailable) {
+                unavailable = pictureUnavailable(memory.pictureId(), subject.userId());
+                if (unavailable) {
+                    unavailablePictures.add(memory.pictureId());
+                }
+            }
+            if (!unavailable) {
                 continue;
             }
             CompanionMemory invalidated = memory.invalidate("PICTURE_UNAVAILABLE", now());
@@ -123,6 +137,11 @@ public class CompanionMemoryService {
                                            Function<CompanionMemory, CompanionMemory> operation) {
         Companion companion = requireCompanion(subject);
         CompanionMemory memory = requireOwnedMemory(companion, subject, memoryId);
+        // 撤权传播覆盖转移端点：来源图片已撤权或消失时，直接拒绝操作且不返回记忆内容。
+        // 状态失效仍由列表读取路径惰性传播，避免本事务内"先失效再报错"被整体回滚。
+        if (memory.pictureId() != null && pictureUnavailable(memory.pictureId(), subject.userId())) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "记忆来源图片已不可用");
+        }
         try {
             CompanionMemory after = operation.apply(memory);
             if (after == memory) {

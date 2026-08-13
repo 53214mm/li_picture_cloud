@@ -370,6 +370,33 @@ class CompanionFeedingCoordinatorTest {
     }
 
     @Test
+    void moodCasRetriesOnceAfterDecayWriteRace() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = processingRun(companion, 102L);
+        CompanionRelationship relationship = CompanionRelationship.initial(companion.id(), 7L);
+        CompanionMood existing = new CompanionMood(51L, companion.id(),
+                bd("20.00"), bd("0.00"), bd("0.00"), bd("0.00"), bd("0.00"),
+                2L, NOW);
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        when(companionRepository.save(any(), eq(companion.revision()))).thenReturn(true);
+        when(growthRepository.append(any())).thenAnswer(invocation ->
+                invocation.<GrowthRecord>getArgument(0).withId(31L));
+        when(runRepository.complete(run.id(), run.revision(), 31L, NOW)).thenReturn(true);
+        when(moodRepository.findByCompanionId(companion.id())).thenReturn(Optional.of(existing));
+        // 与主页惰性衰减写回竞争：第一次 CAS 失败，重读后第二次成功。
+        when(moodRepository.save(any(), anyLong())).thenReturn(false, true);
+        when(relationshipRepository.findByCompanionAndSubject(companion.id(), 7L))
+                .thenReturn(Optional.of(relationship));
+
+        coordinator.complete(run, new PictureNutrition(42L, TraitDelta.zero(), Map.of(), "演示营养",
+                NutritionProvenance.demo(),
+                new MoodImpact(bd("4.00"), bd("0.00"), bd("0.00"), bd("0.00"), bd("0.00")), null));
+
+        verify(moodRepository, times(2)).save(any(), anyLong());
+        verify(runRepository).complete(run.id(), run.revision(), 31L, NOW);
+    }
+
+    @Test
     void moodApplyConflictsRollBackWholeCompletion() {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion, 102L);
