@@ -3,6 +3,7 @@ package com.li.lipicturecloud.controller;
 import com.li.lipicturecloud.application.companion.CompanionChatService;
 import com.li.lipicturecloud.application.companion.CompanionLife;
 import com.li.lipicturecloud.application.companion.CompanionMemoryService;
+import com.li.lipicturecloud.application.companion.CompanionProposalService;
 import com.li.lipicturecloud.application.companion.FeedPictureCommand;
 import com.li.lipicturecloud.application.companion.view.CompanionHomeView;
 import com.li.lipicturecloud.application.companion.view.FeedPictureResult;
@@ -39,6 +40,7 @@ class CompanionControllerTest {
     private CompanionLife companionLife;
     private CompanionMemoryService memoryService;
     private CompanionChatService chatService;
+    private CompanionProposalService proposalService;
     private UserService userService;
     private AuthorizationSubject subject;
 
@@ -47,6 +49,7 @@ class CompanionControllerTest {
         companionLife = mock(CompanionLife.class);
         memoryService = mock(CompanionMemoryService.class);
         chatService = mock(CompanionChatService.class);
+        proposalService = mock(CompanionProposalService.class);
         userService = mock(UserService.class);
         User loginUser = new User();
         loginUser.setId(7L);
@@ -54,7 +57,7 @@ class CompanionControllerTest {
         when(userService.isAdmin(loginUser)).thenReturn(false);
         subject = AuthorizationSubject.user(7L);
         CompanionController controller = new CompanionController(companionLife, memoryService,
-                chatService, userService);
+                chatService, proposalService, userService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

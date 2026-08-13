@@ -60,6 +60,19 @@ class CompanionTest {
     }
 
     @Test
+    void feedbackAdjustsTraitsWithoutChangingExperienceOrLevel() {
+        Companion companion = Companion.awaken(7L, balance).persistedAs(11L);
+
+        Companion after = companion.applyFeedback(
+                new TraitDelta(bd("-0.5"), bd("0"), bd("0"), bd("0"), bd("0")), balance);
+
+        assertThat(after.traits().curiosity()).isEqualByComparingTo("-0.50");
+        assertThat(after.lifeExperience()).isZero();
+        assertThat(after.level()).isEqualTo(1);
+        assertThat(after.revision()).isEqualTo(1L);
+    }
+
+    @Test
     void dailyAndLifetimeRepeatCapsCanReduceGrowthToZero() {
         Companion companion = Companion.awaken(7L, balance).persistedAs(11L);
 

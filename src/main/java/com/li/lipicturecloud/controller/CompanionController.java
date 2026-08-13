@@ -5,11 +5,14 @@ import com.li.lipicturecloud.annotation.RateLimit;
 import com.li.lipicturecloud.application.companion.CompanionChatService;
 import com.li.lipicturecloud.application.companion.CompanionLife;
 import com.li.lipicturecloud.application.companion.CompanionMemoryService;
+import com.li.lipicturecloud.application.companion.CompanionProposalService;
 import com.li.lipicturecloud.application.companion.FeedPictureCommand;
 import com.li.lipicturecloud.application.companion.view.ChatHistoryView;
+import com.li.lipicturecloud.application.companion.view.CompanionContractView;
 import com.li.lipicturecloud.application.companion.view.CompanionHomeView;
 import com.li.lipicturecloud.application.companion.view.CompanionMemoryListView;
 import com.li.lipicturecloud.application.companion.view.CompanionMemoryView;
+import com.li.lipicturecloud.application.companion.view.CompanionProposalView;
 import com.li.lipicturecloud.application.companion.view.FeedPictureResult;
 import com.li.lipicturecloud.common.BaseResponse;
 import com.li.lipicturecloud.common.ResultUtils;
@@ -18,6 +21,7 @@ import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.exception.ThrowUtils;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
 import com.li.lipicturecloud.model.dto.companion.CompanionChatRequest;
+import com.li.lipicturecloud.model.dto.companion.CompanionContractUpdateRequest;
 import com.li.lipicturecloud.model.dto.companion.CompanionFeedRequest;
 import com.li.lipicturecloud.model.dto.companion.CompanionMemoryCorrectRequest;
 import com.li.lipicturecloud.model.entity.User;
@@ -33,6 +37,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -40,6 +45,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.time.LocalTime;
 
 @RestController
 @RequestMapping(value = "/companion", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -56,13 +62,16 @@ public class CompanionController {
     private final CompanionLife companionLife;
     private final CompanionMemoryService memoryService;
     private final CompanionChatService chatService;
+    private final CompanionProposalService proposalService;
     private final UserService userService;
 
     public CompanionController(CompanionLife companionLife, CompanionMemoryService memoryService,
-                               CompanionChatService chatService, UserService userService) {
+                               CompanionChatService chatService, CompanionProposalService proposalService,
+                               UserService userService) {
         this.companionLife = companionLife;
         this.memoryService = memoryService;
         this.chatService = chatService;
+        this.proposalService = proposalService;
         this.userService = userService;
     }
 
@@ -175,6 +184,63 @@ public class CompanionController {
                     }
                 });
         return emitter;
+    }
+
+    @GetMapping("/contract")
+    @AuthCheck
+    public BaseResponse<CompanionContractView> contract(HttpServletRequest request) {
+        return ResultUtils.success(proposalService.contract(subject(request)));
+    }
+
+    @PutMapping("/contract")
+    @AuthCheck
+    public BaseResponse<CompanionContractView> updateContract(
+            @RequestBody CompanionContractUpdateRequest body, HttpServletRequest request) {
+        ThrowUtils.throwIf(body == null || body.getActive() == null
+                        || body.getQuietStart() == null || body.getQuietEnd() == null
+                        || body.getMaxFrequencyHours() == null,
+                ErrorCode.PARAMS_ERROR, "请完整填写主动设置");
+        LocalTime quietStart = parseTime(body.getQuietStart());
+        LocalTime quietEnd = parseTime(body.getQuietEnd());
+        ThrowUtils.throwIf(body.getMaxFrequencyHours() < 0 || body.getMaxFrequencyHours() > 720,
+                ErrorCode.PARAMS_ERROR, "频率上限需为 0-720 小时");
+        return ResultUtils.success(proposalService.updateContract(subject(request),
+                body.getActive(), quietStart, quietEnd, body.getMaxFrequencyHours()));
+    }
+
+    @GetMapping("/proposals/active")
+    @AuthCheck
+    public BaseResponse<CompanionProposalView> activeProposal(HttpServletRequest request) {
+        return ResultUtils.success(proposalService.active(subject(request)));
+    }
+
+    @PostMapping("/proposals/{id}/accept")
+    @AuthCheck
+    public BaseResponse<CompanionProposalView> acceptProposal(@PathVariable("id") long proposalId,
+                                                              HttpServletRequest request) {
+        return ResultUtils.success(proposalService.accept(subject(request), proposalId));
+    }
+
+    @PostMapping("/proposals/{id}/ignore")
+    @AuthCheck
+    public BaseResponse<CompanionProposalView> ignoreProposal(@PathVariable("id") long proposalId,
+                                                              HttpServletRequest request) {
+        return ResultUtils.success(proposalService.ignore(subject(request), proposalId));
+    }
+
+    @PostMapping("/proposals/{id}/scold")
+    @AuthCheck
+    public BaseResponse<CompanionProposalView> scoldProposal(@PathVariable("id") long proposalId,
+                                                             HttpServletRequest request) {
+        return ResultUtils.success(proposalService.scold(subject(request), proposalId));
+    }
+
+    private static LocalTime parseTime(String value) {
+        try {
+            return LocalTime.parse(value);
+        } catch (RuntimeException invalid) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "安静时段需为 HH:mm 格式");
+        }
     }
 
     private AuthorizationSubject subject(HttpServletRequest request) {

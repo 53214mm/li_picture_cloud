@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <preConditions onFail="HALT" onError="HALT">
+        <and>
+            <or>
+                <not><tableExists tableName="companion_autonomy_contract"/></not>
+                <and>
+                    <columnExists tableName="companion_autonomy_contract" columnName="id"/>
+                    <columnExists tableName="companion_autonomy_contract" columnName="companionId"/>
+                    <columnExists tableName="companion_autonomy_contract" columnName="subjectId"/>
+                    <columnExists tableName="companion_autonomy_contract" columnName="active"/>
+                    <columnExists tableName="companion_autonomy_contract" columnName="quietStart"/>
+                    <columnExists tableName="companion_autonomy_contract" columnName="quietEnd"/>
+                    <columnExists tableName="companion_autonomy_contract" columnName="maxFrequencyHours"/>
+                    <columnExists tableName="companion_autonomy_contract" columnName="revision"/>
+                    <columnExists tableName="companion_autonomy_contract" columnName="createTime"/>
+                    <columnExists tableName="companion_autonomy_contract" columnName="updateTime"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="companion_proposal"/></not>
+                <and>
+                    <columnExists tableName="companion_proposal" columnName="id"/>
+                    <columnExists tableName="companion_proposal" columnName="companionId"/>
+                    <columnExists tableName="companion_proposal" columnName="subjectId"/>
+                    <columnExists tableName="companion_proposal" columnName="opportunityType"/>
+                    <columnExists tableName="companion_proposal" columnName="impulseScore"/>
+                    <columnExists tableName="companion_proposal" columnName="content"/>
+                    <columnExists tableName="companion_proposal" columnName="status"/>
+                    <columnExists tableName="companion_proposal" columnName="gateResult"/>
+                    <columnExists tableName="companion_proposal" columnName="revision"/>
+                    <columnExists tableName="companion_proposal" columnName="createTime"/>
+                    <columnExists tableName="companion_proposal" columnName="updateTime"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="companion_proposal_reaction"/></not>
+                <and>
+                    <columnExists tableName="companion_proposal_reaction" columnName="id"/>
+                    <columnExists tableName="companion_proposal_reaction" columnName="proposalId"/>
+                    <columnExists tableName="companion_proposal_reaction" columnName="subjectId"/>
+                    <columnExists tableName="companion_proposal_reaction" columnName="reactionType"/>
+                    <columnExists tableName="companion_proposal_reaction" columnName="createTime"/>
+                </and>
+            </or>
+        </and>
+    </preConditions>
+
+    <changeSet id="20260814-21" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion_autonomy_contract"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion_autonomy_contract (
+    id BIGINT PRIMARY KEY,
+    companionId BIGINT NOT NULL,
+    subjectId BIGINT NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT FALSE,
+    quietStart TIME NOT NULL DEFAULT '23:00:00',
+    quietEnd TIME NOT NULL DEFAULT '08:00:00',
+    maxFrequencyHours INT NOT NULL DEFAULT 72,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_companion_contract UNIQUE (companionId, subjectId),
+    CONSTRAINT ck_companion_contract_frequency CHECK (maxFrequencyHours >= 0)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion_autonomy_contract"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260814-22" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion_proposal"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion_proposal (
+    id BIGINT PRIMARY KEY,
+    companionId BIGINT NOT NULL,
+    subjectId BIGINT NOT NULL,
+    opportunityType VARCHAR(32) NOT NULL,
+    impulseScore DECIMAL(6,2) NOT NULL DEFAULT 0,
+    content VARCHAR(500) NOT NULL,
+    status VARCHAR(24) NOT NULL,
+    gateResult VARCHAR(64) NULL,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion_proposal"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260814-23" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_companion_proposal_active"
+                              tableName="companion_proposal"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_companion_proposal_active
+    ON companion_proposal (companionId, status, createTime, id);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_companion_proposal_active"
+                       tableName="companion_proposal"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260814-24" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion_proposal_reaction"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion_proposal_reaction (
+    id BIGINT PRIMARY KEY,
+    proposalId BIGINT NOT NULL,
+    subjectId BIGINT NOT NULL,
+    reactionType VARCHAR(24) NOT NULL,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion_proposal_reaction"/></rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -68,6 +68,12 @@ public interface CompanionGrowthRecordMapper {
     long sumLifeExperienceSince(@Param("companionId") long companionId, @Param("since") Date since);
 
     @Select("""
+            SELECT COUNT(*) FROM companion_growth_record
+            WHERE companionId = #{companionId} AND createTime >= #{since}
+            """)
+    long countSince(@Param("companionId") long companionId, @Param("since") Date since);
+
+    @Select("""
             SELECT COALESCE(SUM(lifeExperienceDelta), 0)
             FROM companion_growth_record
             WHERE companionId = #{companionId} AND pictureId = #{pictureId}

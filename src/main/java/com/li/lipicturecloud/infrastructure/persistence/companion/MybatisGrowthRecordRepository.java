@@ -72,6 +72,11 @@ public class MybatisGrowthRecordRepository implements GrowthRecordRepository {
         return growthRecordMapper.sumRevisitExperience(companionId, pictureId);
     }
 
+    @Override
+    public long countSince(long companionId, Instant since) {
+        return growthRecordMapper.countSince(companionId, Date.from(Objects.requireNonNull(since, "since")));
+    }
+
     private GrowthRecord fromRow(CompanionGrowthRecordEntity row) {
         return new GrowthRecord(row.getId(), row.getFeedingRunId(), row.getCompanionId(), row.getPictureId(),
                 GrowthEventType.valueOf(row.getEventType()), row.getLifeExperienceDelta(),

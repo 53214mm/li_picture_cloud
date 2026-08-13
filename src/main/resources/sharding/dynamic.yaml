@@ -38,6 +38,9 @@ rules:
       - primary.companion_memory
       - primary.companion_chat_message
       - primary.companion_chat_usage
+      - primary.companion_autonomy_contract
+      - primary.companion_proposal
+      - primary.companion_proposal_reaction
     defaultDataSource: primary
 
 props:
