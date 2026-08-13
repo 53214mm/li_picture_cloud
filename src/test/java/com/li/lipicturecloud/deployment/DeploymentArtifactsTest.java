@@ -35,6 +35,7 @@ class DeploymentArtifactsTest {
         assertThat(yaml).contains(
                 "secure: ${SESSION_COOKIE_SECURE:true}",
                 "namespace: ${SESSION_REDIS_NAMESPACE:lipicturecloud:session:v1}",
+                "allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS}",
                 "secretId: ${COS_SECRET_ID}",
                 "secretKey: ${COS_SECRET_KEY}",
                 "api-key: ${DASHSCOPE_API_KEY}",
@@ -48,6 +49,24 @@ class DeploymentArtifactsTest {
                 "vision-timeout: ${COMPANION_VISION_TIMEOUT}",
                 "vision-max-bytes: ${COMPANION_VISION_MAX_BYTES}",
                 "vision-daily-limit: ${COMPANION_VISION_DAILY_LIMIT}");
+    }
+
+    @Test
+    void productionCorsRequiresAnExplicitAllowlistWithoutStarFallback() throws IOException {
+        String prod = read("src/main/resources/application-prod.yaml");
+        String local = read("src/main/resources/application.yaml");
+        String compose = read("compose.yaml");
+        String environment = read(".env.example");
+        String cors = read("src/main/java/com/li/lipicturecloud/config/CorsProperties.java");
+
+        // 生产必须显式提供白名单：yaml 无默认值、compose 必填、示例文件给出域名而不是 *。
+        assertThat(prod).contains("allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS}");
+        assertThat(compose).contains(
+                "CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required}");
+        assertThat(environment).contains(
+                "CORS_ALLOWED_ORIGINS=https://lipicturecloud.com,https://www.lipicturecloud.com");
+        assertThat(local).contains("allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:*}");
+        assertThat(cors).contains("allowedOriginPatterns", "List.of(\"*\")");
     }
 
     @Test

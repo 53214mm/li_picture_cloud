@@ -30,6 +30,8 @@ import com.li.lipicturecloud.domain.companion.RelationshipImpact;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -50,6 +52,8 @@ import java.util.Optional;
  * 事务中完成。</p>
  */
 public class CompanionFeedingCoordinator {
+
+    private static final Logger log = LoggerFactory.getLogger(CompanionFeedingCoordinator.class);
 
     private final CompanionRepository companionRepository;
     private final GrowthRecordRepository growthRepository;
@@ -172,6 +176,11 @@ public class CompanionFeedingCoordinator {
         if (!runRepository.complete(run.id(), run.revision(), record.id(), now)) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "喂养运行状态已变化，请重试");
         }
+        log.info("companion_feed_completed subjectId={} pictureId={} eventType={} experienceDelta={} "
+                        + "mode={} provider={} model={} confidence={} correlationId={}",
+                run.subjectId(), run.pictureId(), record.eventType().name(), record.lifeExperienceDelta(),
+                record.provenance().actualMode().name(), record.provenance().providerCode(),
+                record.provenance().modelCode(), record.provenance().confidence(), run.correlationId());
         return assembler.feedResult(record);
     }
 

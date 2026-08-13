@@ -5,6 +5,8 @@ import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.mapper.CompanionVisionUsageMapper;
 import com.li.lipicturecloud.model.entity.CompanionVisionUsageEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,8 @@ import java.util.Objects;
  */
 @Repository
 public class MybatisVisionQuotaGuard implements VisionQuotaGuard {
+
+    private static final Logger log = LoggerFactory.getLogger(MybatisVisionQuotaGuard.class);
 
     private final CompanionVisionUsageMapper usageMapper;
 
@@ -38,10 +42,13 @@ public class MybatisVisionQuotaGuard implements VisionQuotaGuard {
         }
 
         CompanionVisionUsageEntity bucket = usageMapper.selectBySubjectAndUsageDateForUpdate(subjectId, usageDate);
-        if (bucket == null) {
-            return reserveFirstAttempt(subjectId, usageDate, dailyLimit);
-        }
-        return reserveExistingAttempt(bucket, usageDate, dailyLimit);
+        VisionQuotaReservation reservation = bucket == null
+                ? reserveFirstAttempt(subjectId, usageDate, dailyLimit)
+                : reserveExistingAttempt(bucket, usageDate, dailyLimit);
+        // 每次真实预占都记录一次成本计量点；失败/降级不退款，因此这里只记录成功路径。
+        log.info("companion_vision_quota_reserved subjectId={} usageDate={} used={} limit={}",
+                subjectId, usageDate, reservation.used(), dailyLimit);
+        return reservation;
     }
 
     private VisionQuotaReservation reserveFirstAttempt(long subjectId, LocalDate usageDate, int dailyLimit) {

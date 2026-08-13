@@ -38,6 +38,9 @@ springdoc:
     enabled: false
 
 app:
+  cors:
+    # 生产跨域白名单必须由部署者显式提供（逗号分隔）；缺失时启动失败，绝不回退到全放行。
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS}
   companion:
     enabled: ${COMPANION_ENABLED:false}
     feeding-enabled: ${COMPANION_FEEDING_ENABLED:false}

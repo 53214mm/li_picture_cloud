@@ -67,23 +67,23 @@ public class CompanionMemoryService {
 
     @Transactional
     public CompanionMemoryView confirm(AuthorizationSubject subject, long memoryId) {
-        return transition(subject, memoryId, memory -> memory.confirm(now()));
+        return transition(subject, memoryId, "confirm", memory -> memory.confirm(now()));
     }
 
     @Transactional
     public CompanionMemoryView correct(AuthorizationSubject subject, long memoryId, String correctedContent) {
         Objects.requireNonNull(correctedContent, "content");
-        return transition(subject, memoryId, memory -> memory.correct(correctedContent, now()));
+        return transition(subject, memoryId, "correct", memory -> memory.correct(correctedContent, now()));
     }
 
     @Transactional
     public CompanionMemoryView dismiss(AuthorizationSubject subject, long memoryId) {
-        return transition(subject, memoryId, memory -> memory.dismiss(now()));
+        return transition(subject, memoryId, "dismiss", memory -> memory.dismiss(now()));
     }
 
     @Transactional
     public CompanionMemoryView delete(AuthorizationSubject subject, long memoryId) {
-        return transition(subject, memoryId, memory -> memory.delete(now()));
+        return transition(subject, memoryId, "delete", memory -> memory.delete(now()));
     }
 
     /**
@@ -98,7 +98,10 @@ public class CompanionMemoryService {
             if (!memoryRepository.save(invalidated, memory.revision())) {
                 log.warn("companion_memory_invalidate_conflict memoryId={} companionId={}",
                         memory.id(), companion.id());
+                continue;
             }
+            log.info("companion_memory_invalidated subjectId={} memoryId={} pictureId={} reason=PICTURE_UNAVAILABLE",
+                    subject.userId(), memory.id(), memory.pictureId());
         }
     }
 
@@ -116,18 +119,20 @@ public class CompanionMemoryService {
         }
     }
 
-    private CompanionMemoryView transition(AuthorizationSubject subject, long memoryId,
-                                           Function<CompanionMemory, CompanionMemory> action) {
+    private CompanionMemoryView transition(AuthorizationSubject subject, long memoryId, String action,
+                                           Function<CompanionMemory, CompanionMemory> operation) {
         Companion companion = requireCompanion(subject);
         CompanionMemory memory = requireOwnedMemory(companion, subject, memoryId);
         try {
-            CompanionMemory after = action.apply(memory);
+            CompanionMemory after = operation.apply(memory);
             if (after == memory) {
                 return assembler.memory(memory);
             }
             if (!memoryRepository.save(after, memory.revision())) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR, "记忆状态已变化，请重试");
             }
+            log.info("companion_memory_action subjectId={} memoryId={} action={} status={}",
+                    subject.userId(), memoryId, action, after.status().name());
             return assembler.memory(after);
         } catch (IllegalStateException | IllegalArgumentException invalid) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "记忆当前状态不允许这个操作");

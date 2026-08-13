@@ -128,6 +128,9 @@ public class CompanionLifeService implements CompanionLife {
     public CompanionHomeView awaken(AuthorizationSubject subject) {
         Objects.requireNonNull(subject, "subject");
         companionRepository.createIfAbsent(subject.userId(), balance);
+        companionRepository.findByOwnerId(subject.userId()).ifPresent(companion ->
+                log.info("companion_awakened subjectId={} companionId={} level={} stage={}",
+                        subject.userId(), companion.id(), companion.level(), companion.lifeStage().name()));
         return home(subject);
     }
 
