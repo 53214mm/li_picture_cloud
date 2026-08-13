@@ -8,6 +8,7 @@ import com.li.lipicturecloud.domain.companion.CompanionRepository;
 import com.li.lipicturecloud.domain.companion.FeedingRun;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
+import com.li.lipicturecloud.domain.companion.NutritionPolicy;
 import com.li.lipicturecloud.domain.companion.PictureNutrition;
 import com.li.lipicturecloud.domain.companion.TraitDelta;
 import com.li.lipicturecloud.exception.BusinessException;
@@ -23,12 +24,16 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.sql.Connection;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConstant.PICTURE_VIEW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -58,9 +63,10 @@ class CompanionLifeServiceTest {
         authorization = mock(SpaceAuthorizationAccessService.class);
         analyzer = mock(PictureNutritionAnalyzer.class);
         properties = new CompanionFeatureProperties();
+        when(analyzer.policy()).thenReturn(NutritionPolicy.DEMO_ONLY);
         when(analyzer.mode()).thenReturn(NutritionMode.DEMO_DETERMINISTIC);
         when(analyzer.contentUnderstood()).thenReturn(false);
-        assembler = new CompanionViewAssembler(CompanionBalance.v1(), analyzer);
+        assembler = new CompanionViewAssembler(CompanionBalance.v1(), analyzer, properties);
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:companion_life_service;MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         service = new CompanionLifeService(companionRepository, growthRepository, coordinator,
@@ -73,7 +79,8 @@ class CompanionLifeServiceTest {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(coordinator.reserve(any(), any(), any(Long.class), any(), any(), any(), any(), any(Boolean.class)))
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
                 .thenReturn(FeedReservation.started(run));
         doThrow(new BusinessException(ErrorCode.NOT_FOUND_ERROR, "图片不存在"))
                 .when(authorization).checkForUser(PICTURE_VIEW, 102L, 7L);
@@ -93,7 +100,8 @@ class CompanionLifeServiceTest {
         FeedPictureResult original = new FeedPictureResult("GROWN", completed.correlationId(),
                 assembler.companion(companion), null);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(coordinator.reserve(any(), any(), any(Long.class), any(), any(), any(), any(), any(Boolean.class)))
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
                 .thenReturn(FeedReservation.replay(completed, original));
 
         assertThat(service.feed(new FeedPictureCommand(subject, 102L, KEY))).isEqualTo(original);
@@ -124,7 +132,8 @@ class CompanionLifeServiceTest {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(coordinator.reserve(any(), any(), any(Long.class), any(), any(), any(), any(), any(Boolean.class)))
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
                 .thenReturn(FeedReservation.started(run));
         when(analyzer.analyze(any())).thenThrow(new IllegalStateException("provider-token=secret"));
 
@@ -136,13 +145,50 @@ class CompanionLifeServiceTest {
     }
 
     @Test
+    void safeVisionFailureKeepsItsCategoryForAuditWithoutLeakingProviderDetails() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = processingRun(companion);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
+                .thenReturn(FeedReservation.started(run));
+        when(analyzer.analyze(any())).thenThrow(new VisionProviderException("VISION_CREDENTIALS", "provider-token=secret"));
+
+        assertThatThrownBy(() -> service.feed(new FeedPictureCommand(subject, 102L, KEY)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("本次没有消化成功，图片未被消耗");
+
+        verify(coordinator).fail(run, "VISION_CREDENTIALS", "本次没有消化成功，图片未被消耗");
+    }
+
+    @Test
+    void familiarPictureUsesAnalyzerShortcutInsteadOfFullAnalysis() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = processingRun(companion);
+        PictureNutrition familiar = PictureNutrition.fromObservation(25L, TraitDelta.zero(), Map.of(), "元数据营养");
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
+                .thenReturn(FeedReservation.started(run));
+        when(growthRepository.hasFullFeed(companion.id(), 102L)).thenReturn(true);
+        when(analyzer.analyzeFamiliar(any())).thenReturn(familiar);
+
+        service.feed(new FeedPictureCommand(subject, 102L, KEY));
+
+        verify(analyzer).analyzeFamiliar(any());
+        verify(analyzer, never()).analyze(any());
+        verify(coordinator).complete(run, familiar);
+    }
+
+    @Test
     void disabledFeedingRejectsBeforeReservation() {
         properties.setFeedingEnabled(false);
 
         assertThatThrownBy(() -> service.feed(new FeedPictureCommand(subject, 102L, KEY)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("伙伴喂养已暂停");
-        verify(coordinator, never()).reserve(any(), any(), any(Long.class), any(), any(), any(), any(), any(Boolean.class));
+        verify(coordinator, never()).reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class));
     }
 
     @Test
@@ -158,7 +204,8 @@ class CompanionLifeServiceTest {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(coordinator.reserve(any(), any(), any(Long.class), any(), any(), any(), any(), any(Boolean.class)))
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
                 .thenReturn(FeedReservation.started(run));
         doThrow(new IllegalStateException("authorization database unavailable"))
                 .when(authorization).checkForUser(PICTURE_VIEW, 102L, 7L);

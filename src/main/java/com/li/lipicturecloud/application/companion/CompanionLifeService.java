@@ -9,6 +9,7 @@ import com.li.lipicturecloud.domain.companion.Companion;
 import com.li.lipicturecloud.domain.companion.CompanionBalance;
 import com.li.lipicturecloud.domain.companion.CompanionRepository;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
+import com.li.lipicturecloud.domain.companion.NutritionPolicy;
 import com.li.lipicturecloud.domain.companion.PictureNutrition;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
@@ -106,9 +107,14 @@ public class CompanionLifeService implements CompanionLife {
         Companion companion = companionRepository.findByOwnerId(command.subject().userId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "请先唤醒伙伴"));
         // reserve 在分析前落库；浏览器或网关超时后可带着同一 key 重放，而不是重复投喂。
+        NutritionPolicy requestedPolicy = analyzer.policy();
         FeedReservation reservation = coordinator.reserve(companion, command.subject(), command.pictureId(),
                 command.idempotencyKey(), fingerprint(command.pictureId()), UUID.randomUUID().toString(),
-                analyzer.mode(), analyzer.contentUnderstood());
+                requestedPolicy,
+                requestedPolicy == NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK
+                        ? properties.getVisionProvider() : null,
+                requestedPolicy == NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK
+                        ? properties.getVisionModel() : null);
 
         // 授权放在回放判断之前：历史结果不是绕过空间权限的旁路。
         checkAuthorization(command, reservation);
@@ -124,10 +130,15 @@ public class CompanionLifeService implements CompanionLife {
 
         PictureNutrition nutrition;
         try {
-            nutrition = analyzer.analyze(new AuthorizedPictureRef(command.subject(), command.pictureId()));
+            AuthorizedPictureRef picture = new AuthorizedPictureRef(command.subject(), command.pictureId());
+            // 已经完整喂养的图片只能结算熟悉度；视觉实现通过专用路径避开像素读取和平台额度。
+            boolean familiar = growthRepository.hasFullFeed(companion.id(), command.pictureId());
+            nutrition = familiar ? analyzer.analyzeFamiliar(picture) : analyzer.analyze(picture);
         } catch (RuntimeException error) {
             // 对外不给出底层异常；run 中只保存可安全展示的失败文案，源图片从不被修改或删除。
-            coordinator.fail(reservation.run(), "NUTRITION_FAILED", "本次没有消化成功，图片未被消耗");
+            String safeCode = error instanceof VisionSafeFailure failure
+                    ? failure.safeCode() : "NUTRITION_FAILED";
+            coordinator.fail(reservation.run(), safeCode, "本次没有消化成功，图片未被消耗");
             log.warn("companion_feed_nutrition_failed correlationId={} subjectId={} pictureId={} exceptionType={}",
                     reservation.run().correlationId(), command.subject().userId(), command.pictureId(),
                     error.getClass().getName());

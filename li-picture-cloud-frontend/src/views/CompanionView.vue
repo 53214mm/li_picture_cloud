@@ -57,10 +57,13 @@
 
         <section class="nutrition-banner" aria-label="当前图片营养分析模式">
           <div>
-            <span class="nutrition-label">演示营养（确定性）</span>
-            <strong>{{ home.nutrition?.contentUnderstood ? '已进行图片内容理解' : '未进行图片内容理解' }}</strong>
+            <span class="nutrition-label">当前请求策略</span>
+            <strong>实际来源会逐条写入成长档案</strong>
           </div>
-          <p>{{ home.nutrition?.notice }}</p>
+          <p>
+            {{ home.nutrition?.notice }}
+            <span v-if="home.nutrition?.dailyLimit"> 每日视觉次数上限：{{ home.nutrition.dailyLimit }}。</span>
+          </p>
         </section>
 
         <template v-if="home.companion">

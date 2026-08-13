@@ -35,6 +35,9 @@ jobs:
           cache: maven
 
       - name: Test, package, and report backend coverage
+        env:
+          # Live smoke is an operator-only action; CI always uses the local HTTP stub.
+          COMPANION_VISION_LIVE_TEST: "false"
         run: ./mvnw -B -Dspring.profiles.active=test verify
 
       - name: Test Redis collaboration integration

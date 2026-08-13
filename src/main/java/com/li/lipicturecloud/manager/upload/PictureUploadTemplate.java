@@ -43,12 +43,13 @@ public abstract class PictureUploadTemplate {
         String originFilename = getOriginFilename(inputSource);  
         String uploadFilename = String.format("%s_%s.%s", DateUtil.formatDate(new Date()), uuid,
                 FileUtil.getSuffix(originFilename));
-        String uploadPath = String.format("/%s/%s", uploadPathPrefix, uploadFilename);  
+        String uploadPath = objectKey(uploadPathPrefix, uploadFilename);
   
         File file = null;
         try {  
             // 3. 创建临时文件  
-            file = File.createTempFile(uploadPath, null);  
+            // 临时文件名和 COS 对象键必须分开：对象键包含目录分隔符，不能作为本地临时文件前缀。
+            file = File.createTempFile(uploadFilename, null);
             // 处理文件来源（本地或 URL）  
             processFile(inputSource, file);  
   
@@ -152,4 +153,8 @@ public abstract class PictureUploadTemplate {
             log.error("file delete error, filepath = {}", file.getAbsolutePath());  
         }  
     }  
+
+    static String objectKey(String uploadPathPrefix, String uploadFilename) {
+        return String.format("%s/%s", uploadPathPrefix, uploadFilename);
+    }
 }

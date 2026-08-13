@@ -10,6 +10,8 @@
 
 **线上体验：** [https://lipicturecloud.com](https://lipicturecloud.com)（不提供公共测试账号）
 
+**长期路线：** [图像生命体平台三年总规划（2026—2029）](docs/roadmap/2026-2029-image-life-companion-roadmap.md)
+
 ## 项目亮点
 
 - 以公共图库、个人空间和团队空间构建完整的图片资产管理模型，覆盖上传、检索、审核、编辑、下载和批量处理。

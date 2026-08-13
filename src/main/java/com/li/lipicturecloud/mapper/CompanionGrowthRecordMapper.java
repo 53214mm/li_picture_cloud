@@ -14,18 +14,21 @@ public interface CompanionGrowthRecordMapper {
             INSERT INTO companion_growth_record
             (id, feedingRunId, companionId, pictureId, eventType, lifeExperienceDelta,
              traitDeltaJson, skillDeltaJson, snapshotJson, reason, nutritionMode,
-             contentUnderstood, balanceVersion, idempotencyKey, correlationId, createTime)
+             contentUnderstood, providerCode, modelCode, promptVersion, resultSchemaVersion,
+             confidence, fallbackReasonCode, balanceVersion, idempotencyKey, correlationId, createTime)
             VALUES
             (#{id}, #{feedingRunId}, #{companionId}, #{pictureId}, #{eventType}, #{lifeExperienceDelta},
              #{traitDeltaJson}, #{skillDeltaJson}, #{snapshotJson}, #{reason}, #{nutritionMode},
-             #{contentUnderstood}, #{balanceVersion}, #{idempotencyKey}, #{correlationId}, #{createTime})
+             #{contentUnderstood}, #{providerCode}, #{modelCode}, #{promptVersion}, #{resultSchemaVersion},
+             #{confidence}, #{fallbackReasonCode}, #{balanceVersion}, #{idempotencyKey}, #{correlationId}, #{createTime})
             """)
     int insert(CompanionGrowthRecordEntity row);
 
     @Select("""
             SELECT id, feedingRunId, companionId, pictureId, eventType, lifeExperienceDelta,
                    traitDeltaJson, skillDeltaJson, snapshotJson, reason, nutritionMode,
-                   contentUnderstood, balanceVersion, idempotencyKey, correlationId, createTime
+                   contentUnderstood, providerCode, modelCode, promptVersion, resultSchemaVersion,
+                   confidence, fallbackReasonCode, balanceVersion, idempotencyKey, correlationId, createTime
             FROM companion_growth_record WHERE id = #{id}
             """)
     CompanionGrowthRecordEntity selectById(@Param("id") long id);
@@ -33,7 +36,8 @@ public interface CompanionGrowthRecordMapper {
     @Select("""
             SELECT id, feedingRunId, companionId, pictureId, eventType, lifeExperienceDelta,
                    traitDeltaJson, skillDeltaJson, snapshotJson, reason, nutritionMode,
-                   contentUnderstood, balanceVersion, idempotencyKey, correlationId, createTime
+                   contentUnderstood, providerCode, modelCode, promptVersion, resultSchemaVersion,
+                   confidence, fallbackReasonCode, balanceVersion, idempotencyKey, correlationId, createTime
             FROM companion_growth_record WHERE feedingRunId = #{feedingRunId}
             """)
     CompanionGrowthRecordEntity selectByFeedingRunId(@Param("feedingRunId") long feedingRunId);
@@ -41,7 +45,8 @@ public interface CompanionGrowthRecordMapper {
     @Select("""
             SELECT id, feedingRunId, companionId, pictureId, eventType, lifeExperienceDelta,
                    traitDeltaJson, skillDeltaJson, snapshotJson, reason, nutritionMode,
-                   contentUnderstood, balanceVersion, idempotencyKey, correlationId, createTime
+                   contentUnderstood, providerCode, modelCode, promptVersion, resultSchemaVersion,
+                   confidence, fallbackReasonCode, balanceVersion, idempotencyKey, correlationId, createTime
             FROM companion_growth_record WHERE companionId = #{companionId}
             ORDER BY createTime DESC, id DESC LIMIT #{limit}
             """)

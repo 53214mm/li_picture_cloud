@@ -22,6 +22,8 @@ class DemoPictureNutritionAdapterTest {
 
         assertThat(second).isEqualTo(first);
         assertThat(adapter.contentUnderstood()).isFalse();
+        assertThat(first.nutritionMode()).isEqualTo(adapter.mode());
+        assertThat(first.contentUnderstood()).isFalse();
         assertThat(first.reason()).contains("演示营养");
     }
 }

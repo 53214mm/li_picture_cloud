@@ -49,6 +49,7 @@ app:
     enabled: true
     feeding-enabled: true
     processing-timeout: 5m
+    nutrition-policy: METADATA_ONLY
   mcp:
     enabled: false
   collaboration:

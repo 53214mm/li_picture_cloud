@@ -4,14 +4,13 @@ import com.li.lipicturecloud.application.companion.AuthorizedPictureRef;
 import com.li.lipicturecloud.application.companion.PictureNutritionAnalyzer;
 import com.li.lipicturecloud.domain.companion.CompanionSkill;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
+import com.li.lipicturecloud.domain.companion.NutritionPolicy;
 import com.li.lipicturecloud.domain.companion.PictureNutrition;
 import com.li.lipicturecloud.domain.companion.TraitDelta;
-import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.Map;
 
-@Component
 /**
  * 第一版的可演示分析器。
  *
@@ -19,6 +18,11 @@ import java.util.Map;
  * 隐私边界明确；接入视觉模型时应新增另一实现并如实标记 {@code NutritionMode}。</p>
  */
 public class DemoPictureNutritionAdapter implements PictureNutritionAnalyzer {
+
+    @Override
+    public NutritionPolicy policy() {
+        return NutritionPolicy.DEMO_ONLY;
+    }
 
     @Override
     public NutritionMode mode() {

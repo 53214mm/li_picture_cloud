@@ -10,6 +10,8 @@ import com.li.lipicturecloud.domain.companion.FeedingRunRepository;
 import com.li.lipicturecloud.domain.companion.GrowthRecord;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
+import com.li.lipicturecloud.domain.companion.NutritionPolicy;
+import com.li.lipicturecloud.domain.companion.NutritionProvenance;
 import com.li.lipicturecloud.domain.companion.PictureNutrition;
 import com.li.lipicturecloud.domain.companion.TraitDelta;
 import com.li.lipicturecloud.exception.BusinessException;
@@ -19,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
@@ -55,7 +58,8 @@ class CompanionFeedingCoordinatorTest {
         runRepository = mock(FeedingRunRepository.class);
         PictureNutritionAnalyzer analyzer = mock(PictureNutritionAnalyzer.class);
         CompanionBalance balance = CompanionBalance.v1();
-        CompanionViewAssembler assembler = new CompanionViewAssembler(balance, analyzer);
+        CompanionViewAssembler assembler = new CompanionViewAssembler(balance, analyzer,
+                new CompanionFeatureProperties());
         coordinator = new CompanionFeedingCoordinator(companionRepository, growthRepository, runRepository,
                 balance, assembler, Clock.fixed(NOW, ZoneOffset.UTC), new CompanionFeatureProperties());
     }
@@ -110,13 +114,140 @@ class CompanionFeedingCoordinatorTest {
     }
 
     @Test
+    void actualAnalysisProvenanceMustBeAllowedByTheRequestedPolicy() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = processingRun(companion, 102L);
+        PictureNutrition metadata = PictureNutrition.fromObservation(
+                40L, TraitDelta.zero(), Map.of(), "元数据营养");
+
+        assertThatThrownBy(() -> coordinator.complete(run, metadata))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("图片营养实际来源不符合喂养策略");
+
+        verify(companionRepository, never()).findByOwnerIdForUpdate(any(Long.class));
+        verify(growthRepository, never()).append(any());
+    }
+
+    @Test
+    void visualCompletionMustMatchTheProviderAndModelRequestedByTheRun() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = FeedingRun.processing(companion.id(), 7L, 102L, KEY, fingerprint(102L), CORRELATION,
+                NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK, "dashscope", "qwen3.6-flash", NOW)
+                .persistedAs(21L);
+        PictureNutrition differentModel = new PictureNutrition(42L, TraitDelta.zero(), Map.of(), "视觉营养",
+                NutritionProvenance.visual("dashscope", "another-model", "companion-vision-v1",
+                        "visual-observation-v1", new BigDecimal("0.82")));
+
+        assertThatThrownBy(() -> coordinator.complete(run, differentModel))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("图片营养实际模型与喂养请求不一致");
+
+        verify(companionRepository, never()).findByOwnerIdForUpdate(any(Long.class));
+    }
+
+    @Test
+    void failedRunCannotRestartUnderADifferentAnalyzerMode() {
+        Companion companion = persistedCompanion();
+        FeedingRun failed = processingRun(companion, 102L)
+                .failed("NUTRITION_FAILED", "分析失败", NOW.plusSeconds(1));
+        when(runRepository.findByKey(companion.id(), KEY)).thenReturn(Optional.of(failed));
+
+        assertThatThrownBy(() -> coordinator.reserve(companion, AuthorizationSubject.user(7L), 102L,
+                KEY, fingerprint(102L), CORRELATION, NutritionMode.METADATA_DETERMINISTIC, false))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode(), Throwable::getMessage)
+                .containsExactly(ErrorCode.PARAMS_ERROR.getCode(), "图片营养模式已变化，请重新发起喂养");
+
+        verify(runRepository, never()).restart(any(Long.class), any(Long.class), any());
+    }
+
+    @Test
+    void failedVisualRunCannotRestartWhenTheRequestedModelHasChanged() {
+        Companion companion = persistedCompanion();
+        FeedingRun failed = FeedingRun.processing(companion.id(), 7L, 102L, KEY, fingerprint(102L), CORRELATION,
+                NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK, "dashscope", "qwen3.6-flash", NOW)
+                .persistedAs(21L).failed("VISION_TIMEOUT", "本次没有消化成功", NOW.plusSeconds(1));
+        when(runRepository.findByKey(companion.id(), KEY)).thenReturn(Optional.of(failed));
+
+        assertThatThrownBy(() -> coordinator.reserve(companion, AuthorizationSubject.user(7L), 102L,
+                KEY, fingerprint(102L), CORRELATION, NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK,
+                "dashscope", "qwen-next"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode(), Throwable::getMessage)
+                .containsExactly(ErrorCode.PARAMS_ERROR.getCode(), "图片营养模式已变化，请重新发起喂养");
+
+        verify(runRepository, never()).restart(any(Long.class), any(Long.class), any());
+    }
+
+    @Test
+    void visualFallbackCanCompleteAndPersistsItsActualMetadataProvenance() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = FeedingRun.processing(companion.id(), 7L, 102L, KEY, fingerprint(102L), CORRELATION,
+                NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK, "dashscope", "qwen3.6-flash", NOW)
+                .persistedAs(21L);
+        PictureNutrition fallback = new PictureNutrition(31L, TraitDelta.zero(), Map.of(), "元数据降级",
+                NutritionProvenance.metadataFallback("VISION_TIMEOUT"));
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        when(companionRepository.save(any(), eq(companion.revision()))).thenReturn(true);
+        when(growthRepository.append(any())).thenAnswer(invocation ->
+                invocation.<GrowthRecord>getArgument(0).withId(31L));
+        when(runRepository.complete(run.id(), run.revision(), 31L, NOW)).thenReturn(true);
+
+        coordinator.complete(run, fallback);
+
+        verify(growthRepository).append(org.mockito.ArgumentMatchers.argThat(record ->
+                record.provenance().actualMode() == NutritionMode.METADATA_DETERMINISTIC
+                        && "VISION_TIMEOUT".equals(record.provenance().fallbackReasonCode())));
+    }
+
+    @Test
+    void viewExposesAStableVisualLabelWithoutLeakingProviderSecrets() {
+        CompanionFeatureProperties properties = new CompanionFeatureProperties();
+        properties.setVisionProvider("dashscope");
+        properties.setVisionModel("qwen3.6-flash");
+        properties.setVisionDailyLimit(10);
+        PictureNutritionAnalyzer analyzer = mock(PictureNutritionAnalyzer.class);
+        CompanionViewAssembler views = new CompanionViewAssembler(CompanionBalance.v1(), analyzer, properties);
+        Companion companion = persistedCompanion();
+        GrowthRecord record = new GrowthRecord(31L, 41L, companion.id(), 102L,
+                com.li.lipicturecloud.domain.companion.GrowthEventType.PICTURE_FED, 42L,
+                TraitDelta.zero(), Map.of(), companion, "观察完成",
+                NutritionProvenance.visual("dashscope", "qwen3.6-flash", "companion-vision-v1",
+                        "visual-observation-v1", new BigDecimal("0.82")),
+                "life-core-v1", KEY, CORRELATION, NOW);
+
+        assertThat(views.growth(record))
+                .extracting("nutritionLabel", "providerCode", "modelCode", "confidence", "fallbackReasonCode")
+                .containsExactly("Qwen 视觉营养 · 已分析图片内容", "dashscope", "qwen3.6-flash",
+                        new BigDecimal("0.82"), null);
+    }
+
+    @Test
+    void viewExposesFallbackAsMetadataRatherThanVisualUnderstanding() {
+        PictureNutritionAnalyzer analyzer = mock(PictureNutritionAnalyzer.class);
+        CompanionViewAssembler views = new CompanionViewAssembler(CompanionBalance.v1(), analyzer,
+                new CompanionFeatureProperties());
+        Companion companion = persistedCompanion();
+        GrowthRecord record = new GrowthRecord(31L, 41L, companion.id(), 102L,
+                com.li.lipicturecloud.domain.companion.GrowthEventType.PICTURE_FED, 42L,
+                TraitDelta.zero(), Map.of(), companion, "元数据观察",
+                NutritionProvenance.metadataFallback("VISION_TIMEOUT"),
+                "life-core-v1", KEY, CORRELATION, NOW);
+
+        assertThat(views.growth(record))
+                .extracting("nutritionLabel", "contentUnderstood", "fallbackReasonCode")
+                .containsExactly("视觉服务暂不可用，本次使用图片元数据营养", false, "VISION_TIMEOUT");
+    }
+
+    @Test
     void completionReadsClockOnlyOnceForDailyBoundaryAndAuditTime() {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion, 102L);
         Clock singleUseClock = mock(Clock.class);
         when(singleUseClock.instant()).thenReturn(NOW);
         PictureNutritionAnalyzer analyzer = mock(PictureNutritionAnalyzer.class);
-        CompanionViewAssembler localAssembler = new CompanionViewAssembler(CompanionBalance.v1(), analyzer);
+        CompanionViewAssembler localAssembler = new CompanionViewAssembler(CompanionBalance.v1(), analyzer,
+                new CompanionFeatureProperties());
         CompanionFeedingCoordinator local = new CompanionFeedingCoordinator(companionRepository,
                 growthRepository, runRepository, CompanionBalance.v1(), localAssembler,
                 singleUseClock, new CompanionFeatureProperties());

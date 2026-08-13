@@ -6,6 +6,7 @@ import com.li.lipicturecloud.domain.companion.FeedingRun;
 import com.li.lipicturecloud.domain.companion.FeedingRunRepository;
 import com.li.lipicturecloud.domain.companion.FeedingRunStatus;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
+import com.li.lipicturecloud.domain.companion.NutritionPolicy;
 import com.li.lipicturecloud.mapper.CompanionFeedRunMapper;
 import com.li.lipicturecloud.model.entity.CompanionFeedRunEntity;
 import org.springframework.stereotype.Repository;
@@ -51,22 +52,26 @@ public class MybatisFeedingRunRepository implements FeedingRunRepository {
                 && current.get().status() != FeedingRunStatus.PROCESSING)) {
             return false;
         }
-        return transition(runId, expectedRevision, current.get().status(), current.get().restarted(now));
+        return transition(runId, expectedRevision, current.get().status(),
+                current.get().restarted(notBeforePersistedUpdate(current.get(), now)));
     }
 
     @Override
     public boolean complete(long runId, long expectedRevision, long growthRecordId, Instant now) {
-        return transitionFromProcessing(runId, expectedRevision, run -> run.completed(growthRecordId, now));
+        return transitionFromProcessing(runId, expectedRevision,
+                run -> run.completed(growthRecordId, notBeforePersistedUpdate(run, now)));
     }
 
     @Override
     public boolean fail(long runId, long expectedRevision, String safeCode, String safeMessage, Instant now) {
-        return transitionFromProcessing(runId, expectedRevision, run -> run.failed(safeCode, safeMessage, now));
+        return transitionFromProcessing(runId, expectedRevision,
+                run -> run.failed(safeCode, safeMessage, notBeforePersistedUpdate(run, now)));
     }
 
     @Override
     public boolean reject(long runId, long expectedRevision, String safeCode, String safeMessage, Instant now) {
-        return transitionFromProcessing(runId, expectedRevision, run -> run.rejected(safeCode, safeMessage, now));
+        return transitionFromProcessing(runId, expectedRevision,
+                run -> run.rejected(safeCode, safeMessage, notBeforePersistedUpdate(run, now)));
     }
 
     private boolean transitionFromProcessing(long runId, long expectedRevision,
@@ -76,6 +81,13 @@ public class MybatisFeedingRunRepository implements FeedingRunRepository {
             return false;
         }
         return transition(runId, expectedRevision, FeedingRunStatus.PROCESSING, targetFactory.apply(current.get()));
+    }
+
+    private static Instant notBeforePersistedUpdate(FeedingRun current, Instant requested) {
+        Objects.requireNonNull(requested, "transition time");
+        // MySQL TIMESTAMP(0) may round a written fractional instant into the next second. The repository
+        // must not feed that storage artifact back as a false domain-level clock reversal.
+        return requested.isBefore(current.updatedAt()) ? current.updatedAt() : requested;
     }
 
     private boolean transition(long id, long expectedRevision, FeedingRunStatus source, FeedingRun target) {
@@ -102,8 +114,8 @@ public class MybatisFeedingRunRepository implements FeedingRunRepository {
     private FeedingRun fromRow(CompanionFeedRunEntity row) {
         return new FeedingRun(row.getId(), row.getCompanionId(), row.getSubjectId(), row.getPictureId(),
                 row.getIdempotencyKey(), row.getRequestFingerprint(), row.getCorrelationId(),
-                FeedingRunStatus.valueOf(row.getStatus()), NutritionMode.valueOf(row.getNutritionMode()),
-                Boolean.TRUE.equals(row.getContentUnderstood()), row.getResultGrowthRecordId(),
+                FeedingRunStatus.valueOf(row.getStatus()), NutritionPolicy.valueOf(row.getRequestedPolicy()),
+                row.getRequestedProviderCode(), row.getRequestedModelCode(), row.getResultGrowthRecordId(),
                 row.getSafeErrorCode(), row.getSafeErrorMessage(),
                 row.getSafeErrorTime() == null ? null : row.getSafeErrorTime().toInstant(),
                 row.getAttemptCount(), row.getRevision(),
@@ -121,8 +133,9 @@ public class MybatisFeedingRunRepository implements FeedingRunRepository {
         row.setRequestFingerprint(run.requestFingerprint());
         row.setCorrelationId(run.correlationId());
         row.setStatus(run.status().name());
-        row.setNutritionMode(run.nutritionMode().name());
-        row.setContentUnderstood(run.contentUnderstood());
+        row.setRequestedPolicy(run.requestedPolicy().name());
+        row.setRequestedProviderCode(run.requestedProviderCode());
+        row.setRequestedModelCode(run.requestedModelCode());
         row.setResultGrowthRecordId(run.resultGrowthRecordId());
         row.setSafeErrorCode(run.safeErrorCode());
         row.setSafeErrorMessage(run.safeErrorMessage());

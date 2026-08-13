@@ -1,9 +1,12 @@
 package com.li.lipicturecloud.config;
 
+import com.li.lipicturecloud.domain.companion.NutritionPolicy;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.unit.DataSize;
 
+import java.net.URI;
 import java.time.Duration;
 
 @Getter
@@ -18,4 +21,19 @@ public class CompanionFeatureProperties {
     private boolean enabled = true;
     private boolean feedingEnabled = true;
     private Duration processingTimeout = Duration.ofMinutes(5);
+    /**
+     * 请求策略描述这次喂养允许走的路径；真正采用的来源由成长记录中的 provenance 保存。
+     *
+     * <p>不要把它命名为 mode：视觉策略可能安全降级为元数据，而 {@code mode} 容易让调用方
+     * 把“允许调用视觉模型”误读成“这次已经理解了图片内容”。</p>
+     */
+    private NutritionPolicy nutritionPolicy = NutritionPolicy.METADATA_ONLY;
+    /** DashScope OpenAI-compatible vision endpoint. Production config must explicitly override it. */
+    private URI visionEndpoint = URI.create("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
+    private String visionProvider = "dashscope";
+    private String visionModel = "qwen3.6-flash";
+    private String visionApiKey = "";
+    private Duration visionTimeout = Duration.ofSeconds(20);
+    private DataSize visionMaxBytes = DataSize.ofMegabytes(8);
+    private int visionDailyLimit = 10;
 }

@@ -51,6 +51,7 @@ class ShardingModeConfigurationTest {
                     .contains("primary.companion_skill")
                     .contains("primary.companion_feed_run")
                     .contains("primary.companion_growth_record")
+                    .contains("primary.companion_vision_usage")
                     .contains("defaultDataSource: primary");
         }
     }

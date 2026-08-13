@@ -53,8 +53,16 @@
                     <columnExists tableName="companion_feed_run" columnName="requestFingerprint"/>
                     <columnExists tableName="companion_feed_run" columnName="correlationId"/>
                     <columnExists tableName="companion_feed_run" columnName="status"/>
-                    <columnExists tableName="companion_feed_run" columnName="nutritionMode"/>
-                    <columnExists tableName="companion_feed_run" columnName="contentUnderstood"/>
+                    <!-- A later migration deliberately replaces these legacy prediction fields
+                         with a request policy. The renamed column alone is a valid MySQL
+                         auto-commit recovery point; later changeSets will add the model fields. -->
+                    <or>
+                        <and>
+                            <columnExists tableName="companion_feed_run" columnName="nutritionMode"/>
+                            <columnExists tableName="companion_feed_run" columnName="contentUnderstood"/>
+                        </and>
+                        <columnExists tableName="companion_feed_run" columnName="requestedPolicy"/>
+                    </or>
                     <columnExists tableName="companion_feed_run" columnName="resultGrowthRecordId"/>
                     <columnExists tableName="companion_feed_run" columnName="safeErrorCode"/>
                     <columnExists tableName="companion_feed_run" columnName="safeErrorMessage"/>
