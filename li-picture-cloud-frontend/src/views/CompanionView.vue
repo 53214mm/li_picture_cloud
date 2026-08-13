@@ -118,6 +118,8 @@
 
           <CompanionChatPanel />
 
+          <CompanionProposalPanel />
+
           <CompanionMemoryPanel />
 
           <CompanionGrowthTimeline :records="home.recentGrowth || []" />
@@ -141,6 +143,7 @@ import CompanionMoodPanel from '@/components/companion/CompanionMoodPanel.vue'
 import CompanionRelationshipPanel from '@/components/companion/CompanionRelationshipPanel.vue'
 import CompanionMemoryPanel from '@/components/companion/CompanionMemoryPanel.vue'
 import CompanionChatPanel from '@/components/companion/CompanionChatPanel.vue'
+import CompanionProposalPanel from '@/components/companion/CompanionProposalPanel.vue'
 import {
   applyFeedResult,
   beginFeedAttempt,
