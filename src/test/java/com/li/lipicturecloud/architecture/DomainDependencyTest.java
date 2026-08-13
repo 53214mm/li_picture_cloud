@@ -1,11 +1,13 @@
 package com.li.lipicturecloud.architecture;
 
+import com.li.lipicturecloud.mapper.CompanionGrowthRecordMapper;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,6 +27,16 @@ class DomainDependencyTest {
 
             assertThat(violations).isEmpty();
         }
+    }
+
+    @Test
+    void growthRecordMapperDoesNotExposeMutationOrDeletionOperations() {
+        Set<String> forbiddenMethodNames = Set.of("update", "updateById", "delete", "deleteById",
+                "deleteByIds", "deleteBatchIds", "deleteByMap");
+
+        assertThat(CompanionGrowthRecordMapper.class.getMethods())
+                .extracting(java.lang.reflect.Method::getName)
+                .noneMatch(forbiddenMethodNames::contains);
     }
 
     private List<String> forbiddenImports(Path path) {

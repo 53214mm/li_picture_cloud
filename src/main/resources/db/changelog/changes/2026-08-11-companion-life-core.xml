@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <!--
+      MySQL auto-commits DDL. If the process stops after DDL but before
+      DATABASECHANGELOG is updated, the per-changeSet preconditions below can
+      safely mark the object as ran. This global guard prevents that recovery
+      path from accepting a name collision with an incomplete legacy table.
+    -->
+    <preConditions onFail="HALT" onError="HALT">
+        <and>
+            <or>
+                <not><tableExists tableName="companion"/></not>
+                <and>
+                    <columnExists tableName="companion" columnName="id"/>
+                    <columnExists tableName="companion" columnName="userId"/>
+                    <columnExists tableName="companion" columnName="lifeExperience"/>
+                    <columnExists tableName="companion" columnName="level"/>
+                    <columnExists tableName="companion" columnName="lifeStage"/>
+                    <columnExists tableName="companion" columnName="curiosity"/>
+                    <columnExists tableName="companion" columnName="enthusiasm"/>
+                    <columnExists tableName="companion" columnName="playfulness"/>
+                    <columnExists tableName="companion" columnName="empathy"/>
+                    <columnExists tableName="companion" columnName="creativity"/>
+                    <columnExists tableName="companion" columnName="balanceVersion"/>
+                    <columnExists tableName="companion" columnName="revision"/>
+                    <columnExists tableName="companion" columnName="createTime"/>
+                    <columnExists tableName="companion" columnName="updateTime"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="companion_skill"/></not>
+                <and>
+                    <columnExists tableName="companion_skill" columnName="id"/>
+                    <columnExists tableName="companion_skill" columnName="companionId"/>
+                    <columnExists tableName="companion_skill" columnName="skillCode"/>
+                    <columnExists tableName="companion_skill" columnName="skillExperience"/>
+                    <columnExists tableName="companion_skill" columnName="createTime"/>
+                    <columnExists tableName="companion_skill" columnName="updateTime"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="companion_feed_run"/></not>
+                <and>
+                    <columnExists tableName="companion_feed_run" columnName="id"/>
+                    <columnExists tableName="companion_feed_run" columnName="companionId"/>
+                    <columnExists tableName="companion_feed_run" columnName="subjectId"/>
+                    <columnExists tableName="companion_feed_run" columnName="pictureId"/>
+                    <columnExists tableName="companion_feed_run" columnName="idempotencyKey"/>
+                    <columnExists tableName="companion_feed_run" columnName="requestFingerprint"/>
+                    <columnExists tableName="companion_feed_run" columnName="correlationId"/>
+                    <columnExists tableName="companion_feed_run" columnName="status"/>
+                    <columnExists tableName="companion_feed_run" columnName="nutritionMode"/>
+                    <columnExists tableName="companion_feed_run" columnName="contentUnderstood"/>
+                    <columnExists tableName="companion_feed_run" columnName="resultGrowthRecordId"/>
+                    <columnExists tableName="companion_feed_run" columnName="safeErrorCode"/>
+                    <columnExists tableName="companion_feed_run" columnName="safeErrorMessage"/>
+                    <columnExists tableName="companion_feed_run" columnName="safeErrorTime"/>
+                    <columnExists tableName="companion_feed_run" columnName="attemptCount"/>
+                    <columnExists tableName="companion_feed_run" columnName="revision"/>
+                    <columnExists tableName="companion_feed_run" columnName="createTime"/>
+                    <columnExists tableName="companion_feed_run" columnName="updateTime"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="companion_growth_record"/></not>
+                <and>
+                    <columnExists tableName="companion_growth_record" columnName="id"/>
+                    <columnExists tableName="companion_growth_record" columnName="feedingRunId"/>
+                    <columnExists tableName="companion_growth_record" columnName="companionId"/>
+                    <columnExists tableName="companion_growth_record" columnName="pictureId"/>
+                    <columnExists tableName="companion_growth_record" columnName="eventType"/>
+                    <columnExists tableName="companion_growth_record" columnName="lifeExperienceDelta"/>
+                    <columnExists tableName="companion_growth_record" columnName="traitDeltaJson"/>
+                    <columnExists tableName="companion_growth_record" columnName="skillDeltaJson"/>
+                    <columnExists tableName="companion_growth_record" columnName="snapshotJson"/>
+                    <columnExists tableName="companion_growth_record" columnName="reason"/>
+                    <columnExists tableName="companion_growth_record" columnName="nutritionMode"/>
+                    <columnExists tableName="companion_growth_record" columnName="contentUnderstood"/>
+                    <columnExists tableName="companion_growth_record" columnName="balanceVersion"/>
+                    <columnExists tableName="companion_growth_record" columnName="idempotencyKey"/>
+                    <columnExists tableName="companion_growth_record" columnName="correlationId"/>
+                    <columnExists tableName="companion_growth_record" columnName="createTime"/>
+                </and>
+            </or>
+        </and>
+    </preConditions>
+
+    <changeSet id="20260811-01" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion (
+    id BIGINT PRIMARY KEY,
+    userId BIGINT NOT NULL,
+    lifeExperience BIGINT NOT NULL DEFAULT 0,
+    level INT NOT NULL DEFAULT 1,
+    lifeStage VARCHAR(32) NOT NULL DEFAULT 'LIGHT',
+    curiosity DECIMAL(6,2) NOT NULL DEFAULT 0,
+    enthusiasm DECIMAL(6,2) NOT NULL DEFAULT 0,
+    playfulness DECIMAL(6,2) NOT NULL DEFAULT 0,
+    empathy DECIMAL(6,2) NOT NULL DEFAULT 0,
+    creativity DECIMAL(6,2) NOT NULL DEFAULT 0,
+    balanceVersion VARCHAR(64) NOT NULL,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_companion_user UNIQUE (userId),
+    CONSTRAINT ck_companion_experience CHECK (lifeExperience >= 0),
+    CONSTRAINT ck_companion_curiosity CHECK (curiosity BETWEEN -100 AND 100),
+    CONSTRAINT ck_companion_enthusiasm CHECK (enthusiasm BETWEEN -100 AND 100),
+    CONSTRAINT ck_companion_playfulness CHECK (playfulness BETWEEN -100 AND 100),
+    CONSTRAINT ck_companion_empathy CHECK (empathy BETWEEN -100 AND 100),
+    CONSTRAINT ck_companion_creativity CHECK (creativity BETWEEN -100 AND 100)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260811-02" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion_skill"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion_skill (
+    id BIGINT PRIMARY KEY,
+    companionId BIGINT NOT NULL,
+    skillCode VARCHAR(64) NOT NULL,
+    skillExperience BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_companion_skill UNIQUE (companionId, skillCode),
+    CONSTRAINT ck_companion_skill_experience CHECK (skillExperience >= 0)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion_skill"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260811-03" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion_feed_run"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion_feed_run (
+    id BIGINT PRIMARY KEY,
+    companionId BIGINT NOT NULL,
+    subjectId BIGINT NOT NULL,
+    pictureId BIGINT NOT NULL,
+    idempotencyKey VARCHAR(64) NOT NULL,
+    requestFingerprint CHAR(64) NOT NULL,
+    correlationId CHAR(36) NOT NULL,
+    status VARCHAR(24) NOT NULL,
+    nutritionMode VARCHAR(48) NOT NULL,
+    contentUnderstood BOOLEAN NOT NULL DEFAULT FALSE,
+    resultGrowthRecordId BIGINT NULL,
+    safeErrorCode VARCHAR(64) NULL,
+    safeErrorMessage VARCHAR(255) NULL,
+    safeErrorTime TIMESTAMP NULL,
+    attemptCount INT NOT NULL DEFAULT 1,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_companion_feed_key UNIQUE (companionId, idempotencyKey)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion_feed_run"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260811-04" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_companion_feed_picture_status"
+                              tableName="companion_feed_run"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_companion_feed_picture_status
+    ON companion_feed_run (companionId, pictureId, status);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_companion_feed_picture_status"
+                       tableName="companion_feed_run"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260811-05" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion_growth_record"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion_growth_record (
+    id BIGINT PRIMARY KEY,
+    feedingRunId BIGINT NOT NULL,
+    companionId BIGINT NOT NULL,
+    pictureId BIGINT NOT NULL,
+    eventType VARCHAR(32) NOT NULL,
+    lifeExperienceDelta BIGINT NOT NULL,
+    traitDeltaJson TEXT NOT NULL,
+    skillDeltaJson TEXT NOT NULL,
+    snapshotJson TEXT NOT NULL,
+    reason VARCHAR(512) NOT NULL,
+    nutritionMode VARCHAR(48) NOT NULL,
+    contentUnderstood BOOLEAN NOT NULL DEFAULT FALSE,
+    balanceVersion VARCHAR(64) NOT NULL,
+    idempotencyKey VARCHAR(64) NOT NULL,
+    correlationId CHAR(36) NOT NULL,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_companion_growth_run UNIQUE (feedingRunId),
+    CONSTRAINT ck_companion_growth_experience CHECK (lifeExperienceDelta >= 0)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion_growth_record"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260811-06" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_companion_growth_history"
+                              tableName="companion_growth_record"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_companion_growth_history
+    ON companion_growth_record (companionId, createTime, id);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_companion_growth_history"
+                       tableName="companion_growth_record"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260811-07" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_companion_growth_picture"
+                              tableName="companion_growth_record"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_companion_growth_picture
+    ON companion_growth_record (companionId, pictureId, eventType);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_companion_growth_picture"
+                       tableName="companion_growth_record"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

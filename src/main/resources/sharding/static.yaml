@@ -23,6 +23,16 @@ rules:
         props:
           algorithm-expression: picture_$->{userId % 2}
           allow-range-query-with-inline-sharding: true
+  - !SINGLE
+    tables:
+      - primary.user
+      - primary.space
+      - primary.space_user
+      - primary.companion
+      - primary.companion_skill
+      - primary.companion_feed_run
+      - primary.companion_growth_record
+    defaultDataSource: primary
 
 props:
   sql-show: false

@@ -1,0 +1,66 @@
+CREATE TABLE IF NOT EXISTS user (
+    id BIGINT PRIMARY KEY,
+    userAccount VARCHAR(256) NOT NULL,
+    userPassword VARCHAR(512) NOT NULL,
+    userName VARCHAR(256),
+    userAvatar VARCHAR(1024),
+    userProfile VARCHAR(512),
+    userRole VARCHAR(256) NOT NULL DEFAULT 'user',
+    editTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    isDelete TINYINT NOT NULL DEFAULT 0,
+    CONSTRAINT uk_e2e_user_account UNIQUE (userAccount)
+);
+
+CREATE TABLE IF NOT EXISTS space (
+    id BIGINT PRIMARY KEY,
+    spaceName VARCHAR(128),
+    spaceLevel INT DEFAULT 0,
+    spaceType INT NOT NULL DEFAULT 0,
+    maxSize BIGINT DEFAULT 0,
+    maxCount BIGINT DEFAULT 0,
+    totalSize BIGINT DEFAULT 0,
+    totalCount BIGINT DEFAULT 0,
+    userId BIGINT NOT NULL,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    editTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    isDelete TINYINT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS picture (
+    id BIGINT PRIMARY KEY,
+    url VARCHAR(512) NOT NULL,
+    thumbnailUrl VARCHAR(512),
+    originalUrl VARCHAR(512),
+    name VARCHAR(128) NOT NULL,
+    introduction VARCHAR(512),
+    category VARCHAR(64),
+    tags VARCHAR(512),
+    picSize BIGINT,
+    picWidth INT,
+    picHeight INT,
+    picScale DOUBLE,
+    picFormat VARCHAR(32),
+    userId BIGINT NOT NULL,
+    spaceId BIGINT,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    editTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    isDelete TINYINT NOT NULL DEFAULT 0,
+    reviewStatus INT NOT NULL DEFAULT 0,
+    reviewMessage VARCHAR(512),
+    reviewerId BIGINT,
+    reviewTime TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS space_user (
+    id BIGINT PRIMARY KEY,
+    spaceId BIGINT NOT NULL,
+    userId BIGINT NOT NULL,
+    spaceRole VARCHAR(128) DEFAULT 'viewer',
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_e2e_space_user UNIQUE (spaceId, userId)
+);

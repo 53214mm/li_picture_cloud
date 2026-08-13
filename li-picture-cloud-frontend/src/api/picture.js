@@ -12,6 +12,11 @@ export function listPictureVOByPage(data) {
   return request.post('/picture/list/page/vo/cache', data)
 }
 
+/** 分页获取当前主体有权查看的空间图片，不使用 Redis 列表缓存。 */
+export function listPictureVOByPageUncached(data) {
+  return request.post('/picture/list/page/vo', data)
+}
+
 /** 获取预设标签与分类 */
 export function getPictureTagCategory() {
   return request.get('/picture/tag_category')

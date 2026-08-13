@@ -15,7 +15,13 @@ export default [
     }
   },
   {
-    files: ['vite.config.js', 'eslint.config.js', 'scripts/**/*.mjs'],
+    files: [
+      'vite.config.js',
+      'playwright.config.js',
+      'eslint.config.js',
+      'scripts/**/*.mjs',
+      'e2e/**/*.js'
+    ],
     languageOptions: {
       globals: globals.node
     }

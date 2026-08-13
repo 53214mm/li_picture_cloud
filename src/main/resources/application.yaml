@@ -1,6 +1,9 @@
 spring:
   application:
     name: li-picture-cloud
+  liquibase:
+    enabled: true
+    change-log: classpath:/db/changelog/db.changelog-master.xml
   datasource:
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD}
@@ -74,6 +77,10 @@ springdoc:
     - /actuator/**
 
 app:
+  companion:
+    enabled: ${COMPANION_ENABLED:true}
+    feeding-enabled: ${COMPANION_FEEDING_ENABLED:true}
+    processing-timeout: ${COMPANION_PROCESSING_TIMEOUT:5m}
   collaboration:
     store: ${COLLABORATION_STORE:redis}
     state-ttl: ${COLLABORATION_STATE_TTL:24h}

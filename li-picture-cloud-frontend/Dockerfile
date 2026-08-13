@@ -4,6 +4,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+ARG VITE_COMPANION_ENABLED=false
+ENV VITE_COMPANION_ENABLED=$VITE_COMPANION_ENABLED
 RUN npm run build
 
 FROM nginx:1.27-alpine

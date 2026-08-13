@@ -2,6 +2,13 @@ spring:
   config:
     activate:
       on-profile: sharding-dynamic
+  liquibase:
+    enabled: true
+    change-log: classpath:/db/changelog/db.changelog-master.xml
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:li_picture_cloud_data}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    user: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD}
   datasource:
     driver-class-name: org.apache.shardingsphere.driver.ShardingSphereDriver
     url: jdbc:shardingsphere:classpath:sharding/dynamic.yaml

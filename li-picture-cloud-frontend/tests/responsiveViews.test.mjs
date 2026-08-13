@@ -47,7 +47,11 @@ test('space and AI surfaces define phone layouts', () => {
     'views/SpaceDetailView.vue',
     'components/space/SpaceCard.vue',
     'components/space/SpaceMemberPanel.vue',
-    'components/AiAgentPanel.vue'
+    'components/AiAgentPanel.vue',
+    'views/CompanionView.vue',
+    'components/companion/CompanionStats.vue',
+    'components/companion/CompanionPicturePicker.vue',
+    'components/companion/CompanionGrowthTimeline.vue'
   ]) {
     assert.match(read(`src/${file}`), /@media \(max-width: 767px\)/, file)
   }

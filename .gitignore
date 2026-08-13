@@ -27,6 +27,9 @@ test-classes
 **/node_modules/
 **/dist/
 **/.vite/
+# Playwright artifacts
+**/playwright-report/
+**/test-results/
 npm-debug.log*
 pnpm-debug.log*
 yarn-error.log*

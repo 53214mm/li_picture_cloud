@@ -1,0 +1,31 @@
+spring:
+  config:
+    activate:
+      on-profile: e2e
+  datasource:
+    url: jdbc:h2:mem:li_picture_cloud_e2e;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;NON_KEYWORDS=USER
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:e2e-schema.sql
+      data-locations: classpath:e2e-data.sql
+  liquibase:
+    enabled: true
+    change-log: classpath:/db/changelog/db.changelog-master.xml
+    # The full test profile already exercises rollback-on-update. The browser runtime
+    # needs one stable migrated database rather than Liquibase's temporary rollback cycle.
+    test-rollback-on-update: false
+
+app:
+  companion:
+    enabled: true
+    feeding-enabled: true
+    processing-timeout: 5m
+
+server:
+  port: 18124
+  servlet:
+    context-path: /api

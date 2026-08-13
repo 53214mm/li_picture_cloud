@@ -1,4 +1,4 @@
-export function buildNavigationGroups({ isLoggedIn, isAdmin }) {
+export function buildNavigationGroups({ isLoggedIn, isAdmin, companionEnabled = true }) {
   const groups = [
     {
       id: 'browse',
@@ -17,6 +17,7 @@ export function buildNavigationGroups({ isLoggedIn, isAdmin }) {
       items: [
         { label: '上传图片', to: '/upload' },
         { label: '我的空间', to: '/space/my' },
+        ...(companionEnabled ? [{ label: '我的伙伴', to: '/companion' }] : []),
         { label: '空间管理', to: '/spaces' },
         { label: '图库分析', to: '/space/analyze' }
       ]

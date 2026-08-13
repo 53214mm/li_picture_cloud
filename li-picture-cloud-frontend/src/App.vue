@@ -16,7 +16,7 @@ import NavBar from '@/components/NavBar.vue'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
-userStore.fetchCurrentUser()
+userStore.ensureCurrentUser().catch(() => {})
 </script>
 
 <style scoped>

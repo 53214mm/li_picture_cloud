@@ -80,6 +80,9 @@ services:
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       SESSION_REDIS_NAMESPACE: ${SESSION_REDIS_NAMESPACE:-lipicturecloud:session:v1}
       COLLABORATION_ALLOWED_ORIGINS: ${COLLABORATION_ALLOWED_ORIGINS:-http://82.156.66.244}
+      COMPANION_ENABLED: ${COMPANION_ENABLED:-false}
+      COMPANION_FEEDING_ENABLED: ${COMPANION_FEEDING_ENABLED:-false}
+      COMPANION_PROCESSING_TIMEOUT: ${COMPANION_PROCESSING_TIMEOUT:-5m}
       COS_HOST: ${COS_HOST:?COS_HOST is required}
       COS_BUCKET: ${COS_BUCKET:?COS_BUCKET is required}
       COS_REGION: ${COS_REGION:?COS_REGION is required}
@@ -108,6 +111,8 @@ services:
     build:
       context: ./li-picture-cloud-frontend
       dockerfile: Dockerfile
+      args:
+        VITE_COMPANION_ENABLED: ${VITE_COMPANION_ENABLED:-false}
     image: lipicturecloud-web:local
     container_name: lipicturecloud-web
     restart: unless-stopped

@@ -83,6 +83,27 @@ class DeploymentArtifactsTest {
         assertThat(https).contains("listen 443 ssl", "ssl_certificate", "return 301 https://$host$request_uri");
     }
 
+    @Test
+    void companionFeatureFlagsAreExplicitAndDisabledByDefaultAcrossDockerCompose() throws IOException {
+        String frontendDockerfile = read("li-picture-cloud-frontend/Dockerfile");
+        String compose = read("compose.yaml");
+        String environment = read(".env.example");
+
+        assertThat(frontendDockerfile).contains(
+                "ARG VITE_COMPANION_ENABLED=false",
+                "ENV VITE_COMPANION_ENABLED=$VITE_COMPANION_ENABLED");
+        assertThat(compose).contains(
+                "COMPANION_ENABLED: ${COMPANION_ENABLED:-false}",
+                "COMPANION_FEEDING_ENABLED: ${COMPANION_FEEDING_ENABLED:-false}",
+                "COMPANION_PROCESSING_TIMEOUT: ${COMPANION_PROCESSING_TIMEOUT:-5m}",
+                "VITE_COMPANION_ENABLED: ${VITE_COMPANION_ENABLED:-false}");
+        assertThat(environment).contains(
+                "COMPANION_ENABLED=false",
+                "COMPANION_FEEDING_ENABLED=false",
+                "COMPANION_PROCESSING_TIMEOUT=5m",
+                "VITE_COMPANION_ENABLED=false");
+    }
+
     private String read(String path) throws IOException {
         return Files.readString(Path.of(path), StandardCharsets.UTF_8);
     }

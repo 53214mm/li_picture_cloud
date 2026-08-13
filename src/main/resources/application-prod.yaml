@@ -38,6 +38,9 @@ springdoc:
     enabled: false
 
 app:
+  companion:
+    enabled: ${COMPANION_ENABLED:false}
+    feeding-enabled: ${COMPANION_FEEDING_ENABLED:false}
   collaboration:
     store: redis
     state-ttl: ${COLLABORATION_STATE_TTL:24h}

@@ -13,6 +13,7 @@
     "lint": "eslint . --max-warnings 0",
     "build": "vite build",
     "check:bundle": "node scripts/check-bundle-size.mjs",
+    "test:e2e": "playwright test",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -26,6 +27,7 @@
     "vue-router": "^4.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@vitejs/plugin-vue": "^6.0.8",
     "eslint": "^9.39.5",
     "eslint-plugin-vue": "^10.10.0",

@@ -23,6 +23,16 @@ rules:
         props:
           strategy: COMPLEX
           algorithmClassName: com.li.lipicturecloud.sharding.DynamicPictureShardingAlgorithm
+  - !SINGLE
+    tables:
+      - primary.user
+      - primary.space
+      - primary.space_user
+      - primary.companion
+      - primary.companion_skill
+      - primary.companion_feed_run
+      - primary.companion_growth_record
+    defaultDataSource: primary
 
 props:
   sql-show: false

@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
+import { useUserStore } from '@/stores/user'
+import { COMPANION_UI_ENABLED } from '@/config/features'
 
 const routes = [
   {
@@ -71,9 +73,32 @@ const routes = [
   }
 ]
 
+// 这是构建期开关：默认生产包没有伙伴路由/chunk，后端开关与它都开启时才形成完整入口。
+if (COMPANION_UI_ENABLED) {
+  routes.push({
+    path: '/companion',
+    name: 'companion',
+    component: () => import('@/views/CompanionView.vue'),
+    meta: { requiresAuth: true }
+  })
+}
+
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+router.beforeEach(async to => {
+  if (!to.meta.requiresAuth) return true
+  const userStore = useUserStore()
+  try {
+    await userStore.ensureCurrentUser()
+  } catch {
+    // 临时网络失败不伪装成“未登录”；目标页会呈现可重试的认证状态。
+    return true
+  }
+  if (userStore.isLoggedIn) return true
+  return { name: 'login', query: { redirect: to.fullPath } }
 })
 
 export default router

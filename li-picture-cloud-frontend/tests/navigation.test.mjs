@@ -17,6 +17,12 @@ test('builds user and admin navigation from one model', async () => {
   assert.deepEqual(admin.map(group => group.id), ['browse', 'workspace', 'admin', 'account'])
   assert.equal(user.flatMap(group => group.items).some(item => item.to === '/admin/users'), false)
   assert.equal(admin.flatMap(group => group.items).some(item => item.to === '/admin/users'), true)
+  assert.equal(user.flatMap(group => group.items).some(item => item.to === '/companion'), true)
+  assert.equal(buildNavigationGroups({ isLoggedIn: false, isAdmin: false })
+    .flatMap(group => group.items).some(item => item.to === '/companion'), false)
+  assert.equal(buildNavigationGroups({
+    isLoggedIn: true, isAdmin: false, companionEnabled: false
+  }).flatMap(group => group.items).some(item => item.to === '/companion'), false)
 })
 
 test('mobile drawer exposes accessible state and close controls', () => {

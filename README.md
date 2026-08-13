@@ -125,6 +125,7 @@ flowchart LR
 - GitHub Actions 执行后端构建、测试、Redis 协同集成测试和前端验证。
 - 后端使用 Maven Wrapper 固定构建入口，测试覆盖授权、协同状态、Redis 事件、AI 上下文、分表算法等关键路径。
 - 前端使用 Node 原生测试、ESLint、Vite 构建和产物体积检查。
+- CI 还会启动 H2 后端与真实 Chromium，验证伙伴唤醒、私有图片喂养及幂等重试。
 - 后端和前端使用多阶段 Docker 构建，运行镜像不携带完整编译环境。
 - 生产配置通过环境变量外部化，仓库只保留 `.env.example` 和本地配置示例。
 - 开发种子与生产种子模板分离，生产账号要求使用 BCrypt strength 12 密文。
@@ -211,6 +212,7 @@ docker compose --env-file .env up -d --build
 - [密码与 AI 安全治理指南](docs/round-16-password-ai-security-guide.md)
 - [用户种子数据指南](docs/round-17-user-seed-guide.md)
 - [OpenCloudOS Docker 部署教程](docs/round-18-docker-deployment-guide.md)
+- [图像伙伴生命核心与演示喂养指南](docs/round-19-companion-life-core-guide.md)
 - [当前未决问题](docs/未决问题.md)
 
 ## 已知边界与后续规划

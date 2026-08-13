@@ -76,6 +76,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { buildNavigationGroups } from '@/constants/navigation'
+import { COMPANION_UI_ENABLED } from '@/config/features'
 
 const route = useRoute()
 const router = useRouter()
@@ -87,7 +88,8 @@ let previousBodyOverflow = ''
 
 const navigationGroups = computed(() => buildNavigationGroups({
   isLoggedIn: userStore.isLoggedIn,
-  isAdmin: userStore.isAdmin
+  isAdmin: userStore.isAdmin,
+  companionEnabled: COMPANION_UI_ENABLED
 }))
 const desktopItems = computed(() => navigationGroups.value.flatMap(group => group.items))
 
