@@ -20,8 +20,9 @@ public class CompanionFeedRunEntity {
     private String requestFingerprint;
     private String correlationId;
     private String status;
-    private String nutritionMode;
-    private Boolean contentUnderstood;
+    private String requestedPolicy;
+    private String requestedProviderCode;
+    private String requestedModelCode;
     private Long resultGrowthRecordId;
     private String safeErrorCode;
     private String safeErrorMessage;

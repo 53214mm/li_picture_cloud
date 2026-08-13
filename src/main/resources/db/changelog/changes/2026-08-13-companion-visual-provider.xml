@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+      The old feed run named the configured analyzer mode as though it were an
+      observed fact. These small, recoverable changeSets turn it into an
+      explicit request policy. Every DDL occupies its own changeSet because
+      MySQL auto-commits DDL before DATABASECHANGELOG is updated.
+    -->
+    <changeSet id="20260813-01" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><columnExists tableName="companion_feed_run" columnName="requestedPolicy"/></not>
+        </preConditions>
+        <renameColumn tableName="companion_feed_run" oldColumnName="nutritionMode"
+                      newColumnName="requestedPolicy" columnDataType="VARCHAR(48)"/>
+        <rollback>
+            <renameColumn tableName="companion_feed_run" oldColumnName="requestedPolicy"
+                          newColumnName="nutritionMode" columnDataType="VARCHAR(48)"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260813-02" author="li-picture-cloud">
+        <preConditions onFail="HALT" onError="HALT">
+            <!-- Unknown legacy values cannot be truthfully reclassified as metadata. -->
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM companion_feed_run
+                WHERE requestedPolicy NOT IN ('DEMO_DETERMINISTIC', 'METADATA_DETERMINISTIC')
+            </sqlCheck>
+        </preConditions>
+        <update tableName="companion_feed_run">
+            <column name="requestedPolicy" valueComputed="CASE requestedPolicy
+                WHEN 'DEMO_DETERMINISTIC' THEN 'DEMO_ONLY'
+                WHEN 'METADATA_DETERMINISTIC' THEN 'METADATA_ONLY' END"/>
+        </update>
+        <rollback>
+            <update tableName="companion_feed_run">
+                <column name="requestedPolicy" valueComputed="CASE requestedPolicy WHEN 'DEMO_ONLY' THEN 'DEMO_DETERMINISTIC' ELSE 'METADATA_DETERMINISTIC' END"/>
+            </update>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260813-03" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <columnExists tableName="companion_feed_run" columnName="contentUnderstood"/>
+        </preConditions>
+        <dropColumn tableName="companion_feed_run" columnName="contentUnderstood"/>
+        <!-- The column was always false before actual provenance existed. -->
+        <rollback>
+            <addColumn tableName="companion_feed_run">
+                <column name="contentUnderstood" type="BOOLEAN" defaultValueBoolean="false">
+                    <constraints nullable="false"/>
+                </column>
+            </addColumn>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260813-04" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><columnExists tableName="companion_feed_run" columnName="requestedProviderCode"/></not>
+        </preConditions>
+        <addColumn tableName="companion_feed_run"><column name="requestedProviderCode" type="VARCHAR(128)"/></addColumn>
+        <rollback><dropColumn tableName="companion_feed_run" columnName="requestedProviderCode"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260813-05" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><columnExists tableName="companion_feed_run" columnName="requestedModelCode"/></not>
+        </preConditions>
+        <addColumn tableName="companion_feed_run"><column name="requestedModelCode" type="VARCHAR(128)"/></addColumn>
+        <rollback><dropColumn tableName="companion_feed_run" columnName="requestedModelCode"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260813-06" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT"><not><columnExists tableName="companion_growth_record" columnName="providerCode"/></not></preConditions>
+        <addColumn tableName="companion_growth_record"><column name="providerCode" type="VARCHAR(128)"/></addColumn>
+        <rollback><dropColumn tableName="companion_growth_record" columnName="providerCode"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260813-07" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT"><not><columnExists tableName="companion_growth_record" columnName="modelCode"/></not></preConditions>
+        <addColumn tableName="companion_growth_record"><column name="modelCode" type="VARCHAR(128)"/></addColumn>
+        <rollback><dropColumn tableName="companion_growth_record" columnName="modelCode"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260813-08" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT"><not><columnExists tableName="companion_growth_record" columnName="promptVersion"/></not></preConditions>
+        <addColumn tableName="companion_growth_record"><column name="promptVersion" type="VARCHAR(128)"/></addColumn>
+        <rollback><dropColumn tableName="companion_growth_record" columnName="promptVersion"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260813-09" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT"><not><columnExists tableName="companion_growth_record" columnName="resultSchemaVersion"/></not></preConditions>
+        <addColumn tableName="companion_growth_record"><column name="resultSchemaVersion" type="VARCHAR(128)"/></addColumn>
+        <rollback><dropColumn tableName="companion_growth_record" columnName="resultSchemaVersion"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260813-10" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT"><not><columnExists tableName="companion_growth_record" columnName="confidence"/></not></preConditions>
+        <addColumn tableName="companion_growth_record"><column name="confidence" type="DECIMAL(5,4)"/></addColumn>
+        <rollback><dropColumn tableName="companion_growth_record" columnName="confidence"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260813-11" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT"><not><columnExists tableName="companion_growth_record" columnName="fallbackReasonCode"/></not></preConditions>
+        <addColumn tableName="companion_growth_record"><column name="fallbackReasonCode" type="VARCHAR(128)"/></addColumn>
+        <rollback><dropColumn tableName="companion_growth_record" columnName="fallbackReasonCode"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260813-12" author="li-picture-cloud">
+        <preConditions onFail="HALT" onError="HALT">
+            <!-- Preserve audit truth: this release only knows the two original deterministic modes. -->
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM companion_growth_record
+                WHERE nutritionMode NOT IN ('DEMO_DETERMINISTIC', 'METADATA_DETERMINISTIC')
+            </sqlCheck>
+        </preConditions>
+        <update tableName="companion_growth_record">
+            <column name="providerCode" value="internal"/>
+            <column name="modelCode" valueComputed="CASE nutritionMode
+                WHEN 'DEMO_DETERMINISTIC' THEN 'demo-v1'
+                WHEN 'METADATA_DETERMINISTIC' THEN 'metadata-v1' END"/>
+            <column name="promptVersion" value="none"/>
+            <column name="resultSchemaVersion" value="nutrition-v1"/>
+        </update>
+        <rollback>
+            <update tableName="companion_growth_record">
+                <column name="providerCode" valueComputed="NULL"/>
+                <column name="modelCode" valueComputed="NULL"/>
+                <column name="promptVersion" valueComputed="NULL"/>
+                <column name="resultSchemaVersion" valueComputed="NULL"/>
+            </update>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260813-13" author="li-picture-cloud">
+        <addNotNullConstraint tableName="companion_growth_record" columnName="providerCode" columnDataType="VARCHAR(128)"/>
+        <rollback><dropNotNullConstraint tableName="companion_growth_record" columnName="providerCode" columnDataType="VARCHAR(128)"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260813-14" author="li-picture-cloud">
+        <addNotNullConstraint tableName="companion_growth_record" columnName="modelCode" columnDataType="VARCHAR(128)"/>
+        <rollback><dropNotNullConstraint tableName="companion_growth_record" columnName="modelCode" columnDataType="VARCHAR(128)"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260813-15" author="li-picture-cloud">
+        <addNotNullConstraint tableName="companion_growth_record" columnName="promptVersion" columnDataType="VARCHAR(128)"/>
+        <rollback><dropNotNullConstraint tableName="companion_growth_record" columnName="promptVersion" columnDataType="VARCHAR(128)"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260813-16" author="li-picture-cloud">
+        <addNotNullConstraint tableName="companion_growth_record" columnName="resultSchemaVersion" columnDataType="VARCHAR(128)"/>
+        <rollback><dropNotNullConstraint tableName="companion_growth_record" columnName="resultSchemaVersion" columnDataType="VARCHAR(128)"/></rollback>
+    </changeSet>
+</databaseChangeLog>

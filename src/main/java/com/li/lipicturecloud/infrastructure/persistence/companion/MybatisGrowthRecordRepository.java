@@ -6,6 +6,7 @@ import com.li.lipicturecloud.domain.companion.GrowthEventType;
 import com.li.lipicturecloud.domain.companion.GrowthRecord;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
+import com.li.lipicturecloud.domain.companion.NutritionProvenance;
 import com.li.lipicturecloud.mapper.CompanionGrowthRecordMapper;
 import com.li.lipicturecloud.model.entity.CompanionGrowthRecordEntity;
 import org.springframework.stereotype.Repository;
@@ -76,7 +77,10 @@ public class MybatisGrowthRecordRepository implements GrowthRecordRepository {
                 GrowthEventType.valueOf(row.getEventType()), row.getLifeExperienceDelta(),
                 jsonCodec.readTraitDelta(row.getTraitDeltaJson()), jsonCodec.readSkillDelta(row.getSkillDeltaJson()),
                 jsonCodec.readSnapshot(row.getSnapshotJson(), CompanionBalance.v1()), row.getReason(),
-                NutritionMode.valueOf(row.getNutritionMode()), Boolean.TRUE.equals(row.getContentUnderstood()),
+                new NutritionProvenance(NutritionMode.valueOf(row.getNutritionMode()),
+                        Boolean.TRUE.equals(row.getContentUnderstood()), row.getProviderCode(),
+                        row.getModelCode(), row.getPromptVersion(), row.getResultSchemaVersion(),
+                        row.getConfidence(), row.getFallbackReasonCode()),
                 row.getBalanceVersion(), row.getIdempotencyKey(), row.getCorrelationId(),
                 Objects.requireNonNull(row.getCreateTime(), "growth createTime").toInstant());
     }
@@ -93,8 +97,14 @@ public class MybatisGrowthRecordRepository implements GrowthRecordRepository {
         row.setSkillDeltaJson(jsonCodec.writeSkillDelta(record.skillExperienceDelta()));
         row.setSnapshotJson(jsonCodec.writeSnapshot(record.companionAfter()));
         row.setReason(record.reason());
-        row.setNutritionMode(record.nutritionMode().name());
-        row.setContentUnderstood(record.contentUnderstood());
+        row.setNutritionMode(record.provenance().actualMode().name());
+        row.setContentUnderstood(record.provenance().contentUnderstood());
+        row.setProviderCode(record.provenance().providerCode());
+        row.setModelCode(record.provenance().modelCode());
+        row.setPromptVersion(record.provenance().promptVersion());
+        row.setResultSchemaVersion(record.provenance().resultSchemaVersion());
+        row.setConfidence(record.provenance().confidence());
+        row.setFallbackReasonCode(record.provenance().fallbackReasonCode());
         row.setBalanceVersion(record.balanceVersion());
         row.setIdempotencyKey(record.idempotencyKey());
         row.setCorrelationId(record.correlationId());

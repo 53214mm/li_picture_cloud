@@ -33,6 +33,9 @@ public class CompanionConfiguration {
         return switch (properties.getNutritionMode()) {
             case DEMO_DETERMINISTIC -> new DemoPictureNutritionAdapter();
             case METADATA_DETERMINISTIC -> new MetadataPictureNutritionAdapter(observations);
+            // 视觉实现会在下一功能单元注入受控内容读取、配额和 Provider；此处绝不能静默
+            // 降级，否则部署者会以为图片已经交给模型理解。
+            case VISUAL_MODEL -> throw new IllegalStateException("视觉营养尚未配置");
         };
     }
 }

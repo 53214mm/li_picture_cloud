@@ -19,8 +19,9 @@ public record FeedingRun(
         String requestFingerprint,
         String correlationId,
         FeedingRunStatus status,
-        NutritionMode nutritionMode,
-        boolean contentUnderstood,
+        NutritionPolicy requestedPolicy,
+        String requestedProviderCode,
+        String requestedModelCode,
         Long resultGrowthRecordId,
         String safeErrorCode,
         String safeErrorMessage,
@@ -32,6 +33,7 @@ public record FeedingRun(
 
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[a-z0-9_-]{16,64}");
     private static final Pattern FINGERPRINT = Pattern.compile("[0-9a-f]{64}");
+    private static final Pattern REQUESTED_CODE = Pattern.compile("[a-zA-Z0-9._-]{1,128}");
 
     public FeedingRun {
         if (id != null && id <= 0) {
@@ -44,7 +46,8 @@ public record FeedingRun(
         validateFingerprint(requestFingerprint);
         validateCorrelationId(correlationId);
         Objects.requireNonNull(status, "status");
-        Objects.requireNonNull(nutritionMode, "nutritionMode");
+        Objects.requireNonNull(requestedPolicy, "requestedPolicy");
+        validateRequestedModel(requestedPolicy, requestedProviderCode, requestedModelCode);
         if (resultGrowthRecordId != null && resultGrowthRecordId <= 0) {
             throw new IllegalArgumentException("growth record id must be positive");
         }
@@ -60,11 +63,36 @@ public record FeedingRun(
 
     public static FeedingRun processing(long companionId, long subjectId, long pictureId,
                                         String idempotencyKey, String requestFingerprint,
+                                        String correlationId, NutritionPolicy requestedPolicy,
+                                        String requestedProviderCode, String requestedModelCode, Instant now) {
+        return new FeedingRun(null, companionId, subjectId, pictureId, idempotencyKey,
+                requestFingerprint, correlationId, FeedingRunStatus.PROCESSING, requestedPolicy,
+                requestedProviderCode, requestedModelCode, null, null, null, null, 1, 0L, now, now);
+    }
+
+    /** Compatibility entry point for the original deterministic analyzers. */
+    public static FeedingRun processing(long companionId, long subjectId, long pictureId,
+                                        String idempotencyKey, String requestFingerprint,
                                         String correlationId, NutritionMode mode,
                                         boolean contentUnderstood, Instant now) {
-        return new FeedingRun(null, companionId, subjectId, pictureId, idempotencyKey,
-                requestFingerprint, correlationId, FeedingRunStatus.PROCESSING, mode,
-                contentUnderstood, null, null, null, null, 1, 0L, now, now);
+        if (contentUnderstood) {
+            throw new IllegalArgumentException("legacy run cannot claim content understanding");
+        }
+        return processing(companionId, subjectId, pictureId, idempotencyKey, requestFingerprint,
+                correlationId, NutritionPolicy.fromLegacyMode(mode), null, null, now);
+    }
+
+    /** Compatibility constructor for historical deterministic run rows and fixtures. */
+    public FeedingRun(Long id, long companionId, long subjectId, long pictureId,
+                      String idempotencyKey, String requestFingerprint, String correlationId,
+                      FeedingRunStatus status, NutritionMode mode, boolean contentUnderstood,
+                      Long resultGrowthRecordId, String safeErrorCode, String safeErrorMessage,
+                      Instant safeErrorTime, int attemptCount, long revision,
+                      Instant createdAt, Instant updatedAt) {
+        this(id, companionId, subjectId, pictureId, idempotencyKey, requestFingerprint, correlationId,
+                status, legacyRequestedPolicy(mode, contentUnderstood), null, null,
+                resultGrowthRecordId, safeErrorCode, safeErrorMessage, safeErrorTime, attemptCount,
+                revision, createdAt, updatedAt);
     }
 
     public FeedingRun persistedAs(long persistedId) {
@@ -115,7 +143,8 @@ public record FeedingRun(
                             String errorCode, String errorMessage, Instant errorTime,
                             int copyAttemptCount, long copyRevision, Instant copyUpdatedAt) {
         return new FeedingRun(copyId, companionId, subjectId, pictureId, idempotencyKey,
-                requestFingerprint, correlationId, copyStatus, nutritionMode, contentUnderstood,
+                requestFingerprint, correlationId, copyStatus, requestedPolicy, requestedProviderCode,
+                requestedModelCode,
                 growthRecordId, errorCode, errorMessage, errorTime, copyAttemptCount,
                 copyRevision, createdAt, copyUpdatedAt);
     }
@@ -157,6 +186,47 @@ public record FeedingRun(
         } catch (IllegalArgumentException exception) {
             throw new IllegalArgumentException("correlation id must be a canonical UUID", exception);
         }
+    }
+
+    private static void validateRequestedModel(NutritionPolicy policy, String providerCode, String modelCode) {
+        boolean providerPresent = providerCode != null;
+        boolean modelPresent = modelCode != null;
+        if (providerPresent != modelPresent) {
+            throw new IllegalArgumentException("requested provider and model must be specified together");
+        }
+        if (providerPresent && (!REQUESTED_CODE.matcher(providerCode).matches()
+                || !REQUESTED_CODE.matcher(modelCode).matches())) {
+            throw new IllegalArgumentException("requested provider and model have invalid format");
+        }
+        if (policy == NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK && !providerPresent) {
+            throw new IllegalArgumentException("visual policy requires requested provider and model");
+        }
+        if (policy != NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK && providerPresent) {
+            throw new IllegalArgumentException("deterministic policy cannot carry requested provider or model");
+        }
+    }
+
+    private static NutritionPolicy legacyRequestedPolicy(NutritionMode mode, boolean contentUnderstood) {
+        if (contentUnderstood) {
+            throw new IllegalArgumentException("legacy run cannot claim content understanding");
+        }
+        return NutritionPolicy.fromLegacyMode(mode);
+    }
+
+    /** @deprecated A run stores a request policy, not an actual analysis mode. */
+    @Deprecated(forRemoval = false)
+    public NutritionMode nutritionMode() {
+        return switch (requestedPolicy) {
+            case DEMO_ONLY -> NutritionMode.DEMO_DETERMINISTIC;
+            case METADATA_ONLY -> NutritionMode.METADATA_DETERMINISTIC;
+            case VISUAL_WITH_METADATA_FALLBACK -> NutritionMode.VISUAL_MODEL;
+        };
+    }
+
+    /** @deprecated Actual content understanding exists only on a completed growth provenance. */
+    @Deprecated(forRemoval = false)
+    public boolean contentUnderstood() {
+        return false;
     }
 
     private static void validateSafeError(String code, String message, Instant time) {

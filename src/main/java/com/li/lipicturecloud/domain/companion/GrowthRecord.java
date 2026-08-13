@@ -15,8 +15,7 @@ public record GrowthRecord(
         Map<CompanionSkill, Long> skillExperienceDelta,
         Companion companionAfter,
         String reason,
-        NutritionMode nutritionMode,
-        boolean contentUnderstood,
+        NutritionProvenance provenance,
         String balanceVersion,
         String idempotencyKey,
         String correlationId,
@@ -39,22 +38,45 @@ public record GrowthRecord(
         skillExperienceDelta = Map.copyOf(skillExperienceDelta);
         Objects.requireNonNull(companionAfter, "companionAfter");
         Objects.requireNonNull(reason, "reason");
-        Objects.requireNonNull(nutritionMode, "nutritionMode");
+        Objects.requireNonNull(provenance, "provenance");
         Objects.requireNonNull(balanceVersion, "balanceVersion");
         Objects.requireNonNull(idempotencyKey, "idempotencyKey");
         Objects.requireNonNull(correlationId, "correlationId");
         Objects.requireNonNull(createdTime, "createdTime");
     }
 
+    /** Compatibility constructor for pre-vision persisted and test fixtures. */
+    public GrowthRecord(Long id, long feedingRunId, long companionId, long pictureId,
+                        GrowthEventType eventType, long lifeExperienceDelta, TraitDelta traitDelta,
+                        Map<CompanionSkill, Long> skillExperienceDelta, Companion companionAfter,
+                        String reason, NutritionMode nutritionMode, boolean contentUnderstood,
+                        String balanceVersion, String idempotencyKey, String correlationId,
+                        Instant createdTime) {
+        this(id, feedingRunId, companionId, pictureId, eventType, lifeExperienceDelta, traitDelta,
+                skillExperienceDelta, companionAfter, reason,
+                legacyProvenance(nutritionMode, contentUnderstood), balanceVersion,
+                idempotencyKey, correlationId, createdTime);
+    }
+
     public static GrowthRecord from(long feedingRunId, long companionId, long pictureId,
-                                    FeedingGrowth growth, NutritionMode nutritionMode,
-                                    boolean contentUnderstood, String idempotencyKey,
+                                    FeedingGrowth growth, NutritionProvenance provenance,
+                                    String idempotencyKey,
                                     String correlationId, Instant createdTime) {
         Objects.requireNonNull(growth, "growth");
         return new GrowthRecord(null, feedingRunId, companionId, pictureId,
                 growth.eventType(), growth.lifeExperienceDelta(), growth.traitDelta(),
                 growth.skillExperienceDelta(), growth.companionAfter(), growth.reason(),
-                nutritionMode, contentUnderstood, growth.balanceVersion(), idempotencyKey,
+                provenance, growth.balanceVersion(), idempotencyKey,
+                correlationId, createdTime);
+    }
+
+    /** Compatibility factory for the deterministic analyzers before a real visual Provider exists. */
+    public static GrowthRecord from(long feedingRunId, long companionId, long pictureId,
+                                    FeedingGrowth growth, NutritionMode nutritionMode,
+                                    boolean contentUnderstood, String idempotencyKey,
+                                    String correlationId, Instant createdTime) {
+        return from(feedingRunId, companionId, pictureId, growth,
+                legacyProvenance(nutritionMode, contentUnderstood), idempotencyKey,
                 correlationId, createdTime);
     }
 
@@ -64,7 +86,30 @@ public record GrowthRecord(
         }
         return new GrowthRecord(persistedId, feedingRunId, companionId, pictureId, eventType,
                 lifeExperienceDelta, traitDelta, skillExperienceDelta, companionAfter, reason,
-                nutritionMode, contentUnderstood, balanceVersion, idempotencyKey,
+                provenance, balanceVersion, idempotencyKey,
                 correlationId, createdTime);
+    }
+
+    /** @deprecated Use {@link #provenance()} as the immutable audit fact. */
+    @Deprecated(forRemoval = false)
+    public NutritionMode nutritionMode() {
+        return provenance.actualMode();
+    }
+
+    /** @deprecated Use {@link #provenance()} as the immutable audit fact. */
+    @Deprecated(forRemoval = false)
+    public boolean contentUnderstood() {
+        return provenance.contentUnderstood();
+    }
+
+    private static NutritionProvenance legacyProvenance(NutritionMode mode, boolean contentUnderstood) {
+        if (contentUnderstood) {
+            throw new IllegalArgumentException("legacy growth record cannot claim content understanding");
+        }
+        return switch (Objects.requireNonNull(mode, "nutritionMode")) {
+            case DEMO_DETERMINISTIC -> NutritionProvenance.demo();
+            case METADATA_DETERMINISTIC -> NutritionProvenance.metadata();
+            case VISUAL_MODEL -> throw new IllegalArgumentException("visual growth record requires explicit provenance");
+        };
     }
 }

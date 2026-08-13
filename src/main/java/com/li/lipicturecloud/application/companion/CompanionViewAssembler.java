@@ -53,7 +53,8 @@ public class CompanionViewAssembler {
         record.skillExperienceDelta().forEach((skill, delta) -> skills.put(skill.name(), delta));
         return new GrowthRecordView(record.id(), record.pictureId(), record.eventType().name(),
                 record.lifeExperienceDelta(), traits(record.traitDelta()), Map.copyOf(skills), record.reason(),
-                record.balanceVersion(), record.nutritionMode().name(), record.contentUnderstood(),
+                record.balanceVersion(), record.provenance().actualMode().name(),
+                record.provenance().contentUnderstood(),
                 record.createdTime());
     }
 
@@ -75,6 +76,7 @@ public class CompanionViewAssembler {
             case METADATA_DETERMINISTIC ->
                     "根据尺寸、格式、大小和图库文字状态生成基础营养；未读取图片像素，也未调用视觉模型。"
                             + "你填写的原文不会进入伙伴成长记录。";
+            case VISUAL_MODEL -> "已由视觉模型读取图片内容；实际模型与降级信息会在成长记录中如实展示。";
         };
     }
 

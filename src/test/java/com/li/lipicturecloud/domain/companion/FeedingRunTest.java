@@ -33,6 +33,20 @@ class FeedingRunTest {
     }
 
     @Test
+    void storesRequestedStrategyWithoutClaimingActualContentUnderstanding() {
+        FeedingRun run = FeedingRun.processing(11L, 7L, 102L,
+                "6f26d166-0a82-4d9f-8a61-6c21cf2e59d0",
+                "f874b3c9fcbec3f749fe12d7ea01bcf09b83244cbe3b16745486df590f3ec97d",
+                "fef53056-2d9f-467d-9b1d-1afe9a6638fe",
+                NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK,
+                "dashscope", "qwen3.6-flash", NOW);
+
+        assertThat(run.requestedPolicy()).isEqualTo(NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK);
+        assertThat(run.requestedProviderCode()).isEqualTo("dashscope");
+        assertThat(run.requestedModelCode()).isEqualTo("qwen3.6-flash");
+    }
+
+    @Test
     void rejectedRunCannotBecomeCompletedOrRestarted() {
         FeedingRun rejected = processing().rejected(
                 "PICTURE_UNAVAILABLE", "图片不可用或无权访问", NOW.plusSeconds(1));

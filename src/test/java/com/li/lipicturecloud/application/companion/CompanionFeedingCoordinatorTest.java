@@ -10,6 +10,8 @@ import com.li.lipicturecloud.domain.companion.FeedingRunRepository;
 import com.li.lipicturecloud.domain.companion.GrowthRecord;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
+import com.li.lipicturecloud.domain.companion.NutritionPolicy;
+import com.li.lipicturecloud.domain.companion.NutritionProvenance;
 import com.li.lipicturecloud.domain.companion.PictureNutrition;
 import com.li.lipicturecloud.domain.companion.TraitDelta;
 import com.li.lipicturecloud.exception.BusinessException;
@@ -19,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
@@ -110,7 +113,7 @@ class CompanionFeedingCoordinatorTest {
     }
 
     @Test
-    void analysisProvenanceMustMatchTheModeBoundToTheRun() {
+    void actualAnalysisProvenanceMustBeAllowedByTheRequestedPolicy() {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion, 102L);
         PictureNutrition metadata = PictureNutrition.fromObservation(
@@ -118,10 +121,27 @@ class CompanionFeedingCoordinatorTest {
 
         assertThatThrownBy(() -> coordinator.complete(run, metadata))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("图片营养模式与喂养运行不一致");
+                .hasMessage("图片营养实际来源不符合喂养策略");
 
         verify(companionRepository, never()).findByOwnerIdForUpdate(any(Long.class));
         verify(growthRepository, never()).append(any());
+    }
+
+    @Test
+    void visualCompletionMustMatchTheProviderAndModelRequestedByTheRun() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = FeedingRun.processing(companion.id(), 7L, 102L, KEY, fingerprint(102L), CORRELATION,
+                NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK, "dashscope", "qwen3.6-flash", NOW)
+                .persistedAs(21L);
+        PictureNutrition differentModel = new PictureNutrition(42L, TraitDelta.zero(), Map.of(), "视觉营养",
+                NutritionProvenance.visual("dashscope", "another-model", "companion-vision-v1",
+                        "visual-observation-v1", new BigDecimal("0.82")));
+
+        assertThatThrownBy(() -> coordinator.complete(run, differentModel))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("图片营养实际模型与喂养请求不一致");
+
+        verify(companionRepository, never()).findByOwnerIdForUpdate(any(Long.class));
     }
 
     @Test

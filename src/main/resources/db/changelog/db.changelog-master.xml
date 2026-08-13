@@ -6,4 +6,6 @@
         https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
     <include file="changes/2026-08-11-companion-life-core.xml"
              relativeToChangelogFile="true"/>
+    <include file="changes/2026-08-13-companion-visual-provider.xml"
+             relativeToChangelogFile="true"/>
 </databaseChangeLog>

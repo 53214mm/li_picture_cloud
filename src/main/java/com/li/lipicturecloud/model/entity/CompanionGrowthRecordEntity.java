@@ -24,6 +24,12 @@ public class CompanionGrowthRecordEntity {
     private String reason;
     private String nutritionMode;
     private Boolean contentUnderstood;
+    private String providerCode;
+    private String modelCode;
+    private String promptVersion;
+    private String resultSchemaVersion;
+    private java.math.BigDecimal confidence;
+    private String fallbackReasonCode;
     private String balanceVersion;
     private String idempotencyKey;
     private String correlationId;

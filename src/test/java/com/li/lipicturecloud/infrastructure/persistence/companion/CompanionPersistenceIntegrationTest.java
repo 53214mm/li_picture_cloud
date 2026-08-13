@@ -12,6 +12,7 @@ import com.li.lipicturecloud.domain.companion.FeedingRunStatus;
 import com.li.lipicturecloud.domain.companion.GrowthRecord;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
+import com.li.lipicturecloud.domain.companion.NutritionProvenance;
 import com.li.lipicturecloud.domain.companion.PictureNutrition;
 import com.li.lipicturecloud.domain.companion.TraitDelta;
 import org.junit.jupiter.api.Test;
@@ -137,7 +138,7 @@ class CompanionPersistenceIntegrationTest {
                 new FeedingContext(false, 0L, 0L), balance);
         GrowthRecord record = growthRecordRepository.append(GrowthRecord.from(
                 run.id(), companion.id(), 102L, growth,
-                run.nutritionMode(), run.contentUnderstood(),
+                NutritionProvenance.demo(),
                 run.idempotencyKey(), run.correlationId(), now));
 
         assertThat(feedingRunRepository.complete(
@@ -146,6 +147,7 @@ class CompanionPersistenceIntegrationTest {
         assertThat(reloaded.companionAfter()).isEqualTo(growth.companionAfter());
         assertThat(reloaded.skillExperienceDelta())
                 .containsEntry(CompanionSkill.STORY_CREATION, 12L);
+        assertThat(reloaded.provenance()).isEqualTo(NutritionProvenance.demo());
         assertThat(feedingRunRepository.findByKey(companion.id(), run.idempotencyKey()).orElseThrow().status())
                 .isEqualTo(FeedingRunStatus.COMPLETED);
         assertThat(growthRecordRepository.hasFullFeed(companion.id(), 102L)).isTrue();

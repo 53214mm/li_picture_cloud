@@ -107,10 +107,10 @@ class CompanionSingleTableRoutingIntegrationTest {
 
         assertThat(update(connection, """
                 INSERT INTO companion_feed_run (id, companionId, subjectId, pictureId, idempotencyKey,
-                requestFingerprint, correlationId, status, nutritionMode)
+                requestFingerprint, correlationId, status, requestedPolicy)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, 8102L, COMPANION_ID, COMPANION_ID, PICTURE_ID, "routing-feed-key-01", FINGERPRINT,
-                CORRELATION_ID, "PROCESSING", "DEMO_DETERMINISTIC")).isEqualTo(1);
+                CORRELATION_ID, "PROCESSING", "DEMO_ONLY")).isEqualTo(1);
         assertThat(update(connection, "UPDATE companion_feed_run SET attemptCount = ? WHERE id = ?", 2, 8102L))
                 .isEqualTo(1);
         assertThat(value(connection, "SELECT attemptCount FROM companion_feed_run WHERE id = ?", 8102L))
@@ -119,10 +119,12 @@ class CompanionSingleTableRoutingIntegrationTest {
         assertThat(update(connection, """
                 INSERT INTO companion_growth_record (id, feedingRunId, companionId, pictureId, eventType,
                 lifeExperienceDelta, traitDeltaJson, skillDeltaJson, snapshotJson, reason, nutritionMode,
+                contentUnderstood, providerCode, modelCode, promptVersion, resultSchemaVersion,
                 balanceVersion, idempotencyKey, correlationId)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, 8103L, 8102L, COMPANION_ID, PICTURE_ID, "FEED", 1L, "{}", "{}", "{}", "created",
-                "DEMO_DETERMINISTIC", "life-core-v1", "routing-feed-key-01", CORRELATION_ID)).isEqualTo(1);
+                "DEMO_DETERMINISTIC", false, "internal", "demo-v1", "none", "nutrition-v1",
+                "life-core-v1", "routing-feed-key-01", CORRELATION_ID)).isEqualTo(1);
         assertThat(update(connection, "UPDATE companion_growth_record SET reason = ? WHERE id = ?", "updated", 8103L))
                 .isEqualTo(1);
         assertThat(value(connection, "SELECT reason FROM companion_growth_record WHERE id = ?", 8103L))
