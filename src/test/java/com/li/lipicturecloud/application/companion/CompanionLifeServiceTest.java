@@ -8,6 +8,7 @@ import com.li.lipicturecloud.domain.companion.CompanionRepository;
 import com.li.lipicturecloud.domain.companion.FeedingRun;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
+import com.li.lipicturecloud.domain.companion.NutritionPolicy;
 import com.li.lipicturecloud.domain.companion.PictureNutrition;
 import com.li.lipicturecloud.domain.companion.TraitDelta;
 import com.li.lipicturecloud.exception.BusinessException;
@@ -29,6 +30,9 @@ import static com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConsta
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -58,6 +62,7 @@ class CompanionLifeServiceTest {
         authorization = mock(SpaceAuthorizationAccessService.class);
         analyzer = mock(PictureNutritionAnalyzer.class);
         properties = new CompanionFeatureProperties();
+        when(analyzer.policy()).thenReturn(NutritionPolicy.DEMO_ONLY);
         when(analyzer.mode()).thenReturn(NutritionMode.DEMO_DETERMINISTIC);
         when(analyzer.contentUnderstood()).thenReturn(false);
         assembler = new CompanionViewAssembler(CompanionBalance.v1(), analyzer);
@@ -73,7 +78,8 @@ class CompanionLifeServiceTest {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(coordinator.reserve(any(), any(), any(Long.class), any(), any(), any(), any(), any(Boolean.class)))
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
                 .thenReturn(FeedReservation.started(run));
         doThrow(new BusinessException(ErrorCode.NOT_FOUND_ERROR, "图片不存在"))
                 .when(authorization).checkForUser(PICTURE_VIEW, 102L, 7L);
@@ -93,7 +99,8 @@ class CompanionLifeServiceTest {
         FeedPictureResult original = new FeedPictureResult("GROWN", completed.correlationId(),
                 assembler.companion(companion), null);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(coordinator.reserve(any(), any(), any(Long.class), any(), any(), any(), any(), any(Boolean.class)))
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
                 .thenReturn(FeedReservation.replay(completed, original));
 
         assertThat(service.feed(new FeedPictureCommand(subject, 102L, KEY))).isEqualTo(original);
@@ -124,7 +131,8 @@ class CompanionLifeServiceTest {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(coordinator.reserve(any(), any(), any(Long.class), any(), any(), any(), any(), any(Boolean.class)))
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
                 .thenReturn(FeedReservation.started(run));
         when(analyzer.analyze(any())).thenThrow(new IllegalStateException("provider-token=secret"));
 
@@ -158,7 +166,8 @@ class CompanionLifeServiceTest {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(coordinator.reserve(any(), any(), any(Long.class), any(), any(), any(), any(), any(Boolean.class)))
+        when(coordinator.reserve(any(), any(), anyLong(), anyString(), anyString(), anyString(),
+                any(NutritionPolicy.class), nullable(String.class), nullable(String.class)))
                 .thenReturn(FeedReservation.started(run));
         doThrow(new IllegalStateException("authorization database unavailable"))
                 .when(authorization).checkForUser(PICTURE_VIEW, 102L, 7L);

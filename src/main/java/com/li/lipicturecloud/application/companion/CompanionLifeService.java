@@ -9,6 +9,7 @@ import com.li.lipicturecloud.domain.companion.Companion;
 import com.li.lipicturecloud.domain.companion.CompanionBalance;
 import com.li.lipicturecloud.domain.companion.CompanionRepository;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
+import com.li.lipicturecloud.domain.companion.NutritionPolicy;
 import com.li.lipicturecloud.domain.companion.PictureNutrition;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
@@ -106,9 +107,14 @@ public class CompanionLifeService implements CompanionLife {
         Companion companion = companionRepository.findByOwnerId(command.subject().userId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "请先唤醒伙伴"));
         // reserve 在分析前落库；浏览器或网关超时后可带着同一 key 重放，而不是重复投喂。
+        NutritionPolicy requestedPolicy = analyzer.policy();
         FeedReservation reservation = coordinator.reserve(companion, command.subject(), command.pictureId(),
                 command.idempotencyKey(), fingerprint(command.pictureId()), UUID.randomUUID().toString(),
-                analyzer.mode(), analyzer.contentUnderstood());
+                requestedPolicy,
+                requestedPolicy == NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK
+                        ? properties.getVisionProvider() : null,
+                requestedPolicy == NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK
+                        ? properties.getVisionModel() : null);
 
         // 授权放在回放判断之前：历史结果不是绕过空间权限的旁路。
         checkAuthorization(command, reservation);

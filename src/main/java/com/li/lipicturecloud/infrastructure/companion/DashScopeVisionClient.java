@@ -111,6 +111,7 @@ public final class DashScopeVisionClient implements VisualObservationProvider {
     /**
      * 返回实际调用的供应商标识，供后续把真实来源写入成长审计记录。
      */
+    @Override
     public String providerCode() {
         return providerCode;
     }
@@ -118,6 +119,7 @@ public final class DashScopeVisionClient implements VisualObservationProvider {
     /**
      * 返回实际调用的模型标识，避免将用户的请求策略误记成真实来源。
      */
+    @Override
     public String modelCode() {
         return modelCode;
     }
@@ -125,6 +127,7 @@ public final class DashScopeVisionClient implements VisualObservationProvider {
     /**
      * 返回提示词的语义版本；修改提示词含义时必须同步升级该值。
      */
+    @Override
     public String promptVersion() {
         return PROMPT_VERSION;
     }
@@ -132,6 +135,7 @@ public final class DashScopeVisionClient implements VisualObservationProvider {
     /**
      * 返回模型候选结果的结构版本，便于后续演进时按历史版本重放。
      */
+    @Override
     public String resultSchemaVersion() {
         return RESULT_SCHEMA_VERSION;
     }

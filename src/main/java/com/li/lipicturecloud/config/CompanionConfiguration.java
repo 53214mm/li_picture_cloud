@@ -1,10 +1,17 @@
 package com.li.lipicturecloud.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.li.lipicturecloud.application.companion.AuthorizedPictureContentProvider;
 import com.li.lipicturecloud.application.companion.PictureNutritionAnalyzer;
 import com.li.lipicturecloud.application.companion.PictureObservationProvider;
+import com.li.lipicturecloud.application.companion.VisualObservationProvider;
+import com.li.lipicturecloud.application.companion.VisionQuotaGuard;
 import com.li.lipicturecloud.domain.companion.CompanionBalance;
+import com.li.lipicturecloud.infrastructure.companion.DashScopeVisionClient;
 import com.li.lipicturecloud.infrastructure.companion.DemoPictureNutritionAdapter;
 import com.li.lipicturecloud.infrastructure.companion.MetadataPictureNutritionAdapter;
+import com.li.lipicturecloud.infrastructure.companion.VisualPictureNutritionAdapter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,15 +34,42 @@ public class CompanionConfiguration {
         return Clock.systemUTC();
     }
 
+    /**
+     * Demo 与视觉/元数据实现分成互斥 Bean，测试和 E2E 无论是否设置真实 API key 都不会创建网络客户端。
+     */
     @Bean
-    public PictureNutritionAnalyzer pictureNutritionAnalyzer(CompanionFeatureProperties properties,
-                                                             PictureObservationProvider observations) {
-        return switch (properties.getNutritionMode()) {
-            case DEMO_DETERMINISTIC -> new DemoPictureNutritionAdapter();
-            case METADATA_DETERMINISTIC -> new MetadataPictureNutritionAdapter(observations);
-            // 视觉实现会在下一功能单元注入受控内容读取、配额和 Provider；此处绝不能静默
-            // 降级，否则部署者会以为图片已经交给模型理解。
-            case VISUAL_MODEL -> throw new IllegalStateException("视觉营养尚未配置");
-        };
+    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-mode", havingValue = "DEMO_DETERMINISTIC")
+    public PictureNutritionAnalyzer demoPictureNutritionAnalyzer() {
+        return new DemoPictureNutritionAdapter();
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-mode",
+            havingValue = "METADATA_DETERMINISTIC", matchIfMissing = true)
+    public PictureNutritionAnalyzer metadataPictureNutritionAnalyzer(PictureObservationProvider observations) {
+        return new MetadataPictureNutritionAdapter(observations);
+    }
+
+    /**
+     * 只在显式视觉模式创建客户端；空 API key 会在这里快速失败，绝不静默降级成元数据模式。
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-mode", havingValue = "VISUAL_MODEL")
+    public VisualObservationProvider dashScopeVisualObservationProvider(ObjectMapper objectMapper,
+                                                                          CompanionFeatureProperties properties) {
+        return DashScopeVisionClient.fromProperties(objectMapper, properties);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-mode", havingValue = "VISUAL_MODEL")
+    public PictureNutritionAnalyzer visualPictureNutritionAnalyzer(CompanionFeatureProperties properties,
+                                                                    PictureObservationProvider observations,
+                                                                    VisionQuotaGuard quota,
+                                                                    AuthorizedPictureContentProvider contents,
+                                                                    VisualObservationProvider visual,
+                                                                    Clock clock) {
+        return new VisualPictureNutritionAdapter(quota, contents, visual,
+                new MetadataPictureNutritionAdapter(observations), clock,
+                properties.getVisionMaxBytes().toBytes(), properties.getVisionDailyLimit());
     }
 }

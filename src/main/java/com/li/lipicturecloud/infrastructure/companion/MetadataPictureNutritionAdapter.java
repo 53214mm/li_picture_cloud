@@ -6,6 +6,7 @@ import com.li.lipicturecloud.application.companion.PictureObservation;
 import com.li.lipicturecloud.application.companion.PictureObservationProvider;
 import com.li.lipicturecloud.domain.companion.CompanionSkill;
 import com.li.lipicturecloud.domain.companion.NutritionMode;
+import com.li.lipicturecloud.domain.companion.NutritionPolicy;
 import com.li.lipicturecloud.domain.companion.PictureNutrition;
 import com.li.lipicturecloud.domain.companion.TraitDelta;
 
@@ -25,6 +26,11 @@ public class MetadataPictureNutritionAdapter implements PictureNutritionAnalyzer
 
     public MetadataPictureNutritionAdapter(PictureObservationProvider observations) {
         this.observations = observations;
+    }
+
+    @Override
+    public NutritionPolicy policy() {
+        return NutritionPolicy.METADATA_ONLY;
     }
 
     @Override
