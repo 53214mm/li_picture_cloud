@@ -129,7 +129,18 @@ public class CompanionChatService {
         messages.add(new SystemMessage(systemPrompt));
         List<CompanionChatMessage> history = messageRepository.findRecent(
                 companion.id(), properties.getChatHistoryLimit());
+        // 历史为倒序；跳过刚落库的本轮用户消息（稍后显式追加，避免重复）。
+        int latestUserIndex = -1;
+        for (int i = 0; i < history.size(); i++) {
+            if (history.get(i).role().name().equals("USER")) {
+                latestUserIndex = i;
+                break;
+            }
+        }
         for (int i = history.size() - 1; i >= 0; i--) {
+            if (i == latestUserIndex) {
+                continue;
+            }
             CompanionChatMessage past = history.get(i);
             messages.add(past.role().name().equals("USER")
                     ? new UserMessage(past.content()) : new AssistantMessage(past.content()));
