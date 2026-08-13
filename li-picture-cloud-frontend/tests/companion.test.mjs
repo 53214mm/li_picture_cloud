@@ -52,6 +52,49 @@ test('renders only the server-provided nutrition label and safe provenance field
   assert.match(timeline, /overflow-y:\s*auto/)
 })
 
+test('mood relationship and memory panels reuse the shared message bubble language', async () => {
+  const mood = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionMoodPanel.vue', import.meta.url)), 'utf8')
+  const relationship = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionRelationshipPanel.vue', import.meta.url)), 'utf8')
+  const memory = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionMemoryPanel.vue', import.meta.url)), 'utf8')
+  const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/CompanionView.vue', import.meta.url)), 'utf8')
+  const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/companion.js', import.meta.url)), 'utf8')
+  const constants = await readFile(fileURLToPath(new globalThis.URL('../src/constants/companion.js', import.meta.url)), 'utf8')
+
+  // 情绪面板展示服务端摘要，不自行解释数值。
+  assert.match(mood, /MOOD_AXES/)
+  assert.match(mood, /mood\.summary/)
+  assert.match(mood, /CompanionMessageBubble/)
+  assert.match(mood, /:message="mood\.summary"/)
+  assert.match(mood, /随时间自然回落/)
+  // 关系面板支持近期反馈的负向展示。
+  assert.match(relationship, /RELATIONSHIP_AXES/)
+  assert.match(relationship, /recentFeedback/)
+  assert.match(relationship, /negative/)
+  // 记忆面板：五个接口、状态机操作与失效隐藏内容。
+  assert.match(memory, /CompanionMessageBubble/)
+  assert.match(memory, /MEMORY_STATUS/)
+  assert.match(memory, /listCompanionMemories/)
+  assert.match(memory, /confirmCompanionMemory/)
+  assert.match(memory, /correctCompanionMemory/)
+  assert.match(memory, /dismissCompanionMemory/)
+  assert.match(memory, /deleteCompanionMemory/)
+  assert.match(memory, /availableActions/)
+  assert.match(memory, /来源图片已不可用/)
+  assert.match(memory, /memory\.content/)
+  // 主页集成三个面板，服务端 mood/relationship 驱动展示。
+  assert.match(page, /CompanionMoodPanel/)
+  assert.match(page, /CompanionRelationshipPanel/)
+  assert.match(page, /CompanionMemoryPanel/)
+  assert.match(page, /:mood="home\.mood"/)
+  assert.match(page, /:relationship="home\.relationship"/)
+  // API 与常量契约。
+  assert.match(api, /\/companion\/memories/)
+  assert.match(constants, /MOOD_AXES/)
+  assert.match(constants, /RELATIONSHIP_AXES/)
+  assert.match(constants, /MEMORY_STATUS/)
+  assert.match(constants, /INVALIDATED/)
+})
+
 test('applies the server result once and de-duplicates history', () => {
   const home = { companion: { revision: '0' }, recentGrowth: [] }
   const result = {

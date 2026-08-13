@@ -42,16 +42,20 @@ test('awakens a companion and recovers one private-picture feed without double g
   expect(keys[1]).toBe(keys[0])
   await expect(page.getByText('42 / 100 生命经验')).toBeVisible()
   await expect(page.getByText('+42 生命经验')).toBeVisible()
-  await expect(page.getByRole('group', { name: '伙伴说' }).first())
-    .toContainText('演示营养让伙伴练习了观察与叙事。')
+  // 喂养故事、情绪摘要与记忆都统一使用"伙伴说"气泡；按文案过滤各自的展示。
+  await expect(page.getByRole('group', { name: '伙伴说' })
+    .filter({ hasText: '演示营养让伙伴练习了观察与叙事。' })).toBeVisible()
   await expect(page.getByTestId('growth-trait-curiosity').first()).toContainText('+0.60')
   await expect(page.getByTestId('skill-IMAGE_OBSERVATION')).toContainText('18 / 100')
   await expect(page.getByTestId('skill-STORY_CREATION')).toContainText('12 / 100')
-  await expect(page.getByRole('link', { name: '图片 #102' }).first())
+  await expect(page.locator('.timeline-list').getByRole('link', { name: '图片 #102', exact: true }).first())
     .toHaveAttribute('href', '/picture/102')
   await expect(page.getByTestId('growth-nutrition-label').first())
     .toContainText('演示营养（未读取图片内容）')
   await expect(page.getByText('未进行内容理解').first()).toBeVisible()
+  // Demo 喂养产生一条待确认记忆候选，情绪与关系面板也随喂养出现。
+  await expect(page.getByTestId('memory-status').first()).toHaveText('待确认')
+  await expect(page.getByText('伙伴记得一张让它练习了观察与叙事的演示图片，它把这次练习记进了档案。')).toBeVisible()
 
   const homeResponse = await page.request.get('/api/companion/me')
   expect(homeResponse.ok()).toBeTruthy()
@@ -64,7 +68,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByText('42 / 100 生命经验')).toBeVisible()
   await expect(page.getByText('+42 生命经验')).toBeVisible()
   await expect(page.getByTestId('skill-IMAGE_OBSERVATION')).toContainText('18 / 100')
-  await expect(page.getByRole('link', { name: '图片 #102' }).first())
+  await expect(page.locator('.timeline-list').getByRole('link', { name: '图片 #102', exact: true }).first())
     .toHaveAttribute('href', '/picture/102')
   await expect(page.getByTestId('growth-nutrition-label').first())
     .toContainText('演示营养（未读取图片内容）')
@@ -121,8 +125,11 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
   await expect(page.getByText('来源 dashscope / qwen3.6-flash')).toBeVisible()
   await expect(page.getByText('置信度 0.84')).toBeVisible()
-  await expect(page.getByRole('group', { name: '伙伴说' })).toHaveCount(2)
-  await expect(page.getByRole('link', { name: '图片 #102' })).toHaveCount(2)
+  // 成长档案内恰好两条喂养故事气泡（页面另有情绪/记忆气泡，不在档案区内计数）。
+  const archiveBubbles = page.locator('.timeline-list').getByRole('group', { name: '伙伴说' })
+  await expect(archiveBubbles).toHaveCount(2)
+  // 档案内两条来源图片链接（记忆面板使用"来源图片 #102"文案，精确匹配区分）。
+  await expect(page.locator('.timeline-list').getByRole('link', { name: '图片 #102', exact: true })).toHaveCount(2)
 
   await page.reload()
   await expect(labels.nth(0)).toHaveText('Qwen 视觉营养 · 已分析图片内容')

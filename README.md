@@ -215,6 +215,7 @@ docker compose --env-file .env up -d --build
 - [用户种子数据指南](docs/round-17-user-seed-guide.md)
 - [OpenCloudOS Docker 部署教程](docs/round-18-docker-deployment-guide.md)
 - [图像伙伴生命核心与演示喂养指南](docs/round-19-companion-life-core-guide.md)
+- [伙伴情绪、关系状态与来源化记忆指南](docs/round-20-companion-mood-relationship-memory-guide.md)
 - [当前未决问题](docs/未决问题.md)
 
 ## 已知边界与后续规划

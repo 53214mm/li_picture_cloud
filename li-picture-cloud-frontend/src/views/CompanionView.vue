@@ -111,6 +111,13 @@
             </section>
           </div>
 
+          <div class="state-grid">
+            <CompanionMoodPanel :mood="home.mood" />
+            <CompanionRelationshipPanel :relationship="home.relationship" />
+          </div>
+
+          <CompanionMemoryPanel />
+
           <CompanionGrowthTimeline :records="home.recentGrowth || []" />
         </template>
       </template>
@@ -128,6 +135,9 @@ import { listPictureVOByPageUncached } from '@/api/picture'
 import CompanionStats from '@/components/companion/CompanionStats.vue'
 import CompanionPicturePicker from '@/components/companion/CompanionPicturePicker.vue'
 import CompanionGrowthTimeline from '@/components/companion/CompanionGrowthTimeline.vue'
+import CompanionMoodPanel from '@/components/companion/CompanionMoodPanel.vue'
+import CompanionRelationshipPanel from '@/components/companion/CompanionRelationshipPanel.vue'
+import CompanionMemoryPanel from '@/components/companion/CompanionMemoryPanel.vue'
 import {
   applyFeedResult,
   beginFeedAttempt,
@@ -307,6 +317,7 @@ async function submitFeed() {
 .nutrition-label { font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .nutrition-banner p { font-size: .85rem; }
 .companion-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(23rem, .85fr); gap: 1.5rem; align-items: start; }
+.state-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; align-items: start; }
 .feeding-column { min-width: 0; display: grid; gap: 1rem; }
 .feeding-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .feeding-heading h2 { font-size: 1.5rem; }
@@ -323,7 +334,7 @@ async function submitFeed() {
 .feed-message.notice { color: #075d2a; font-weight: 700; }
 .feed-helper { color: var(--gray-600); }
 @media (max-width: 900px) {
-  .companion-grid { grid-template-columns: 1fr; }
+  .companion-grid, .state-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 767px) {
   .companion-page { padding-block: 1rem 3rem; }
