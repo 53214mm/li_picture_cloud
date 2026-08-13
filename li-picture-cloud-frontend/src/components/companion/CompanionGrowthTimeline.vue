@@ -1,56 +1,67 @@
 <template>
   <section class="timeline-card" aria-labelledby="growth-title">
     <header>
-      <span class="eyebrow">成长档案</span>
-      <h2 id="growth-title">最近发生的变化</h2>
+      <div>
+        <span class="eyebrow">成长档案</span>
+        <h2 id="growth-title">最近发生的变化</h2>
+      </div>
+      <span v-if="visibleRecords.length" class="archive-limit">最近 {{ visibleRecords.length }} / 最多 {{ MAX_ARCHIVE_RECORDS }} 条</span>
     </header>
     <div v-if="!records.length" class="empty-state">
       伙伴还没有成长记录，选择一张图片开始第一次喂养。
     </div>
-    <ol v-else class="timeline-list">
-      <li v-for="record in records" :key="record.id" class="timeline-item">
-        <span class="timeline-dot" aria-hidden="true"></span>
-        <div class="event-card">
-          <div class="event-heading">
-            <div>
-              <strong>{{ eventLabel(record.eventType) }}</strong>
-              <span class="experience">+{{ record.lifeExperienceDelta }} 生命经验</span>
+    <div v-else class="timeline-scroll" role="region" aria-label="成长档案列表" tabindex="0">
+      <ol class="timeline-list">
+        <li v-for="record in visibleRecords" :key="record.id" class="timeline-item">
+          <span class="timeline-dot" aria-hidden="true"></span>
+          <div class="event-card">
+            <div class="event-heading">
+              <div>
+                <strong>{{ eventLabel(record.eventType) }}</strong>
+                <span class="experience">+{{ record.lifeExperienceDelta }} 生命经验</span>
+              </div>
+              <time :datetime="record.createdTime">{{ formatTime(record.createdTime) }}</time>
             </div>
-            <time :datetime="record.createdTime">{{ formatTime(record.createdTime) }}</time>
+            <CompanionMessageBubble :message="record.reason" />
+            <div v-if="traitChanges(record).length || skillChanges(record).length" class="delta-list">
+              <span v-for="item in traitChanges(record)" :key="item.key"
+                    :data-testid="`growth-trait-${item.key}`">
+                {{ item.label }} {{ formatSignedDelta(item.value) }}
+              </span>
+              <span v-for="item in skillChanges(record)" :key="item.key">
+                {{ item.label }} +{{ item.value }}
+              </span>
+            </div>
+            <div class="event-meta">
+              <router-link v-if="record.sourcePictureId" :to="`/picture/${record.sourcePictureId}`">
+                图片 #{{ shortId(record.sourcePictureId) }}
+              </router-link>
+              <span>规则 {{ record.balanceVersion }}</span>
+              <span data-testid="growth-nutrition-label">{{ record.nutritionLabel || '图片营养' }}</span>
+              <span v-if="record.providerCode && record.modelCode">来源 {{ record.providerCode }} / {{ record.modelCode }}</span>
+              <span v-if="record.confidence != null">置信度 {{ Number(record.confidence).toFixed(2) }}</span>
+              <span v-if="record.contentUnderstood" class="visual-badge">已分析图片内容</span>
+              <span v-else class="demo-badge">未进行内容理解</span>
+            </div>
           </div>
-          <CompanionMessageBubble :message="record.reason" />
-          <div v-if="traitChanges(record).length || skillChanges(record).length" class="delta-list">
-            <span v-for="item in traitChanges(record)" :key="item.key"
-                  :data-testid="`growth-trait-${item.key}`">
-              {{ item.label }} {{ formatSignedDelta(item.value) }}
-            </span>
-            <span v-for="item in skillChanges(record)" :key="item.key">
-              {{ item.label }} +{{ item.value }}
-            </span>
-          </div>
-          <div class="event-meta">
-            <router-link v-if="record.sourcePictureId" :to="`/picture/${record.sourcePictureId}`">
-              图片 #{{ shortId(record.sourcePictureId) }}
-            </router-link>
-            <span>规则 {{ record.balanceVersion }}</span>
-            <span data-testid="growth-nutrition-label">{{ record.nutritionLabel || '图片营养' }}</span>
-            <span v-if="record.providerCode && record.modelCode">来源 {{ record.providerCode }} / {{ record.modelCode }}</span>
-            <span v-if="record.confidence != null">置信度 {{ Number(record.confidence).toFixed(2) }}</span>
-            <span v-if="record.contentUnderstood" class="visual-badge">已分析图片内容</span>
-            <span v-else class="demo-badge">未进行内容理解</span>
-          </div>
-        </div>
-      </li>
-    </ol>
+        </li>
+      </ol>
+    </div>
   </section>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { SKILL_LABEL, TRAIT_AXES } from '@/constants/companion'
 import { formatSignedDelta } from '@/utils/companion'
 import CompanionMessageBubble from '@/components/companion/CompanionMessageBubble.vue'
 
-defineProps({ records: { type: Array, required: true } })
+const MAX_ARCHIVE_RECORDS = 20
+
+const props = defineProps({ records: { type: Array, required: true } })
+
+// 服务端主页同样限制为 20 条；组件自身保底，避免未来接口变更让档案区无限累积。
+const visibleRecords = computed(() => props.records.slice(0, MAX_ARCHIVE_RECORDS))
 
 function eventLabel(type) {
   return type === 'PICTURE_REVISITED' ? '再次遇见熟悉的图片' : '从图片中获得成长'
@@ -82,10 +93,12 @@ function formatTime(value) {
 
 <style scoped>
 .timeline-card { border: 2px solid var(--black); background: var(--white); }
-.timeline-card > header { padding: 1.25rem 1.5rem; border-bottom: 2px solid var(--black); }
+.timeline-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 2px solid var(--black); }
 .timeline-card h2 { font-size: 1.35rem; }
 .eyebrow { color: var(--blue); font-size: .68rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.archive-limit { padding: .3rem .55rem; border: 1px solid var(--gray-400); color: var(--gray-600); font-size: .72rem; font-weight: 700; white-space: nowrap; }
 .empty-state { padding: 2rem 1.5rem; color: var(--gray-600); }
+.timeline-scroll { max-block-size: 46rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .timeline-list { padding: 1.25rem 1.5rem 1.5rem; }
 .timeline-item { position: relative; padding-left: 1.5rem; }
 .timeline-item:not(:last-child) { padding-bottom: 1.25rem; }
@@ -104,6 +117,8 @@ function formatTime(value) {
 .visual-badge { padding: .2rem .4rem; border: 1px solid #075d2a; color: #075d2a; font-weight: 700; }
 @media (max-width: 767px) {
   .timeline-card > header, .timeline-list { padding-inline: 1.25rem; }
+  .timeline-card > header { align-items: center; }
+  .timeline-scroll { max-block-size: 38rem; }
   .timeline-list { grid-template-columns: 1fr; }
   .event-heading { flex-direction: column; gap: .35rem; }
 }

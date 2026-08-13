@@ -27,6 +27,7 @@ test('keeps one idempotency key through ambiguous retries', () => {
 })
 
 test('renders only the server-provided nutrition label and safe provenance fields', async () => {
+  const picker = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionPicturePicker.vue', import.meta.url)), 'utf8')
   const timeline = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionGrowthTimeline.vue', import.meta.url)), 'utf8')
   const bubble = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionMessageBubble.vue', import.meta.url)), 'utf8')
   const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/CompanionView.vue', import.meta.url)), 'utf8')
@@ -41,6 +42,14 @@ test('renders only the server-provided nutrition label and safe provenance field
   assert.match(timeline, /:message="record\.reason"/)
   assert.match(bubble, /role="group"/)
   assert.match(bubble, /伙伴说/)
+  assert.match(picker, /MAX_MATERIAL_PICTURES = 12/)
+  assert.match(picker, /visiblePictures/)
+  assert.match(picker, /max-block-size:\s*29rem/)
+  assert.match(picker, /overflow-y:\s*auto/)
+  assert.match(timeline, /MAX_ARCHIVE_RECORDS = 20/)
+  assert.match(timeline, /visibleRecords/)
+  assert.match(timeline, /max-block-size:\s*46rem/)
+  assert.match(timeline, /overflow-y:\s*auto/)
 })
 
 test('applies the server result once and de-duplicates history', () => {
