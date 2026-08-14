@@ -58,6 +58,7 @@
                 title="敲打会立即止住这次提议" @click="react('scold')">敲打它</button>
       </div>
       <p v-if="actionError" class="proposal-error" role="alert">{{ actionError }}</p>
+      <p v-else-if="actionNoticeText" class="proposal-notice" role="status">{{ actionNoticeText }}</p>
       <p class="scold-hint">敲打只抑制这一次提议；反复敲打才会缓慢影响它"好奇"的性格倾向。</p>
     </div>
   </section>
@@ -80,6 +81,7 @@ const loading = ref(false)
 const loadError = ref('')
 const busy = ref(false)
 const actionError = ref('')
+const actionNoticeText = ref('')
 const showContract = ref(false)
 const contractSaving = ref(false)
 const contractError = ref('')
@@ -147,6 +149,7 @@ async function react(kind) {
   if (busy.value || !proposal.value) return
   busy.value = true
   actionError.value = ''
+  actionNoticeText.value = ''
   try {
     const updated = kind === 'accept'
       ? await acceptCompanionProposal(proposal.value.id)
@@ -154,18 +157,17 @@ async function react(kind) {
         ? await ignoreCompanionProposal(proposal.value.id)
         : await scoldCompanionProposal(proposal.value.id)
     proposal.value = null
-    actionNotice(kind, updated)
+    if (kind === 'scold' && updated?.status === 'SUPPRESSED') {
+      actionNoticeText.value = '伙伴安静了，这次提议已被止住。'
+    } else if (kind === 'accept' && updated?.status === 'DONE') {
+      actionNoticeText.value = '好呀，伙伴已经记下了。'
+    } else if (kind === 'ignore' && updated?.status === 'IGNORED') {
+      actionNoticeText.value = '已忽略，伙伴不会再提这件事。'
+    }
   } catch (error) {
     actionError.value = error.message || '操作失败，请稍后重试。'
   } finally {
     busy.value = false
-  }
-}
-
-function actionNotice(kind, updated) {
-  // 轻量反馈：处理后清空当前提案，下一次主动检查会按契约重新评估。
-  if (kind === 'scold' && updated?.status === 'SUPPRESSED') {
-    actionError.value = '伙伴安静了，这次提议已被止住。'
   }
 }
 </script>
@@ -183,6 +185,7 @@ function actionNotice(kind, updated) {
 .contract-row input[type='number'] { width: 6rem; padding: .35rem .5rem; border: 2px solid var(--black); font: inherit; }
 .contract-actions .btn { min-height: 40px; font-size: .8rem; }
 .contract-error, .proposal-error { margin-top: .5rem; color: var(--red); font-size: .8rem; }
+.proposal-notice { margin-top: .5rem; color: #075d2a; font-size: .8rem; font-weight: 700; }
 .proposal-state { padding: 2rem 1.5rem; color: var(--gray-600); }
 .proposal-state.error { color: var(--red); }
 .proposal-state.error .btn { margin-top: 1rem; }

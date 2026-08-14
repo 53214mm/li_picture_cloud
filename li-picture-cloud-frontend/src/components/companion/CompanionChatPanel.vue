@@ -94,9 +94,10 @@ async function send() {
     })
     if (!companionDraft.content) companionDraft.content = '（这次没有想好怎么回）'
   } catch (error) {
-    // 请求未发出或响应异常：移除空泡泡并提示，历史刷新后会与后端一致。
+    // 请求未发出或响应异常：移除空泡泡、恢复草稿，历史刷新后会与后端一致。
     const index = messages.value.indexOf(companionDraft)
     if (index !== -1 && !companionDraft.content) messages.value.splice(index, 1)
+    if (!draft.value) draft.value = content
     sendError.value = error.message || '伙伴暂时没法回应，请稍后再试。'
   } finally {
     sending.value = false
