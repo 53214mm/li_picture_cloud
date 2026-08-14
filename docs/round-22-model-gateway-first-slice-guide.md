@@ -1,6 +1,6 @@
-# Round 22：模型与 MCP 控制中心第一个垂直切片指南
+# Round 22：模型与 MCP 控制中心前两个垂直切片指南
 
-> 分支 `deepseek/companion-mood-relationship-memory`，提交 d133f89 → 0901d37 → 48616dc。
+> 分支 `deepseek/companion-mood-relationship-memory`，提交 d133f89 → … → 80487b0。
 > 规格来源：`docs/superpowers/specs/2026-08-14-model-mcp-control-center-design.md`。
 
 ## 本切片交付了什么
@@ -42,9 +42,15 @@
 
 ## 验收与已知边界
 
-- 后端切片内测试全绿；完整 `mvn verify`（440 测试 + JaCoCo 门禁含 domain.airuntime）与 E2E 4/4 在切片收口时通过。
-- 已知边界（Q3 后续）：凭据密文无轮换工具；使用记录无 Token 用量（当前只记成功/失败）；BYOK 仅接入语言任务，视觉/图像任务尚未接网关；MCP 工具注册与模型能力画像未开始。
+- 后端切片内测试全绿；完整 `mvn verify`（469 测试 + JaCoCo 门禁含 domain.airuntime）与 E2E 4/4 在切片收口时通过。
+- 已知边界（Q3 后续）：凭据密文无轮换工具；使用记录无 Token 用量（当前只记成功/失败）；图像创作任务尚未接网关；MCP 工具注册与平台试用额度账本未开始；能力画像来自平台静态认知表，供应商变更需评审更新。
 - 演示档（chatPolicy=DEMO_ONLY）不发起任何模型调用，路由规则只在 MODEL 档生效。
+
+## 第二个切片：视觉接入网关 + 能力画像（提交 a4b3dc5 / 29de8c7 / 80487b0）
+
+1. **能力画像**（a4b3dc5）：`model_capability_profile` 追加式快照表（Liquibase 20260814-36/37 + 两份 sharding + 迁移测试）；`StaticModelCapabilityRegistry` 平台静态认知表（DeepSeek 语言 / Qwen 视觉 / gpt-image-2 设计默认），未知组合一律 `unknown()`（全不支持，绝不猜能力）；连接测试成功时 `ModelConnectivityService` 写快照，快照失败不掩盖探测结果。
+2. **视觉接入网关**（29de8c7）：`VisionRouter`（VISION_UNDERSTANDING 路由，BYOK 优先、平台回退、坏路由大声失败、能力画像视觉门禁）；`RoutedVisualObservationProvider`（平台默认走既有 DashScope 路径行为不变；BYOK 复用同一 OpenAI 兼容客户端按调用实例化）；`VisualObservationProvider` 接口升级为 `observe(content, subjectId)` 返回 `VisualObservationResult`（候选 + 真实来源），消除并发下"最后一次调用"状态错乱；语言/视觉共用 `ModelRouteDecision`；两条视觉路径都写 `VISION_UNDERSTANDING` 使用记录（BYOK/PLATFORM 正确分账）。
+3. **控制中心展示**（80487b0）：`GET /api/model/connections/{id}/capability`（归属校验 + 安全视图）；前端探测成功后展示"支持：文本 · 工具调用 · 结构化输出 · 上下文 64000"能力徽章，未知能力不展示；E2E 断言 DeepSeek 语言连接不展示视觉能力。
 
 ## 独立审查与修复（第五轮审查）
 
