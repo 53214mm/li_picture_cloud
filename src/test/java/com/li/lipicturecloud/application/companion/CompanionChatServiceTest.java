@@ -2,7 +2,7 @@ package com.li.lipicturecloud.application.companion;
 
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
 import com.li.lipicturecloud.application.airuntime.LanguageInvocationException;
-import com.li.lipicturecloud.application.airuntime.LanguageRouteDecision;
+import com.li.lipicturecloud.application.airuntime.ModelRouteDecision;
 import com.li.lipicturecloud.application.companion.view.ChatHistoryView;
 import com.li.lipicturecloud.config.CompanionFeatureProperties;
 import com.li.lipicturecloud.domain.airuntime.CostSource;
@@ -93,7 +93,7 @@ class CompanionChatServiceTest {
         when(messageRepository.findRecent(anyLong(), anyInt())).thenReturn(List.of());
         when(memoryRepository.findRecent(anyLong(), anyInt())).thenReturn(List.of());
         when(languageRouter.decide(anyLong())).thenReturn(
-                com.li.lipicturecloud.application.airuntime.LanguageRouteDecision.platform());
+                com.li.lipicturecloud.application.airuntime.ModelRouteDecision.platform());
         service = new CompanionChatService(companionRepository, messageRepository, moodRepository,
                 relationshipRepository, memoryRepository, contextAssembler, quotaGuard, properties,
                 chatModelProvider, languageRouter, languageInvoker, modelUsageService,
@@ -248,8 +248,8 @@ class CompanionChatServiceTest {
         Companion companion = persistedCompanion();
         properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
         when(languageRouter.decide(7L)).thenReturn(
-                LanguageRouteDecision.byok(byokConnection(), "sk-secret"));
-        when(languageInvoker.stream(any(LanguageRouteDecision.class), anyList()))
+                ModelRouteDecision.byok(byokConnection(), "sk-secret"));
+        when(languageInvoker.stream(any(ModelRouteDecision.class), anyList()))
                 .thenReturn(Flux.just("你", "好"));
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
         when(contextAssembler.systemPrompt(11L, 7L, 5)).thenReturn("系统提示");
@@ -273,8 +273,8 @@ class CompanionChatServiceTest {
         Companion companion = persistedCompanion();
         properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
         when(languageRouter.decide(7L)).thenReturn(
-                LanguageRouteDecision.byok(byokConnection(), "sk-secret"));
-        when(languageInvoker.stream(any(LanguageRouteDecision.class), anyList()))
+                ModelRouteDecision.byok(byokConnection(), "sk-secret"));
+        when(languageInvoker.stream(any(ModelRouteDecision.class), anyList()))
                 .thenReturn(Flux.error(new LanguageInvocationException(
                         ConnectivityResult.CREDENTIAL_REJECTED, "rejected")));
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));

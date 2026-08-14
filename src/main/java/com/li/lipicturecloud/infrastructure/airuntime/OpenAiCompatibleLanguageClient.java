@@ -6,7 +6,7 @@ import com.li.lipicturecloud.application.airuntime.ChatTurn;
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
 import com.li.lipicturecloud.application.airuntime.LanguageInvocationException;
 import com.li.lipicturecloud.application.airuntime.LanguageModelInvoker;
-import com.li.lipicturecloud.application.airuntime.LanguageRouteDecision;
+import com.li.lipicturecloud.application.airuntime.ModelRouteDecision;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -50,7 +50,7 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
     }
 
     @Override
-    public Flux<String> stream(LanguageRouteDecision route, List<ChatTurn> turns) {
+    public Flux<String> stream(ModelRouteDecision route, List<ChatTurn> turns) {
         Objects.requireNonNull(route, "route");
         if (!route.isByok()) {
             throw new IllegalArgumentException("BYOK client only handles BYOK routes");
@@ -90,12 +90,12 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
                 .onErrorMap(this::normalizeFailure);
     }
 
-    URI resolveEndpoint(LanguageRouteDecision route) {
+    URI resolveEndpoint(ModelRouteDecision route) {
         return URI.create(route.connection().endpointUri().toString()
                 .replaceFirst("/+$", "") + "/chat/completions");
     }
 
-    String encodeBody(LanguageRouteDecision route, List<ChatTurn> turns) throws IOException {
+    String encodeBody(ModelRouteDecision route, List<ChatTurn> turns) throws IOException {
         StringBuilder messages = new StringBuilder();
         for (ChatTurn turn : turns) {
             if (messages.length() > 0) {

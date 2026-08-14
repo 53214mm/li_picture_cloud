@@ -6,6 +6,7 @@ import com.li.lipicturecloud.application.companion.AuthorizedPictureRef;
 import com.li.lipicturecloud.application.companion.PictureNutritionAnalyzer;
 import com.li.lipicturecloud.application.companion.VisualObservationCandidate;
 import com.li.lipicturecloud.application.companion.VisualObservationProvider;
+import com.li.lipicturecloud.application.companion.VisualObservationResult;
 import com.li.lipicturecloud.application.companion.VisionQuotaGuard;
 import com.li.lipicturecloud.application.companion.VisionSafeFailure;
 import com.li.lipicturecloud.domain.companion.CompanionSkill;
@@ -98,7 +99,7 @@ public final class VisualPictureNutritionAdapter implements PictureNutritionAnal
             quota.reserve(picture.subject().userId(), LocalDate.now(clock.withZone(SHANGHAI)), dailyLimit);
             // 紧贴外发前再检查一次，避免下载后的分享撤销、移动或替换使旧字节越过权限边界。
             contents.verifyStillAuthorized(picture, content);
-            return visualNutrition(visual.observe(content));
+            return visualNutrition(visual.observe(content, picture.subject().userId()));
         } catch (RuntimeException exception) {
             if (exception instanceof VisionSafeFailure failure && FALLBACK_CODES.contains(failure.safeCode())) {
                 return metadataFallback(picture, failure.safeCode());
@@ -113,8 +114,9 @@ public final class VisualPictureNutritionAdapter implements PictureNutritionAnal
         return metadataFallback(picture, "SKIPPED_FAMILIAR");
     }
 
-    private PictureNutrition visualNutrition(VisualObservationCandidate candidate) {
-        Objects.requireNonNull(candidate, "visual observation candidate");
+    private PictureNutrition visualNutrition(VisualObservationResult result) {
+        Objects.requireNonNull(result, "visual observation result");
+        VisualObservationCandidate candidate = result.candidate();
         long experience = 35L + candidate.sceneComplexity() * 2L + candidate.energy() + candidate.creativity();
         TraitDelta traits = new TraitDelta(
                 decimal("0.20").add(decimal("0.10").multiply(BigDecimal.valueOf(candidate.sceneComplexity()))),
@@ -136,8 +138,8 @@ public final class VisualPictureNutritionAdapter implements PictureNutritionAnal
         }
         return new PictureNutrition(experience, traits, Map.copyOf(skills),
                 candidate.companionMessage(),
-                NutritionProvenance.visual(visual.providerCode(), visual.modelCode(), visual.promptVersion(),
-                        visual.resultSchemaVersion(), candidate.confidence()),
+                NutritionProvenance.visual(result.providerCode(), result.modelCode(),
+                        result.promptVersion(), result.resultSchemaVersion(), candidate.confidence()),
                 moodImpact(candidate), candidate.companionMessage());
     }
 

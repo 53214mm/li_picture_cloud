@@ -3,6 +3,7 @@ package com.li.lipicturecloud.infrastructure.companion;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.li.lipicturecloud.application.companion.AuthorizedPictureContent;
 import com.li.lipicturecloud.application.companion.VisualObservationCandidate;
+import com.li.lipicturecloud.application.companion.VisualObservationResult;
 import com.li.lipicturecloud.application.companion.VisionProviderException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,15 +70,15 @@ class DashScopeVisionClientTest {
                         .value(240))
                 .andRespond(withSuccess(validResponse(), MediaType.APPLICATION_JSON));
 
-        VisualObservationCandidate candidate = client.observe(jpegContent());
+        VisualObservationResult result = client.observe(jpegContent(), 7L);
 
-        assertThat(candidate).isEqualTo(new VisualObservationCandidate(
+        assertThat(result.candidate()).isEqualTo(new VisualObservationCandidate(
                 VisualObservationCandidate.Mood.JOYFUL, 2, 3, true, 2, 3, new BigDecimal("0.84"),
                 "我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。"));
-        assertThat(client.providerCode()).isEqualTo("dashscope");
-        assertThat(client.modelCode()).isEqualTo("qwen3.6-flash");
-        assertThat(client.promptVersion()).isEqualTo("companion-vision-v2");
-        assertThat(client.resultSchemaVersion()).isEqualTo("visual-observation-v2");
+        assertThat(result.providerCode()).isEqualTo("dashscope");
+        assertThat(result.modelCode()).isEqualTo("qwen3.6-flash");
+        assertThat(result.promptVersion()).isEqualTo("companion-vision-v2");
+        assertThat(result.resultSchemaVersion()).isEqualTo("visual-observation-v2");
         server.verify();
     }
 
@@ -87,7 +88,7 @@ class DashScopeVisionClientTest {
         server.expect(requestTo(ENDPOINT))
                 .andRespond(withStatus(status).contentType(MediaType.TEXT_PLAIN).body("provider internals"));
 
-        assertThatThrownBy(() -> client.observe(jpegContent()))
+        assertThatThrownBy(() -> client.observe(jpegContent(), 7L))
                 .isInstanceOf(VisionProviderException.class)
                 .hasMessage("视觉服务暂不可用")
                 .extracting(error -> ((VisionProviderException) error).safeCode())
@@ -102,7 +103,7 @@ class DashScopeVisionClientTest {
                 ```
                 """), MediaType.APPLICATION_JSON));
 
-        assertThatThrownBy(() -> client.observe(jpegContent()))
+        assertThatThrownBy(() -> client.observe(jpegContent(), 7L))
                 .isInstanceOf(VisionProviderException.class)
                 .extracting(error -> ((VisionProviderException) error).safeCode())
                 .isEqualTo("VISION_INVALID_RESPONSE");
@@ -113,7 +114,7 @@ class DashScopeVisionClientTest {
     void rejectsMissingExtraOrOutOfRangeStructuredFields(String rawResponse) {
         server.expect(requestTo(ENDPOINT)).andRespond(withSuccess(rawResponse, MediaType.APPLICATION_JSON));
 
-        assertThatThrownBy(() -> client.observe(jpegContent()))
+        assertThatThrownBy(() -> client.observe(jpegContent(), 7L))
                 .isInstanceOf(VisionProviderException.class)
                 .extracting(error -> ((VisionProviderException) error).safeCode())
                 .isEqualTo("VISION_INVALID_RESPONSE");
@@ -123,7 +124,7 @@ class DashScopeVisionClientTest {
     void mapsTransportTimeoutToStableSafeCode() {
         server.expect(requestTo(ENDPOINT)).andRespond(withException(new SocketTimeoutException("internal timeout")));
 
-        assertThatThrownBy(() -> client.observe(jpegContent()))
+        assertThatThrownBy(() -> client.observe(jpegContent(), 7L))
                 .isInstanceOf(VisionProviderException.class)
                 .hasMessage("视觉服务暂不可用")
                 .extracting(error -> ((VisionProviderException) error).safeCode())
@@ -135,7 +136,7 @@ class DashScopeVisionClientTest {
         String oversized = "x".repeat(65 * 1024);
         server.expect(requestTo(ENDPOINT)).andRespond(withSuccess(oversized, MediaType.APPLICATION_JSON));
 
-        assertThatThrownBy(() -> client.observe(jpegContent()))
+        assertThatThrownBy(() -> client.observe(jpegContent(), 7L))
                 .isInstanceOf(VisionProviderException.class)
                 .extracting(error -> ((VisionProviderException) error).safeCode())
                 .isEqualTo("VISION_INVALID_RESPONSE");

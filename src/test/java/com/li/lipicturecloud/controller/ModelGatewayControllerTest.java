@@ -2,12 +2,15 @@ package com.li.lipicturecloud.controller;
 
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
 import com.li.lipicturecloud.application.airuntime.CredentialService;
+import com.li.lipicturecloud.application.airuntime.ModelCapabilityProfileService;
 import com.li.lipicturecloud.application.airuntime.ModelConnectionService;
 import com.li.lipicturecloud.application.airuntime.ModelConnectivityService;
 import com.li.lipicturecloud.application.airuntime.ModelRoutingService;
 import com.li.lipicturecloud.application.airuntime.ModelUsageService;
 import com.li.lipicturecloud.domain.airuntime.CostSource;
 import com.li.lipicturecloud.domain.airuntime.CredentialVault;
+import com.li.lipicturecloud.domain.airuntime.ModelCapabilities;
+import com.li.lipicturecloud.domain.airuntime.ModelCapabilityProfile;
 import com.li.lipicturecloud.domain.airuntime.ModelConnection;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;
 import com.li.lipicturecloud.domain.airuntime.ModelTask;
@@ -27,6 +30,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -49,6 +53,7 @@ class ModelGatewayControllerTest {
     private ModelConnectivityService connectivityService;
     private ModelRoutingService routingService;
     private ModelUsageService usageService;
+    private ModelCapabilityProfileService profileService;
 
     @BeforeEach
     void setUp() {
@@ -57,12 +62,14 @@ class ModelGatewayControllerTest {
         connectivityService = mock(ModelConnectivityService.class);
         routingService = mock(ModelRoutingService.class);
         usageService = mock(ModelUsageService.class);
+        profileService = mock(ModelCapabilityProfileService.class);
         UserService userService = mock(UserService.class);
         User loginUser = new User();
         loginUser.setId(7L);
         when(userService.getLoginUserEntity(any(HttpServletRequest.class))).thenReturn(loginUser);
         ModelGatewayController controller = new ModelGatewayController(credentialService,
-                connectionService, connectivityService, routingService, usageService, userService);
+                connectionService, connectivityService, routingService, usageService,
+                profileService, userService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -161,6 +168,31 @@ class ModelGatewayControllerTest {
                 .andExpect(jsonPath("$.data[0].success").value(true))
                 .andExpect(jsonPath("$.data[0].correlationId")
                         .value("fef53056-2d9f-467d-9b1d-1afe9a6638fe"));
+    }
+
+    @Test
+    void capabilityEndpointRequiresOwnershipAndReturnsSafeSnapshot() throws Exception {
+        ModelConnection owned = ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK,
+                "主力", URI.create("https://api.deepseek.com/v1"), "deepseek-chat", 5L, true, 1L);
+        when(connectionService.findOwned(9L, 7L)).thenReturn(owned);
+        ModelCapabilityProfile profile = ModelCapabilityProfile.snapshot(9L, 7L,
+                ModelProvider.DEEPSEEK, "deepseek-chat",
+                ModelCapabilities.of(true, false, true, true, false, false, false, 64_000,
+                        ModelCapabilities.SYNC, ModelCapabilities.COST_CHEAP),
+                Instant.parse("2026-08-14T08:00:00Z")).withId(3L);
+        when(profileService.findLatest(9L)).thenReturn(Optional.of(profile));
+
+        mockMvc.perform(get("/model/connections/9/capability"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.text").value(true))
+                .andExpect(jsonPath("$.data.vision").value(false))
+                .andExpect(jsonPath("$.data.maxContextTokens").value(64_000))
+                .andExpect(jsonPath("$.data.costHint").value("CHEAP"));
+
+        when(profileService.findLatest(9L)).thenReturn(Optional.empty());
+        mockMvc.perform(get("/model/connections/9/capability"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(40400));
     }
 
     @Test

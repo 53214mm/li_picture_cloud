@@ -10,7 +10,7 @@ import java.net.URI;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class LanguageRouteDecisionTest {
+class ModelRouteDecisionTest {
 
     private static final ModelConnection CONNECTION = ModelConnection.restore(9L, 7L,
             ModelProvider.DEEPSEEK, "主力", URI.create("https://api.deepseek.com/v1"),
@@ -18,7 +18,7 @@ class LanguageRouteDecisionTest {
 
     @Test
     void platformRouteCarriesNoConnectionOrCredential() {
-        LanguageRouteDecision platform = LanguageRouteDecision.platform();
+        ModelRouteDecision platform = ModelRouteDecision.platform();
 
         assertThat(platform.costSource()).isEqualTo(CostSource.PLATFORM);
         assertThat(platform.connection()).isNull();
@@ -28,7 +28,7 @@ class LanguageRouteDecisionTest {
 
     @Test
     void byokRouteCarriesConnectionAndDecryptedKey() {
-        LanguageRouteDecision byok = LanguageRouteDecision.byok(CONNECTION, "sk-secret");
+        ModelRouteDecision byok = ModelRouteDecision.byok(CONNECTION, "sk-secret");
 
         assertThat(byok.costSource()).isEqualTo(CostSource.BYOK);
         assertThat(byok.connection()).isEqualTo(CONNECTION);
@@ -38,19 +38,19 @@ class LanguageRouteDecisionTest {
 
     @Test
     void rejectsMixedFields() {
-        assertThatThrownBy(() -> new LanguageRouteDecision(CostSource.PLATFORM, CONNECTION, null))
+        assertThatThrownBy(() -> new ModelRouteDecision(CostSource.PLATFORM, CONNECTION, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new LanguageRouteDecision(CostSource.PLATFORM, null, "sk"))
+        assertThatThrownBy(() -> new ModelRouteDecision(CostSource.PLATFORM, null, "sk"))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new LanguageRouteDecision(CostSource.BYOK, null, "sk"))
+        assertThatThrownBy(() -> new ModelRouteDecision(CostSource.BYOK, null, "sk"))
                 .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> LanguageRouteDecision.byok(CONNECTION, null))
+        assertThatThrownBy(() -> ModelRouteDecision.byok(CONNECTION, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> LanguageRouteDecision.byok(CONNECTION, "  "))
+        assertThatThrownBy(() -> ModelRouteDecision.byok(CONNECTION, "  "))
                 .isInstanceOf(IllegalArgumentException.class);
         ModelConnection withoutCredential = ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK,
                 "主力", URI.create("https://api.deepseek.com/v1"), "deepseek-chat", null, true, 1L);
-        assertThatThrownBy(() -> LanguageRouteDecision.byok(withoutCredential, "sk"))
+        assertThatThrownBy(() -> ModelRouteDecision.byok(withoutCredential, "sk"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

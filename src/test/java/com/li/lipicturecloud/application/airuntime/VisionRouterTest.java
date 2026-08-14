@@ -3,6 +3,8 @@ package com.li.lipicturecloud.application.airuntime;
 import com.li.lipicturecloud.domain.airuntime.CredentialVault;
 import com.li.lipicturecloud.domain.airuntime.CredentialVaultRepository;
 import com.li.lipicturecloud.domain.airuntime.CostSource;
+import com.li.lipicturecloud.domain.airuntime.ModelCapabilities;
+import com.li.lipicturecloud.domain.airuntime.ModelCapabilityProfile;
 import com.li.lipicturecloud.domain.airuntime.ModelConnection;
 import com.li.lipicturecloud.domain.airuntime.ModelConnectionRepository;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;
@@ -15,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,14 +26,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class LanguageRouterTest {
+class VisionRouterTest {
+
+    private static final Instant NOW = Instant.parse("2026-08-14T08:00:00Z");
 
     private TaskRoutingRuleRepository routingRepository;
     private ModelConnectionRepository connectionRepository;
     private CredentialVaultRepository vaultRepository;
     private CredentialCipher cipher;
     private EndpointAllowlist allowlist;
-    private LanguageRouter router;
+    private ModelCapabilityProfileService profileService;
+    private VisionRouter router;
 
     @BeforeEach
     void setUp() {
@@ -39,8 +45,9 @@ class LanguageRouterTest {
         vaultRepository = mock(CredentialVaultRepository.class);
         cipher = mock(CredentialCipher.class);
         allowlist = new PropertyEndpointAllowlist(List.of("deepseek.com"));
-        router = new LanguageRouter(routingRepository, connectionRepository, vaultRepository,
-                cipher, allowlist);
+        profileService = mock(ModelCapabilityProfileService.class);
+        router = new VisionRouter(routingRepository, connectionRepository, vaultRepository, cipher,
+                allowlist, profileService);
     }
 
     private ModelConnection connection() {
@@ -53,26 +60,37 @@ class LanguageRouterTest {
                 "cipher", CredentialVault.ALGORITHM_AES_GCM_V1, 0L);
     }
 
+    private ModelCapabilityProfile visionProfile() {
+        return ModelCapabilityProfile.snapshot(9L, 7L, ModelProvider.DEEPSEEK, "deepseek-chat",
+                ModelCapabilities.of(true, true, false, false, false, false, false, 64_000,
+                        ModelCapabilities.SYNC, ModelCapabilities.COST_CHEAP), NOW).withId(2L);
+    }
+
+    private void stubByokRule() {
+        when(routingRepository.findBySubjectAndTask(7L, ModelTask.VISION_UNDERSTANDING))
+                .thenReturn(Optional.of(TaskRoutingRule.create(7L, ModelTask.VISION_UNDERSTANDING, 9L)
+                        .withId(1L)));
+    }
+
     @Test
     void missingRuleOrExplicitPlatformYieldsPlatformRoute() {
-        when(routingRepository.findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT))
+        when(routingRepository.findBySubjectAndTask(7L, ModelTask.VISION_UNDERSTANDING))
                 .thenReturn(Optional.empty());
         assertThat(router.decide(7L)).isEqualTo(ModelRouteDecision.platform());
 
-        when(routingRepository.findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT))
-                .thenReturn(Optional.of(TaskRoutingRule.create(7L, ModelTask.LANGUAGE_AGENT, null)
+        when(routingRepository.findBySubjectAndTask(7L, ModelTask.VISION_UNDERSTANDING))
+                .thenReturn(Optional.of(TaskRoutingRule.create(7L, ModelTask.VISION_UNDERSTANDING, null)
                         .withId(1L)));
         assertThat(router.decide(7L)).isEqualTo(ModelRouteDecision.platform());
     }
 
     @Test
-    void boundEnabledConnectionYieldsByokRouteWithDecryptedKey() {
-        when(routingRepository.findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT))
-                .thenReturn(Optional.of(TaskRoutingRule.create(7L, ModelTask.LANGUAGE_AGENT, 9L)
-                        .withId(1L)));
+    void capableByokConnectionYieldsByokRouteWithDecryptedKey() {
+        stubByokRule();
         when(connectionRepository.findById(9L)).thenReturn(Optional.of(connection()));
         when(vaultRepository.findById(5L)).thenReturn(Optional.of(credential()));
         when(cipher.decrypt(credential())).thenReturn("sk-secret");
+        when(profileService.findLatest(9L)).thenReturn(Optional.of(visionProfile()));
 
         ModelRouteDecision decision = router.decide(7L);
 
@@ -83,60 +101,54 @@ class LanguageRouterTest {
 
     @Test
     void brokenByokRulesFailLoudlyInsteadOfFallingBackToPlatform() {
-        when(routingRepository.findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT))
-                .thenReturn(Optional.of(TaskRoutingRule.create(7L, ModelTask.LANGUAGE_AGENT, 9L)
-                        .withId(1L)));
+        stubByokRule();
 
         when(connectionRepository.findById(9L)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> router.decide(7L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("路由规则");
-
-        ModelConnection foreign = ModelConnection.restore(9L, 8L, ModelProvider.DEEPSEEK, "主力",
-                URI.create("https://api.deepseek.com/v1"), "deepseek-chat", 5L, true, 1L);
-        when(connectionRepository.findById(9L)).thenReturn(Optional.of(foreign));
-        assertThatThrownBy(() -> router.decide(7L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("路由规则");
+                .isInstanceOf(BusinessException.class).hasMessageContaining("路由规则");
 
         ModelConnection disabled = ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK, "主力",
                 URI.create("https://api.deepseek.com/v1"), "deepseek-chat", 5L, false, 1L);
         when(connectionRepository.findById(9L)).thenReturn(Optional.of(disabled));
         assertThatThrownBy(() -> router.decide(7L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("已停用");
+                .isInstanceOf(BusinessException.class).hasMessageContaining("已停用");
 
         ModelConnection withoutCredential = ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK,
                 "主力", URI.create("https://api.deepseek.com/v1"), "deepseek-chat", null, true, 1L);
         when(connectionRepository.findById(9L)).thenReturn(Optional.of(withoutCredential));
         assertThatThrownBy(() -> router.decide(7L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("未绑定凭据");
+                .isInstanceOf(BusinessException.class).hasMessageContaining("未绑定凭据");
 
-        when(connectionRepository.findById(9L)).thenReturn(Optional.of(connection()));
-        when(vaultRepository.findById(5L)).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> router.decide(7L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("凭据不存在");
-    }
-
-    @Test
-    void rejectsEndpointsThatLeftTheAllowlist() {
-        when(routingRepository.findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT))
-                .thenReturn(Optional.of(TaskRoutingRule.create(7L, ModelTask.LANGUAGE_AGENT, 9L)
-                        .withId(1L)));
         ModelConnection blocked = ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK, "主力",
                 URI.create("https://evil.example.com/v1"), "deepseek-chat", 5L, true, 1L);
         when(connectionRepository.findById(9L)).thenReturn(Optional.of(blocked));
+        assertThatThrownBy(() -> router.decide(7L))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不在允许清单内");
+    }
 
+    @Test
+    void capabilityGateRejectsMissingOrNonVisionProfiles() {
+        stubByokRule();
+        when(connectionRepository.findById(9L)).thenReturn(Optional.of(connection()));
+        when(vaultRepository.findById(5L)).thenReturn(Optional.of(credential()));
+
+        when(profileService.findLatest(9L)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> router.decide(7L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("不在允许清单内");
+                .hasMessageContaining("尚未生成能力画像");
+
+        ModelCapabilityProfile textOnly = ModelCapabilityProfile.snapshot(9L, 7L,
+                ModelProvider.DEEPSEEK, "deepseek-chat",
+                ModelCapabilities.of(true, false, true, true, false, false, false, 64_000,
+                        ModelCapabilities.SYNC, ModelCapabilities.COST_CHEAP), NOW).withId(2L);
+        when(profileService.findLatest(9L)).thenReturn(Optional.of(textOnly));
+        assertThatThrownBy(() -> router.decide(7L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不支持视觉理解");
     }
 
     @Test
     void rejectsInvalidSubjectIds() {
         assertThatThrownBy(() -> router.decide(0L)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> router.decide(-1L)).isInstanceOf(IllegalArgumentException.class);
     }
 }

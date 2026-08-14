@@ -90,6 +90,12 @@ public class ModelConnectionService {
         return connectionRepository.findByOwnerId(subjectId);
     }
 
+    /** 归属校验后的连接读取；供控制中心等需要连接本体的内部服务复用。 */
+    public ModelConnection findOwned(long id, long subjectId) {
+        checkIdentity(subjectId);
+        return requireOwnedConnection(id, subjectId);
+    }
+
     private ModelConnection requireOwnedConnection(long id, long subjectId) {
         ModelConnection connection = connectionRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "模型连接不存在"));

@@ -4,7 +4,7 @@ import com.li.lipicturecloud.application.airuntime.ChatTurn;
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
 import com.li.lipicturecloud.application.airuntime.LanguageInvocationException;
 import com.li.lipicturecloud.application.airuntime.LanguageModelInvoker;
-import com.li.lipicturecloud.application.airuntime.LanguageRouteDecision;
+import com.li.lipicturecloud.application.airuntime.ModelRouteDecision;
 import com.li.lipicturecloud.application.airuntime.LanguageRouter;
 import com.li.lipicturecloud.application.airuntime.ModelUsageService;
 import com.li.lipicturecloud.application.companion.view.ChatHistoryView;
@@ -132,7 +132,7 @@ public class CompanionChatService {
         Objects.requireNonNull(subject, "subject");
         String normalized = validateMessage(message);
         Companion companion = requireCompanion(subject);
-        LanguageRouteDecision route = properties.getChatPolicy()
+        ModelRouteDecision route = properties.getChatPolicy()
                 == CompanionFeatureProperties.CompanionChatPolicy.MODEL
                 ? languageRouter.decide(subject.userId())
                 : null;
@@ -152,7 +152,7 @@ public class CompanionChatService {
     }
 
     private Flux<String> modelReply(Companion companion, AuthorizationSubject subject, String message,
-                                    Instant now, LanguageRouteDecision route) {
+                                    Instant now, ModelRouteDecision route) {
         List<ChatTurn> turns = assembleTurns(companion, subject, message);
         if (route.isByok()) {
             return byokReply(companion, subject, route, turns, now);
@@ -235,7 +235,7 @@ public class CompanionChatService {
 
     /** BYOK 路径：失败只记录安全错误码，绝不静默切换到平台钱包。 */
     private Flux<String> byokReply(Companion companion, AuthorizationSubject subject,
-                                   LanguageRouteDecision route, List<ChatTurn> turns, Instant now) {
+                                   ModelRouteDecision route, List<ChatTurn> turns, Instant now) {
         StringBuilder collected = new StringBuilder();
         return languageInvoker.stream(route, turns)
                 .map(delta -> {

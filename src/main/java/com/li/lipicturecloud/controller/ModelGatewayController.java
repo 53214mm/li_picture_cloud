@@ -3,11 +3,13 @@ package com.li.lipicturecloud.controller;
 import com.li.lipicturecloud.annotation.AuthCheck;
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
 import com.li.lipicturecloud.application.airuntime.CredentialService;
+import com.li.lipicturecloud.application.airuntime.ModelCapabilityProfileService;
 import com.li.lipicturecloud.application.airuntime.ModelConnectionService;
 import com.li.lipicturecloud.application.airuntime.ModelConnectivityService;
 import com.li.lipicturecloud.application.airuntime.ModelRoutingService;
 import com.li.lipicturecloud.application.airuntime.ModelUsageService;
 import com.li.lipicturecloud.application.airuntime.view.CredentialVaultView;
+import com.li.lipicturecloud.application.airuntime.view.ModelCapabilityProfileView;
 import com.li.lipicturecloud.application.airuntime.view.ModelConnectionView;
 import com.li.lipicturecloud.application.airuntime.view.ModelRoutingRuleView;
 import com.li.lipicturecloud.application.airuntime.view.ModelUsageRecordView;
@@ -56,6 +58,7 @@ public class ModelGatewayController {
     private final ModelConnectivityService connectivityService;
     private final ModelRoutingService routingService;
     private final ModelUsageService usageService;
+    private final ModelCapabilityProfileService profileService;
     private final UserService userService;
 
     public ModelGatewayController(CredentialService credentialService,
@@ -63,12 +66,14 @@ public class ModelGatewayController {
                                   ModelConnectivityService connectivityService,
                                   ModelRoutingService routingService,
                                   ModelUsageService usageService,
+                                  ModelCapabilityProfileService profileService,
                                   UserService userService) {
         this.credentialService = credentialService;
         this.connectionService = connectionService;
         this.connectivityService = connectivityService;
         this.routingService = routingService;
         this.usageService = usageService;
+        this.profileService = profileService;
         this.userService = userService;
     }
 
@@ -158,6 +163,17 @@ public class ModelGatewayController {
     public BaseResponse<ConnectivityResult> testConnection(@PathVariable long id,
                                                            HttpServletRequest request) {
         return ResultUtils.success(connectivityService.testConnection(id, subject(request).userId()));
+    }
+
+    @GetMapping("/connections/{id}/capability")
+    @AuthCheck
+    public BaseResponse<ModelCapabilityProfileView> capability(@PathVariable long id,
+                                                               HttpServletRequest request) {
+        long subjectId = subject(request).userId();
+        connectionService.findOwned(id, subjectId);
+        return ResultUtils.success(ModelCapabilityProfileView.of(profileService.findLatest(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR,
+                        "连接尚未生成能力画像，请先测试连接"))));
     }
 
     // ===== 任务路由 =====

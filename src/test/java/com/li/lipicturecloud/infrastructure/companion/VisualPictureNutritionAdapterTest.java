@@ -5,6 +5,7 @@ import com.li.lipicturecloud.application.companion.AuthorizedPictureContentProvi
 import com.li.lipicturecloud.application.companion.AuthorizedPictureRef;
 import com.li.lipicturecloud.application.companion.VisualObservationCandidate;
 import com.li.lipicturecloud.application.companion.VisualObservationProvider;
+import com.li.lipicturecloud.application.companion.VisualObservationResult;
 import com.li.lipicturecloud.application.companion.VisionContentException;
 import com.li.lipicturecloud.application.companion.VisionProviderException;
 import com.li.lipicturecloud.application.companion.VisionQuotaGuard;
@@ -26,6 +27,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -50,13 +52,11 @@ class VisualPictureNutritionAdapterTest {
         AuthorizedPictureRef picture = picture();
         AuthorizedPictureContent content = jpegContent();
         when(contents.load(picture, MAX_BYTES)).thenReturn(content);
-        when(visual.observe(content)).thenReturn(new VisualObservationCandidate(
-                VisualObservationCandidate.Mood.JOYFUL, 3, 3, true, 2, 4, new BigDecimal("0.84"),
-                "我像走进一场明亮的小冒险：画面里的层次让我忍不住多看几眼，热闹的气息也让我更想靠近这个世界。"));
-        when(visual.providerCode()).thenReturn("dashscope");
-        when(visual.modelCode()).thenReturn("qwen3.6-flash");
-        when(visual.promptVersion()).thenReturn("companion-vision-v2");
-        when(visual.resultSchemaVersion()).thenReturn("visual-observation-v2");
+        when(visual.observe(content, 7L)).thenReturn(new VisualObservationResult(
+                new VisualObservationCandidate(
+                        VisualObservationCandidate.Mood.JOYFUL, 3, 3, true, 2, 4, new BigDecimal("0.84"),
+                        "我像走进一场明亮的小冒险：画面里的层次让我忍不住多看几眼，热闹的气息也让我更想靠近这个世界。"),
+                "dashscope", "qwen3.6-flash", "companion-vision-v2", "visual-observation-v2"));
 
         PictureNutrition nutrition = new VisualPictureNutritionAdapter(
                 quota, contents, visual, metadata, CLOCK, MAX_BYTES, DAILY_LIMIT).analyze(picture);
@@ -83,7 +83,7 @@ class VisualPictureNutritionAdapterTest {
         order.verify(contents).load(picture, MAX_BYTES);
         order.verify(quota).reserve(7L, LocalDate.of(2026, 8, 14), DAILY_LIMIT);
         order.verify(contents).verifyStillAuthorized(picture, content);
-        order.verify(visual).observe(content);
+        order.verify(visual).observe(content, 7L);
         verify(metadata, never()).analyze(any());
     }
 
@@ -98,7 +98,7 @@ class VisualPictureNutritionAdapterTest {
         PictureNutrition metadataNutrition = PictureNutrition.fromObservation(31L, TraitDelta.zero(),
                 Map.of(CompanionSkill.IMAGE_OBSERVATION, 8L), "未读取图片像素");
         when(contents.load(picture, MAX_BYTES)).thenReturn(content);
-        when(visual.observe(content)).thenThrow(new VisionProviderException("VISION_TIMEOUT", "视觉服务暂不可用"));
+        when(visual.observe(content, 7L)).thenThrow(new VisionProviderException("VISION_TIMEOUT", "视觉服务暂不可用"));
         when(metadata.analyze(picture)).thenReturn(metadataNutrition);
 
         PictureNutrition nutrition = new VisualPictureNutritionAdapter(
@@ -122,7 +122,7 @@ class VisualPictureNutritionAdapterTest {
         AuthorizedPictureContent content = jpegContent();
         VisionProviderException credentials = new VisionProviderException("VISION_CREDENTIALS", "视觉服务暂不可用");
         when(contents.load(picture, MAX_BYTES)).thenReturn(content);
-        when(visual.observe(content)).thenThrow(credentials);
+        when(visual.observe(content, 7L)).thenThrow(credentials);
 
         assertThatThrownBy(() -> new VisualPictureNutritionAdapter(
                 quota, contents, visual, metadata, CLOCK, MAX_BYTES, DAILY_LIMIT).analyze(picture))
@@ -149,7 +149,7 @@ class VisualPictureNutritionAdapterTest {
 
         assertThat(nutrition.provenance().fallbackReasonCode()).isEqualTo("VISION_IMAGE_TOO_LARGE");
         verify(quota, never()).reserve(any(Long.class), any(LocalDate.class), any(Integer.class));
-        verify(visual, never()).observe(any());
+        verify(visual, never()).observe(any(), anyLong());
     }
 
     @Test
@@ -169,7 +169,7 @@ class VisualPictureNutritionAdapterTest {
         assertThat(nutrition.provenance().fallbackReasonCode()).isEqualTo("SKIPPED_FAMILIAR");
         verify(contents, never()).load(any(), any(Long.class));
         verify(quota, never()).reserve(any(Long.class), any(LocalDate.class), any(Integer.class));
-        verify(visual, never()).observe(any());
+        verify(visual, never()).observe(any(), anyLong());
     }
 
     private static AuthorizedPictureRef picture() {

@@ -45,7 +45,7 @@ class DashScopeVisionLiveSmokeTest {
         DashScopeVisionClient client = DashScopeVisionClient.fromProperties(new ObjectMapper(), properties);
 
         VisualObservationCandidate candidate = client.observe(new AuthorizedPictureContent(
-                1L, Instant.EPOCH, "image/jpeg", "c".repeat(64), bytes));
+                1L, Instant.EPOCH, "image/jpeg", "c".repeat(64), bytes), 7L).candidate();
 
         assertThat(candidate.confidence()).isBetween(java.math.BigDecimal.ZERO, java.math.BigDecimal.ONE);
         assertThat(candidate.sceneComplexity()).isBetween(0, 4);

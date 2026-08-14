@@ -40,8 +40,12 @@ public class ModelCapabilityProfileService {
     }
 
     public ModelCapabilityProfile latest(long connectionId) {
-        return profileRepository.findLatestByConnectionId(connectionId)
+        return findLatest(connectionId)
                 .orElseThrow(() -> new com.li.lipicturecloud.exception.BusinessException(
                         com.li.lipicturecloud.exception.ErrorCode.NOT_FOUND_ERROR, "连接尚未生成能力画像"));
+    }
+
+    public java.util.Optional<ModelCapabilityProfile> findLatest(long connectionId) {
+        return profileRepository.findLatestByConnectionId(connectionId);
     }
 }

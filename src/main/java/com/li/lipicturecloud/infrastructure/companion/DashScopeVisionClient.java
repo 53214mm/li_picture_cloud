@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.li.lipicturecloud.application.companion.AuthorizedPictureContent;
 import com.li.lipicturecloud.application.companion.VisualObservationCandidate;
 import com.li.lipicturecloud.application.companion.VisualObservationProvider;
+import com.li.lipicturecloud.application.companion.VisualObservationResult;
 import com.li.lipicturecloud.application.companion.VisionProviderException;
 import com.li.lipicturecloud.config.CompanionFeatureProperties;
 import org.springframework.http.HttpHeaders;
@@ -88,7 +89,7 @@ public final class DashScopeVisionClient implements VisualObservationProvider {
     }
 
     @Override
-    public VisualObservationCandidate observe(AuthorizedPictureContent content) {
+    public VisualObservationResult observe(AuthorizedPictureContent content, long subjectId) {
         Objects.requireNonNull(content, "content");
         try {
             String response = restClient.post()
@@ -103,7 +104,8 @@ public final class DashScopeVisionClient implements VisualObservationProvider {
                         }
                         return readResponseAtMost(clientResponse.getBody());
                     });
-            return parseCandidate(response);
+            return new VisualObservationResult(parseCandidate(response), providerCode, modelCode,
+                    PROMPT_VERSION, RESULT_SCHEMA_VERSION);
         } catch (VisionProviderException exception) {
             throw exception;
         } catch (RestClientException exception) {
@@ -114,36 +116,9 @@ public final class DashScopeVisionClient implements VisualObservationProvider {
         }
     }
 
-    /**
-     * 返回实际调用的供应商标识，供后续把真实来源写入成长审计记录。
-     */
-    @Override
-    public String providerCode() {
-        return providerCode;
-    }
-
-    /**
-     * 返回实际调用的模型标识，避免将用户的请求策略误记成真实来源。
-     */
-    @Override
-    public String modelCode() {
+    /** 平台默认模型标识（包内使用：写使用记录真实来源）。 */
+    String modelCode() {
         return modelCode;
-    }
-
-    /**
-     * 返回提示词的语义版本；修改提示词含义时必须同步升级该值。
-     */
-    @Override
-    public String promptVersion() {
-        return PROMPT_VERSION;
-    }
-
-    /**
-     * 返回模型候选结果的结构版本，便于后续演进时按历史版本重放。
-     */
-    @Override
-    public String resultSchemaVersion() {
-        return RESULT_SCHEMA_VERSION;
     }
 
     private ObjectNode request(AuthorizedPictureContent content) {

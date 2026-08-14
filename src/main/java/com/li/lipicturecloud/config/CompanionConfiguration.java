@@ -10,11 +10,13 @@ import com.li.lipicturecloud.domain.companion.CompanionBalance;
 import com.li.lipicturecloud.infrastructure.companion.DashScopeVisionClient;
 import com.li.lipicturecloud.infrastructure.companion.DemoPictureNutritionAdapter;
 import com.li.lipicturecloud.infrastructure.companion.MetadataPictureNutritionAdapter;
+import com.li.lipicturecloud.infrastructure.companion.RoutedVisualObservationProvider;
 import com.li.lipicturecloud.infrastructure.companion.VisualPictureNutritionAdapter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
 
@@ -62,13 +64,27 @@ public class CompanionConfiguration {
 
     /**
      * 只在显式视觉模式创建客户端；空 API key 会在这里快速失败，绝不静默降级成元数据模式。
+     *
+     * <p>Provider 经视觉路由网关解析：平台默认走既有 DashScope 路径（行为不变），
+     * 用户 BYOK 视觉连接走同一 OpenAI 兼容客户端。</p>
      */
     @Bean
     @ConditionalOnProperty(prefix = "app.companion", name = "nutrition-policy",
             havingValue = "VISUAL_WITH_METADATA_FALLBACK")
-    public VisualObservationProvider dashScopeVisualObservationProvider(ObjectMapper objectMapper,
-                                                                          CompanionFeatureProperties properties) {
-        return DashScopeVisionClient.fromProperties(objectMapper, properties);
+    public VisualObservationProvider routedVisualObservationProvider(
+            ObjectMapper objectMapper,
+            CompanionFeatureProperties properties,
+            com.li.lipicturecloud.application.airuntime.VisionRouter visionRouter,
+            com.li.lipicturecloud.application.airuntime.ModelUsageService modelUsageService) {
+        DashScopeVisionClient platform = DashScopeVisionClient.fromProperties(objectMapper,
+                properties);
+        RestClient byokRestClient = RestClient.builder().requestFactory(
+                        new org.springframework.http.client.JdkClientHttpRequestFactory(
+                                java.net.http.HttpClient.newBuilder()
+                                        .connectTimeout(properties.getVisionTimeout()).build()))
+                .build();
+        return new RoutedVisualObservationProvider(visionRouter, modelUsageService, platform,
+                byokRestClient, objectMapper);
     }
 
     @Bean

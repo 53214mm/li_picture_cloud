@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.li.lipicturecloud.application.airuntime.ChatTurn;
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
 import com.li.lipicturecloud.application.airuntime.LanguageInvocationException;
-import com.li.lipicturecloud.application.airuntime.LanguageRouteDecision;
+import com.li.lipicturecloud.application.airuntime.ModelRouteDecision;
 import com.li.lipicturecloud.domain.airuntime.ModelConnection;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;
 import com.sun.net.httpserver.HttpExchange;
@@ -33,7 +33,7 @@ class OpenAiCompatibleLanguageClientTest {
     private final AtomicReference<String> lastBody = new AtomicReference<>();
     private final AtomicReference<String> lastAuthorization = new AtomicReference<>();
     private TestableClient client;
-    private LanguageRouteDecision route;
+    private ModelRouteDecision route;
 
     /** 覆盖端点解析指向本地 stub；其余行为与生产客户端一致。 */
     static class TestableClient extends OpenAiCompatibleLanguageClient {
@@ -44,7 +44,7 @@ class OpenAiCompatibleLanguageClientTest {
         }
 
         @Override
-        URI resolveEndpoint(LanguageRouteDecision route) {
+        URI resolveEndpoint(ModelRouteDecision route) {
             return endpointOverride;
         }
     }
@@ -57,7 +57,7 @@ class OpenAiCompatibleLanguageClientTest {
         client = new TestableClient(new ObjectMapper(), HttpClient.newHttpClient(),
                 Duration.ofSeconds(5));
         client.endpointOverride = URI.create("http://127.0.0.1:" + port + "/chat/completions");
-        route = LanguageRouteDecision.byok(ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK,
+        route = ModelRouteDecision.byok(ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK,
                 "主力", URI.create("https://api.deepseek.com/v1"), "deepseek-chat", 5L, true, 1L),
                 "sk-test-key");
     }
@@ -188,7 +188,7 @@ class OpenAiCompatibleLanguageClientTest {
 
     @Test
     void rejectsPlatformRoutesAndEmptyTurns() {
-        assertThatThrownBy(() -> client.stream(LanguageRouteDecision.platform(),
+        assertThatThrownBy(() -> client.stream(ModelRouteDecision.platform(),
                 List.of(ChatTurn.user("在吗")))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> client.stream(route, List.of()))
                 .isInstanceOf(IllegalArgumentException.class);

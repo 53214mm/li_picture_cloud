@@ -6,17 +6,17 @@ import com.li.lipicturecloud.domain.airuntime.ModelConnection;
 import java.util.Objects;
 
 /**
- * 语言任务的一次路由决定。
+ * 一次模型任务的路由决定（语言/视觉/图像创作共用）。
  *
  * <p>BYOK 路由携带连接与已解密凭据（仅存在于本次调用内存中）；平台路由两者皆空。
  * BYOK 调用失败不得静默切换平台钱包，失败只能以安全错误码向用户暴露。</p>
  */
-public record LanguageRouteDecision(
+public record ModelRouteDecision(
         CostSource costSource,
         ModelConnection connection,
         String apiKey) {
 
-    public LanguageRouteDecision {
+    public ModelRouteDecision {
         Objects.requireNonNull(costSource, "costSource");
         if (costSource == CostSource.PLATFORM) {
             if (connection != null || apiKey != null) {
@@ -33,12 +33,12 @@ public record LanguageRouteDecision(
         }
     }
 
-    public static LanguageRouteDecision platform() {
-        return new LanguageRouteDecision(CostSource.PLATFORM, null, null);
+    public static ModelRouteDecision platform() {
+        return new ModelRouteDecision(CostSource.PLATFORM, null, null);
     }
 
-    public static LanguageRouteDecision byok(ModelConnection connection, String apiKey) {
-        return new LanguageRouteDecision(CostSource.BYOK, connection, apiKey);
+    public static ModelRouteDecision byok(ModelConnection connection, String apiKey) {
+        return new ModelRouteDecision(CostSource.BYOK, connection, apiKey);
     }
 
     public boolean isByok() {
@@ -48,7 +48,7 @@ public record LanguageRouteDecision(
     /** 记录的隐式 toString 会打印 apiKey 组件，这里显式遮蔽，杜绝未来日志/序列化误伤。 */
     @Override
     public String toString() {
-        return "LanguageRouteDecision[costSource=" + costSource
+        return "ModelRouteDecision[costSource=" + costSource
                 + ", connection=" + (connection == null ? null
                 : "ModelConnection[id=" + connection.id() + ", provider=" + connection.provider()
                 + ", endpointUri=" + connection.endpointUri() + ", modelCode="
