@@ -21,6 +21,11 @@ test('story api mirrors the creation endpoints', async () => {
   assert.match(api, /request\.post\(`\/creation\/story\/\$\{id\}\/draft`\)/)
   assert.match(api, /request\.post\(`\/creation\/story\/\$\{id\}\/save`\)/)
   assert.match(api, /request\.get\('\/creation\/story'/)
+  assert.match(api, /request\.post\('\/creation\/emoji', data\)/)
+  assert.match(api, /request\.post\(`\/creation\/emoji\/\$\{id\}\/generate`\)/)
+  assert.match(api, /request\.get\(`\/creation\/emoji\/\$\{id\}\/candidates`\)/)
+  assert.match(api, /request\.post\(`\/creation\/emoji\/\$\{id\}\/select`/)
+  assert.match(api, /request\.post\(`\/creation\/emoji\/\$\{id\}\/save`\)/)
 })
 
 test('story panel drives the state machine without exposing secrets', async () => {
@@ -37,4 +42,17 @@ test('story panel drives the state machine without exposing secrets', async () =
   assert.doesNotMatch(panel, /\{\{ task\.idempotencyKey \}\}/)
   // 最多 12 张来源图片。
   assert.match(panel, /MAX_PICTURES = 12/)
+})
+
+test('emoji panel picks one picture and drives candidate selection', async () => {
+  const panel = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionEmojiPanel.vue', import.meta.url)), 'utf8')
+
+  assert.match(panel, /生成候选/)
+  assert.match(panel, /选中保存/)
+  assert.match(panel, /保存作品/)
+  assert.match(panel, /role="radiogroup"/)
+  assert.match(panel, /data-testid="emoji-result"/)
+  // 单选一张来源图片。
+  assert.match(panel, /type="radio" name="emoji-source"/)
+  assert.match(panel, /crypto\.randomUUID\(\)/)
 })

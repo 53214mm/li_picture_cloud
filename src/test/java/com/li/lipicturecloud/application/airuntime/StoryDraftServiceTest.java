@@ -85,8 +85,10 @@ class StoryDraftServiceTest {
                             new org.springframework.ai.chat.messages.AssistantMessage("生成文本"));
                     return response;
                 });
-        service = new StoryDraftService(taskRepository, lineageRepository, authorization,
-                pictureRepository, languageRouter, languageInvoker, chatModelProvider,
+        service = new StoryDraftService(taskRepository, lineageRepository,
+                new CreationServiceSupport(taskRepository, authorization, pictureRepository,
+                        Clock.fixed(NOW, ZoneOffset.UTC)),
+                languageRouter, languageInvoker, chatModelProvider,
                 trialLedger, Clock.fixed(NOW, ZoneOffset.UTC));
         when(taskRepository.save(any(CreationTask.class), anyLong())).thenReturn(true);
         when(languageRouter.decide(7L)).thenReturn(ModelRouteDecision.platform());
@@ -255,6 +257,7 @@ class StoryDraftServiceTest {
                 List.of(102L), CreationStatus.AWAITING_CONFIRM, "大纲", null, null, null, KEY,
                 2L, stale, stale);
         when(taskRepository.findBySubjectId(7L, 20)).thenReturn(List.of(awaiting));
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(awaiting));
 
         List<CreationTask> tasks = service.list(SUBJECT, 20);
 

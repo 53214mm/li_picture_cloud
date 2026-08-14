@@ -118,6 +118,25 @@ class CreationTaskTest {
     }
 
     @Test
+    void selectDraftOnlyWorksForCandidateStyleAwaitingTasks() {
+        CreationTask awaiting = new CreationTask(9L, 7L, CreationKind.EMOJI_DRAFT,
+                List.of(102L), CreationStatus.AWAITING_CONFIRM, null, null, null, null, KEY,
+                3L, NOW, NOW);
+        CreationTask saving = awaiting.selectDraft("被选中表情", NOW);
+        assertThat(saving.status()).isEqualTo(CreationStatus.SAVING);
+        assertThat(saving.draftText()).isEqualTo("被选中表情");
+        assertThat(saving.revision()).isEqualTo(4L);
+
+        CreationTask storyAwaiting = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
+                List.of(102L), CreationStatus.AWAITING_CONFIRM, "大纲", null, null, null, KEY,
+                3L, NOW, NOW);
+        assertThatThrownBy(() -> storyAwaiting.selectDraft("x", NOW))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> awaiting.selectDraft("带\u0007控制", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void withIdAndTimestampGuards() {
         CreationTask created = CreationTask.create(7L, CreationKind.STORY_DRAFT, List.of(102L),
                 KEY, NOW);

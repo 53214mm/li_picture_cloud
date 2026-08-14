@@ -119,6 +119,16 @@ public record CreationTask(
         return advance(CreationStatus.SAVING, outlineText, draftText, null, now);
     }
 
+    /** 表情草稿等候选式玩法：从候选列表选中一条作为作品草稿进入保存。 */
+    public CreationTask selectDraft(String draft, Instant now) {
+        requireStatus(CreationStatus.AWAITING_CONFIRM, "selectDraft");
+        if (outlineText != null || draftText != null) {
+            throw new IllegalStateException("selectDraft requires a candidate-style task awaiting selection");
+        }
+        return advance(CreationStatus.SAVING, null, requireSafeText(draft,
+                MAX_DRAFT_CODE_POINTS, "draft"), null, now);
+    }
+
     public CreationTask completeSave(String result, Instant now) {
         requireStatus(CreationStatus.SAVING, "completeSave");
         return advance(CreationStatus.SAVED, outlineText, draftText, requireSafeText(result,

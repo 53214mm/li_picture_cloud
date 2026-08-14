@@ -106,4 +106,34 @@ CREATE INDEX idx_creation_lineage_task ON creation_lineage (taskId, id);
             <dropIndex indexName="idx_creation_lineage_task" tableName="creation_lineage"/>
         </rollback>
     </changeSet>
+
+    <changeSet id="20260815-08" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="creation_candidate"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE creation_candidate (
+    id BIGINT PRIMARY KEY,
+    taskId BIGINT NOT NULL,
+    seq INT NOT NULL,
+    text VARCHAR(200) NOT NULL,
+    createdTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_creation_candidate UNIQUE (taskId, seq)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="creation_candidate"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260815-09" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_creation_candidate_task"
+                              tableName="creation_candidate"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_creation_candidate_task ON creation_candidate (taskId, seq);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_creation_candidate_task" tableName="creation_candidate"/>
+        </rollback>
+    </changeSet>
 </databaseChangeLog>

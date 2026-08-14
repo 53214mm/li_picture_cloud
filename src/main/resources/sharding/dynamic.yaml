@@ -51,6 +51,7 @@ rules:
       - primary.platform_trial_ledger
       - primary.creation_task
       - primary.creation_lineage
+      - primary.creation_candidate
     defaultDataSource: primary
 
 props:

@@ -517,7 +517,7 @@ class CompanionSchemaMigrationTest {
 
     private static void assertCreationTables(DataSource dataSource, int expectedTableCount) {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
-        for (String table : List.of("creation_task", "creation_lineage")) {
+        for (String table : List.of("creation_task", "creation_lineage", "creation_candidate")) {
             Integer count = jdbcTemplate.queryForObject("""
                     SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
                     WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?

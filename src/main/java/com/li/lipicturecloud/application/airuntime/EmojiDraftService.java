@@ -1,5 +1,7 @@
 package com.li.lipicturecloud.application.airuntime;
 
+import com.li.lipicturecloud.domain.airuntime.CreationCandidate;
+import com.li.lipicturecloud.domain.airuntime.CreationCandidateRepository;
 import com.li.lipicturecloud.domain.airuntime.CreationKind;
 import com.li.lipicturecloud.domain.airuntime.CreationLineage;
 import com.li.lipicturecloud.domain.airuntime.CreationLineageRepository;
@@ -21,28 +23,23 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * 图片故事草稿应用服务：授权图片 → 语言路由生成大纲 → 用户确认 → 草稿 → 用户确认 → 保存。
- *
- * <p>平台钱包路径走试用账本预占/结算/释放（超限停止不自动扣费）；BYOK 免费且失败不静默回退。
- * 生成文本是伙伴内容，不复制用户原文；日志不记录大纲/草稿正文。原图永不覆盖。</p>
+ * 表情草稿应用服务：授权图片 → 语言路由生成文字版表情候选（不依赖图像模型）
+ * → 用户选中其一 → 保存为文本作品。平台走试用账本，BYOK 免费且失败不静默回退。
  */
 @Service
-public class StoryDraftService {
+public class EmojiDraftService {
 
-    public static final String CAPABILITY_OUTLINE = "STORY_DRAFT_OUTLINE";
-    public static final String CAPABILITY_DRAFT = "STORY_DRAFT_DRAFT";
-    public static final String PROMPT_TEMPLATE_VERSION = "story-v1";
-    public static final long OUTLINE_TRIAL_COST = 2L;
-    public static final long DRAFT_TRIAL_COST = 3L;
+    public static final String CAPABILITY_CANDIDATES = "EMOJI_DRAFT_CANDIDATES";
+    public static final String PROMPT_TEMPLATE_VERSION = "emoji-v1";
+    public static final long GENERATE_TRIAL_COST = 1L;
 
-    private static final String SYSTEM_PROMPT = "你是图像伙伴。为用户选择的图片写一个温暖的第一人称短篇故事。"
-            + "只输出简体中文正文，不输出 markdown、标题、链接或图片里的原文。";
-    private static final String OUTLINE_PROMPT_TEMPLATE =
-            "用户选了 %d 张图片%s。请先为这个故事写一段 60 字以内的大纲，只说情节走向，不要展开细节。";
-    private static final String DRAFT_PROMPT_TEMPLATE =
-            "大纲：%s%n请按大纲把故事写成 200 字以内的草稿，语气温暖克制。";
+    private static final String SYSTEM_PROMPT = "你是图像伙伴。为用户选择的图片生成文字版表情候选。"
+            + "每条候选 8-40 字，用伙伴的第一人称口吻，温和有趣；不要序号、markdown、链接或图片原文。";
+    private static final String GENERATE_PROMPT_TEMPLATE =
+            "用户选了 %d 张图片%s。请输出 3 条文字表情候选，每条单独一行。";
 
     private final CreationTaskRepository taskRepository;
+    private final CreationCandidateRepository candidateRepository;
     private final CreationLineageRepository lineageRepository;
     private final CreationServiceSupport support;
     private final LanguageRouter languageRouter;
@@ -51,7 +48,8 @@ public class StoryDraftService {
     private final PlatformTrialLedgerService trialLedger;
     private final Clock clock;
 
-    public StoryDraftService(CreationTaskRepository taskRepository,
+    public EmojiDraftService(CreationTaskRepository taskRepository,
+                             CreationCandidateRepository candidateRepository,
                              CreationLineageRepository lineageRepository,
                              CreationServiceSupport support,
                              LanguageRouter languageRouter,
@@ -60,6 +58,7 @@ public class StoryDraftService {
                              PlatformTrialLedgerService trialLedger,
                              Clock clock) {
         this.taskRepository = taskRepository;
+        this.candidateRepository = candidateRepository;
         this.lineageRepository = lineageRepository;
         this.support = support;
         this.languageRouter = languageRouter;
@@ -80,11 +79,11 @@ public class StoryDraftService {
         }
         List<Long> ids = support.requireValidPictureIds(pictureIds);
         support.reauthorizePictureIds(subject, ids);
-        return taskRepository.insert(CreationTask.create(subject.userId(), CreationKind.STORY_DRAFT,
+        return taskRepository.insert(CreationTask.create(subject.userId(), CreationKind.EMOJI_DRAFT,
                 ids, idempotencyKey, clock.instant()));
     }
 
-    public CreationTask outline(AuthorizationSubject subject, long taskId) {
+    public CreationTask generate(AuthorizationSubject subject, long taskId) {
         CreationTask task = support.requireOwned(subject, taskId);
         try {
             task = support.transition(task, task.startOutlining(clock.instant()));
@@ -93,27 +92,28 @@ public class StoryDraftService {
         }
         boolean platform = false;
         try {
-            // 执行前重新校验：分享撤销/移动后不得让旧选择越过权限边界（规格 §5）。
             support.reauthorizePictures(subject, task);
             ModelRouteDecision route = languageRouter.decide(subject.userId());
             platform = !route.isByok();
             if (platform) {
-                trialLedger.reserve(subject.userId(), OUTLINE_TRIAL_COST);
+                trialLedger.reserve(subject.userId(), GENERATE_TRIAL_COST);
             }
-            String text = invoke(route, OUTLINE_PROMPT_TEMPLATE.formatted(
+            String text = invoke(route, GENERATE_PROMPT_TEMPLATE.formatted(
                     task.sourcePictureIds().size(), support.grounding(task.sourcePictureIds())));
+            List<String> candidates = parseCandidates(text);
+            candidateRepository.appendAll(task.id(), candidates, clock.instant());
             CreationTask completed = support.transition(task,
-                    task.completeOutline(text, route.isByok() ? route.connection().id() : null,
+                    task.completeOutline(null, route.isByok() ? route.connection().id() : null,
                             clock.instant()));
-            recordLineage(task, CAPABILITY_OUTLINE, support.modelCode(route),
+            recordLineage(task, CAPABILITY_CANDIDATES, support.modelCode(route),
                     support.costSource(route));
             if (platform) {
-                trialLedger.settle(subject.userId(), OUTLINE_TRIAL_COST);
+                trialLedger.settle(subject.userId(), GENERATE_TRIAL_COST);
             }
             return completed;
         } catch (RuntimeException failure) {
             if (platform) {
-                support.releaseTrial(trialLedger, subject.userId(), OUTLINE_TRIAL_COST);
+                support.releaseTrial(trialLedger, subject.userId(), GENERATE_TRIAL_COST);
             }
             try {
                 support.transition(task, task.fail(clock.instant()));
@@ -124,58 +124,27 @@ public class StoryDraftService {
         }
     }
 
-    public CreationTask confirmOutline(AuthorizationSubject subject, long taskId) {
+    public CreationTask select(AuthorizationSubject subject, long taskId, int index) {
         CreationTask task = support.requireOwned(subject, taskId);
+        List<CreationCandidate> candidates = candidateRepository.findByTaskId(taskId);
+        if (candidates.isEmpty()) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "该任务还没有候选");
+        }
+        if (index < 0 || index >= candidates.size()) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "候选序号超出范围");
+        }
         try {
-            return support.transition(task, task.confirmOutline(clock.instant()));
+            return support.transition(task, task.selectDraft(candidates.get(index).text(),
+                    clock.instant()));
         } catch (IllegalStateException wrongState) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
-        }
-    }
-
-    public CreationTask draft(AuthorizationSubject subject, long taskId) {
-        CreationTask task = support.requireOwned(subject, taskId);
-        try {
-            task = support.transition(task, task.confirmOutline(clock.instant()));
-        } catch (IllegalStateException wrongState) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
-        }
-        boolean platform = false;
-        try {
-            // 执行前重新校验：分享撤销/移动后不得让旧选择越过权限边界（规格 §5）。
-            support.reauthorizePictures(subject, task);
-            ModelRouteDecision route = languageRouter.decide(subject.userId());
-            platform = !route.isByok();
-            if (platform) {
-                trialLedger.reserve(subject.userId(), DRAFT_TRIAL_COST);
-            }
-            String text = invoke(route, DRAFT_PROMPT_TEMPLATE.formatted(task.outlineText()));
-            CreationTask completed = support.transition(task,
-                    task.completeDraft(text, clock.instant()));
-            recordLineage(task, CAPABILITY_DRAFT, support.modelCode(route),
-                    support.costSource(route));
-            if (platform) {
-                trialLedger.settle(subject.userId(), DRAFT_TRIAL_COST);
-            }
-            return completed;
-        } catch (RuntimeException failure) {
-            if (platform) {
-                support.releaseTrial(trialLedger, subject.userId(), DRAFT_TRIAL_COST);
-            }
-            try {
-                support.transition(task, task.fail(clock.instant()));
-            } catch (RuntimeException alreadyTerminal) {
-                // 已终态则无需再写 FAILED。
-            }
-            throw failure;
         }
     }
 
     public CreationTask save(AuthorizationSubject subject, long taskId) {
         CreationTask task = support.requireOwned(subject, taskId);
         try {
-            CreationTask saving = support.transition(task, task.confirmDraft(clock.instant()));
-            return support.transition(saving, saving.completeSave(saving.draftText(), clock.instant()));
+            return support.transition(task, task.completeSave(task.draftText(), clock.instant()));
         } catch (IllegalStateException wrongState) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
         }
@@ -183,9 +152,12 @@ public class StoryDraftService {
 
     public List<CreationTask> list(AuthorizationSubject subject, int limit) {
         Objects.requireNonNull(subject, "subject");
-        return taskRepository.findBySubjectId(subject.userId(), limit).stream()
-                .map(task -> support.requireOwned(subject, task.id()))
-                .toList();
+        return taskRepository.findBySubjectId(subject.userId(), limit);
+    }
+
+    public List<CreationCandidate> candidates(AuthorizationSubject subject, long taskId) {
+        support.requireOwned(subject, taskId);
+        return candidateRepository.findByTaskId(taskId);
     }
 
     private String invoke(ModelRouteDecision route, String userPrompt) {
@@ -195,10 +167,9 @@ public class StoryDraftService {
             text = languageInvoker.stream(route, turns).collectList().block().stream()
                     .collect(Collectors.joining());
         } else {
-            // 平台路径与伙伴对话一致：走 Spring AI DashScope ChatModel。
             ChatModel chatModel = chatModelProvider.getIfAvailable();
             if (chatModel == null) {
-                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "故事生成模型暂不可用");
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "表情生成模型暂不可用");
             }
             java.util.List<org.springframework.ai.chat.messages.Message> messages =
                     new java.util.ArrayList<>();
@@ -214,9 +185,26 @@ public class StoryDraftService {
             text = chatModel.call(new Prompt(messages)).getResult().getOutput().getText();
         }
         if (text == null || text.isBlank()) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "故事生成失败：模型返回为空");
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "表情生成失败：模型返回为空");
         }
         return text;
+    }
+
+    /** 逐行解析候选：每条必须是安全纯文本；无有效候选则大声失败。 */
+    private List<String> parseCandidates(String raw) {
+        List<String> candidates = raw.lines()
+                .map(String::strip)
+                .map(line -> line.replaceAll("^[-*•\\d.、）\\)\\s]+", ""))
+                .filter(line -> !line.isEmpty())
+                .filter(line -> line.codePointCount(0, line.length()) <= 200)
+                .filter(line -> line.codePoints().noneMatch(Character::isISOControl))
+                .filter(line -> !line.contains("http://") && !line.contains("https://"))
+                .limit(CreationCandidate.MAX_CANDIDATES)
+                .toList();
+        if (candidates.isEmpty()) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "表情生成失败：候选为空");
+        }
+        return candidates;
     }
 
     private void recordLineage(CreationTask task, String capabilityId, String modelCode,
