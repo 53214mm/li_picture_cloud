@@ -168,8 +168,7 @@ public class CompanionController {
                             subject.userId(), error.getClass().getName());
                     try {
                         emitter.send(SseEmitter.event().name("error")
-                                .data(error instanceof BusinessException business
-                                        ? business.getMessage() : "伙伴暂时没法回应，请稍后再试"));
+                                .data(chatErrorMessage(error)));
                         emitter.complete();
                     } catch (IOException ignored) {
                         emitter.completeWithError(error);
@@ -249,5 +248,22 @@ public class CompanionController {
         return userService.isAdmin(loginUser)
                 ? AuthorizationSubject.platformAdmin(loginUser.getId())
                 : AuthorizationSubject.user(loginUser.getId());
+    }
+
+    private String chatErrorMessage(Throwable error) {
+        if (error instanceof com.li.lipicturecloud.application.airuntime.LanguageInvocationException invocation) {
+            // BYOK 失败大声暴露安全错误码对应的提示，绝不静默回退平台钱包。
+            return switch (invocation.safeErrorCode()) {
+                case com.li.lipicturecloud.application.airuntime.ConnectivityResult.CREDENTIAL_REJECTED ->
+                        "连接凭据被模型服务拒绝，请在控制中心检查 API Key";
+                case com.li.lipicturecloud.application.airuntime.ConnectivityResult.UPSTREAM_TIMEOUT ->
+                        "模型服务响应超时，请稍后再试";
+                default -> "模型服务暂时不可用，请稍后再试";
+            };
+        }
+        if (error instanceof BusinessException business) {
+            return business.getMessage();
+        }
+        return "伙伴暂时没法回应，请稍后再试";
     }
 }

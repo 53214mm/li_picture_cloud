@@ -31,4 +31,7 @@ public class ModelCredentialProperties {
 
     /** 连接探测的超时预算。 */
     private Duration connectivityTimeout = Duration.ofSeconds(5);
+
+    /** 语言模型流式调用的超时预算。 */
+    private Duration languageTimeout = Duration.ofSeconds(60);
 }

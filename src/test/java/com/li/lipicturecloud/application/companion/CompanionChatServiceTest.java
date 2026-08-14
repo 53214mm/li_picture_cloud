@@ -1,7 +1,14 @@
 package com.li.lipicturecloud.application.companion;
 
+import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
+import com.li.lipicturecloud.application.airuntime.LanguageInvocationException;
+import com.li.lipicturecloud.application.airuntime.LanguageRouteDecision;
 import com.li.lipicturecloud.application.companion.view.ChatHistoryView;
 import com.li.lipicturecloud.config.CompanionFeatureProperties;
+import com.li.lipicturecloud.domain.airuntime.CostSource;
+import com.li.lipicturecloud.domain.airuntime.ModelConnection;
+import com.li.lipicturecloud.domain.airuntime.ModelProvider;
+import com.li.lipicturecloud.domain.airuntime.ModelTask;
 import com.li.lipicturecloud.domain.companion.Companion;
 import com.li.lipicturecloud.domain.companion.CompanionBalance;
 import com.li.lipicturecloud.domain.companion.CompanionChatMessage;
@@ -29,6 +36,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import reactor.core.publisher.Flux;
 
 import java.math.BigDecimal;
+import java.net.URI;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -39,6 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -61,6 +70,9 @@ class CompanionChatServiceTest {
     private CompanionFeatureProperties properties;
     @SuppressWarnings("unchecked")
     private ObjectProvider<ChatModel> chatModelProvider = mock(ObjectProvider.class);
+    private com.li.lipicturecloud.application.airuntime.LanguageRouter languageRouter;
+    private com.li.lipicturecloud.application.airuntime.LanguageModelInvoker languageInvoker;
+    private com.li.lipicturecloud.application.airuntime.ModelUsageService modelUsageService;
     private CompanionChatService service;
 
     @BeforeEach
@@ -73,13 +85,19 @@ class CompanionChatServiceTest {
         contextAssembler = mock(CompanionChatContextAssembler.class);
         quotaGuard = mock(ChatQuotaGuard.class);
         properties = new CompanionFeatureProperties();
+        languageRouter = mock(com.li.lipicturecloud.application.airuntime.LanguageRouter.class);
+        languageInvoker = mock(com.li.lipicturecloud.application.airuntime.LanguageModelInvoker.class);
+        modelUsageService = mock(com.li.lipicturecloud.application.airuntime.ModelUsageService.class);
         when(messageRepository.append(any())).thenAnswer(invocation ->
                 invocation.<CompanionChatMessage>getArgument(0).withId(51L));
         when(messageRepository.findRecent(anyLong(), anyInt())).thenReturn(List.of());
         when(memoryRepository.findRecent(anyLong(), anyInt())).thenReturn(List.of());
+        when(languageRouter.decide(anyLong())).thenReturn(
+                com.li.lipicturecloud.application.airuntime.LanguageRouteDecision.platform());
         service = new CompanionChatService(companionRepository, messageRepository, moodRepository,
                 relationshipRepository, memoryRepository, contextAssembler, quotaGuard, properties,
-                chatModelProvider, Clock.fixed(NOW, ZoneOffset.UTC));
+                chatModelProvider, languageRouter, languageInvoker, modelUsageService,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -218,5 +236,58 @@ class CompanionChatServiceTest {
 
     private Companion persistedCompanion() {
         return Companion.awaken(7L, CompanionBalance.v1()).persistedAs(11L);
+    }
+
+    private ModelConnection byokConnection() {
+        return ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK, "主力",
+                URI.create("https://api.deepseek.com/v1"), "deepseek-chat", 5L, true, 1L);
+    }
+
+    @Test
+    void byokRouteUsesUserConnectionAndRecordsByokUsage() {
+        Companion companion = persistedCompanion();
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        when(languageRouter.decide(7L)).thenReturn(
+                LanguageRouteDecision.byok(byokConnection(), "sk-secret"));
+        when(languageInvoker.stream(any(LanguageRouteDecision.class), anyList()))
+                .thenReturn(Flux.just("你", "好"));
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(contextAssembler.systemPrompt(11L, 7L, 5)).thenReturn("系统提示");
+
+        String reply = String.join("", service.chat(subject, "在吗").collectList().block());
+
+        assertThat(reply).isEqualTo("你好");
+        verify(chatModelProvider, never()).getIfAvailable();
+        verify(modelUsageService).recordSuccess(7L, ModelTask.LANGUAGE_AGENT, 9L,
+                ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK);
+        ArgumentCaptor<CompanionChatMessage> captor = ArgumentCaptor.forClass(CompanionChatMessage.class);
+        verify(messageRepository, times(2)).append(captor.capture());
+        CompanionChatMessage replyMessage = captor.getAllValues().get(1);
+        assertThat(replyMessage.modelProvider()).isEqualTo("DEEPSEEK");
+        assertThat(replyMessage.modelCode()).isEqualTo("deepseek-chat");
+        assertThat(replyMessage.content()).isEqualTo("你好");
+    }
+
+    @Test
+    void byokFailureRecordsSafeCodeAndNeverFallsBackToPlatform() {
+        Companion companion = persistedCompanion();
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        when(languageRouter.decide(7L)).thenReturn(
+                LanguageRouteDecision.byok(byokConnection(), "sk-secret"));
+        when(languageInvoker.stream(any(LanguageRouteDecision.class), anyList()))
+                .thenReturn(Flux.error(new LanguageInvocationException(
+                        ConnectivityResult.CREDENTIAL_REJECTED, "rejected")));
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(contextAssembler.systemPrompt(11L, 7L, 5)).thenReturn("系统提示");
+
+        assertThatThrownBy(() -> service.chat(subject, "在吗").blockLast())
+                .isInstanceOf(LanguageInvocationException.class);
+
+        verify(chatModelProvider, never()).getIfAvailable();
+        verify(modelUsageService).recordFailure(7L, ModelTask.LANGUAGE_AGENT, 9L,
+                ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK,
+                ConnectivityResult.CREDENTIAL_REJECTED);
+        // 只有用户消息落库，不留下半截回复。
+        verify(messageRepository, times(1)).append(any());
     }
 }

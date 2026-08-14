@@ -5,6 +5,7 @@ import com.li.lipicturecloud.application.airuntime.EndpointAllowlist;
 import com.li.lipicturecloud.application.airuntime.ModelConnectivityTester;
 import com.li.lipicturecloud.infrastructure.airuntime.AesGcmCredentialCipher;
 import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleConnectivityTester;
+import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleLanguageClient;
 import com.li.lipicturecloud.infrastructure.airuntime.PropertyEndpointAllowlist;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +54,13 @@ public class ModelGatewayConfiguration {
     @Bean
     public ModelConnectivityTester modelConnectivityTester(ModelCredentialProperties properties) {
         return OpenAiCompatibleConnectivityTester.production(properties.getConnectivityTimeout());
+    }
+
+    @Bean
+    public com.li.lipicturecloud.application.airuntime.LanguageModelInvoker modelLanguageInvoker(
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+            ModelCredentialProperties properties) {
+        return OpenAiCompatibleLanguageClient.production(objectMapper, properties.getLanguageTimeout());
     }
 
     private static boolean isDevelopmentEnvironment(Environment environment) {

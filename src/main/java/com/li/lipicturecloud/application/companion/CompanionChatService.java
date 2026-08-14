@@ -1,8 +1,18 @@
 package com.li.lipicturecloud.application.companion;
 
+import com.li.lipicturecloud.application.airuntime.ChatTurn;
+import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
+import com.li.lipicturecloud.application.airuntime.LanguageInvocationException;
+import com.li.lipicturecloud.application.airuntime.LanguageModelInvoker;
+import com.li.lipicturecloud.application.airuntime.LanguageRouteDecision;
+import com.li.lipicturecloud.application.airuntime.LanguageRouter;
+import com.li.lipicturecloud.application.airuntime.ModelUsageService;
 import com.li.lipicturecloud.application.companion.view.ChatHistoryView;
 import com.li.lipicturecloud.application.companion.view.ChatMessageView;
 import com.li.lipicturecloud.config.CompanionFeatureProperties;
+import com.li.lipicturecloud.domain.airuntime.CostSource;
+import com.li.lipicturecloud.domain.airuntime.ModelProvider;
+import com.li.lipicturecloud.domain.airuntime.ModelTask;
 import com.li.lipicturecloud.domain.companion.Companion;
 import com.li.lipicturecloud.domain.companion.CompanionChatMessage;
 import com.li.lipicturecloud.domain.companion.CompanionChatMessageRepository;
@@ -65,6 +75,9 @@ public class CompanionChatService {
     private final ChatQuotaGuard quotaGuard;
     private final CompanionFeatureProperties properties;
     private final ObjectProvider<ChatModel> chatModelProvider;
+    private final LanguageRouter languageRouter;
+    private final LanguageModelInvoker languageInvoker;
+    private final ModelUsageService modelUsageService;
     private final Clock clock;
 
     public CompanionChatService(CompanionRepository companionRepository,
@@ -76,6 +89,9 @@ public class CompanionChatService {
                                 ChatQuotaGuard quotaGuard,
                                 CompanionFeatureProperties properties,
                                 ObjectProvider<ChatModel> chatModelProvider,
+                                LanguageRouter languageRouter,
+                                LanguageModelInvoker languageInvoker,
+                                ModelUsageService modelUsageService,
                                 Clock clock) {
         this.companionRepository = companionRepository;
         this.messageRepository = messageRepository;
@@ -86,6 +102,9 @@ public class CompanionChatService {
         this.quotaGuard = quotaGuard;
         this.properties = properties;
         this.chatModelProvider = chatModelProvider;
+        this.languageRouter = languageRouter;
+        this.languageInvoker = languageInvoker;
+        this.modelUsageService = modelUsageService;
         this.clock = clock;
     }
 
@@ -126,14 +145,20 @@ public class CompanionChatService {
     }
 
     private Flux<String> modelReply(Companion companion, AuthorizationSubject subject, String message, Instant now) {
-        ChatModel chatModel = chatModelProvider.getIfAvailable();
-        if (chatModel == null) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "伙伴对话模型暂不可用");
+        LanguageRouteDecision route = languageRouter.decide(subject.userId());
+        List<ChatTurn> turns = assembleTurns(companion, subject, message);
+        if (route.isByok()) {
+            return byokReply(companion, subject, route, turns, now);
         }
+        return platformReply(companion, subject, turns, now);
+    }
+
+    /**
+     * 组装上下文与历史（预算守卫同模型路径）：系统提示 + 预算内历史（旧→新）+ 当前消息。
+     */
+    private List<ChatTurn> assembleTurns(Companion companion, AuthorizationSubject subject, String message) {
         String systemPrompt = contextAssembler.systemPrompt(companion.id(), subject.userId(),
                 properties.getChatMemoryLimit());
-        List<Message> messages = new ArrayList<>();
-        messages.add(new SystemMessage(systemPrompt));
         List<CompanionChatMessage> history = messageRepository.findRecent(
                 companion.id(), properties.getChatHistoryLimit());
         // 历史为倒序；跳过刚落库的本轮用户消息（稍后显式追加，避免重复）。
@@ -159,13 +184,25 @@ public class CompanionChatService {
             used += size;
             included.add(past);
         }
+        List<ChatTurn> turns = new ArrayList<>();
+        turns.add(ChatTurn.system(systemPrompt));
         // included 是新→旧，倒序后旧→新加入。
         for (int i = included.size() - 1; i >= 0; i--) {
             CompanionChatMessage past = included.get(i);
-            messages.add(past.role().name().equals("USER")
-                    ? new UserMessage(past.content()) : new AssistantMessage(past.content()));
+            turns.add(past.role().name().equals("USER")
+                    ? ChatTurn.user(past.content()) : ChatTurn.assistant(past.content()));
         }
-        messages.add(new UserMessage(message));
+        turns.add(ChatTurn.user(message));
+        return turns;
+    }
+
+    private Flux<String> platformReply(Companion companion, AuthorizationSubject subject,
+                                       List<ChatTurn> turns, Instant now) {
+        ChatModel chatModel = chatModelProvider.getIfAvailable();
+        if (chatModel == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "伙伴对话模型暂不可用");
+        }
+        List<Message> messages = turns.stream().map(this::toAiMessage).toList();
         StringBuilder collected = new StringBuilder();
         return chatModel.stream(new Prompt(messages))
                 .map(chunk -> {
@@ -176,10 +213,72 @@ public class CompanionChatService {
                     }
                     return text == null ? "" : text;
                 })
-                .doOnComplete(() -> persistReply(companion, subject,
-                        collected.toString(), "dashscope", "qwen-max", now))
-                .doOnError(error -> log.warn("companion_chat_model_failed subjectId={} exceptionType={}",
-                        subject.userId(), error.getClass().getName()));
+                .doOnComplete(() -> {
+                    persistReply(companion, subject, collected.toString(), "dashscope", "qwen-max", now);
+                    recordUsageSuccess(subject, null, ModelProvider.DASHSCOPE, "qwen-max",
+                            CostSource.PLATFORM);
+                })
+                .doOnError(error -> {
+                    log.warn("companion_chat_model_failed subjectId={} exceptionType={}",
+                            subject.userId(), error.getClass().getName());
+                    recordUsageFailure(subject, null, ModelProvider.DASHSCOPE, "qwen-max",
+                            CostSource.PLATFORM, ConnectivityResult.UPSTREAM_ERROR);
+                });
+    }
+
+    /** BYOK 路径：失败只记录安全错误码，绝不静默切换到平台钱包。 */
+    private Flux<String> byokReply(Companion companion, AuthorizationSubject subject,
+                                   LanguageRouteDecision route, List<ChatTurn> turns, Instant now) {
+        StringBuilder collected = new StringBuilder();
+        return languageInvoker.stream(route, turns)
+                .map(delta -> {
+                    collected.append(delta);
+                    return delta;
+                })
+                .doOnComplete(() -> {
+                    persistReply(companion, subject, collected.toString(),
+                            route.connection().provider().name(), route.connection().modelCode(), now);
+                    recordUsageSuccess(subject, route.connection().id(), route.connection().provider(),
+                            route.connection().modelCode(), CostSource.BYOK);
+                })
+                .doOnError(error -> {
+                    String code = error instanceof LanguageInvocationException invocation
+                            ? invocation.safeErrorCode() : ConnectivityResult.UPSTREAM_ERROR;
+                    log.warn("companion_chat_byok_failed subjectId={} code={}", subject.userId(), code);
+                    recordUsageFailure(subject, route.connection().id(), route.connection().provider(),
+                            route.connection().modelCode(), CostSource.BYOK, code);
+                });
+    }
+
+    private Message toAiMessage(ChatTurn turn) {
+        return switch (turn.role()) {
+            case ChatTurn.ROLE_SYSTEM -> new SystemMessage(turn.content());
+            case ChatTurn.ROLE_ASSISTANT -> new AssistantMessage(turn.content());
+            default -> new UserMessage(turn.content());
+        };
+    }
+
+    private void recordUsageSuccess(AuthorizationSubject subject, Long connectionId,
+                                    ModelProvider provider, String modelCode, CostSource costSource) {
+        try {
+            modelUsageService.recordSuccess(subject.userId(), ModelTask.LANGUAGE_AGENT,
+                    connectionId, provider, modelCode, costSource);
+        } catch (RuntimeException recordFailure) {
+            // 使用记录失败不得影响对话主链路；只记录安全字段。
+            log.warn("companion_chat_usage_record_failed subjectId={}", subject.userId());
+        }
+    }
+
+    private void recordUsageFailure(AuthorizationSubject subject, Long connectionId,
+                                    ModelProvider provider, String modelCode, CostSource costSource,
+                                    String safeErrorCode) {
+        try {
+            modelUsageService.recordFailure(subject.userId(), ModelTask.LANGUAGE_AGENT,
+                    connectionId, provider, modelCode, costSource, safeErrorCode);
+        } catch (RuntimeException recordFailure) {
+            log.warn("companion_chat_usage_record_failed subjectId={} code={}",
+                    subject.userId(), safeErrorCode);
+        }
     }
 
     private String demoReply(long companionId, long subjectId, String message) {
