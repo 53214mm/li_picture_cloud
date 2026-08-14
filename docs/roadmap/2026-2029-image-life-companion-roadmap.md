@@ -442,6 +442,26 @@ flowchart TD
 6. 建立伙伴关键漏斗、主动健康和 Provider 成本指标；
 7. 为下一阶段“主动提案闭环”单独编写规格，不把主动调度直接塞进喂养服务。
 
+### 执行状态（2026-08-14 更新）
+
+1. ✅ 已合并（PR #1，`main` @ `11a6182`）。
+2. ✅ 已完成：情绪五轴（衰减规则）、关系五轴、来源化记忆与最小页面；见
+   [round-20 指南](../round-20-companion-mood-relationship-memory-guide.md)。
+3. ✅ 已完成：确认/纠正/忽略/删除 + 列表惰性失效 + 转移端点守门。
+4. ✅ 已完成：喂养故事/情绪摘要/记忆统一走 `CompanionMessageBubble`。
+5. ✅ 代码部分完成：生产 CORS 白名单 fail-fast + 非开发 profile 禁 `*`；
+   凭据/日志人工审计与发布检查见
+   [发布检查清单](../reviews/2026-08-14-production-security-release-checklist.md)（待人工签字）。
+6. ✅ 已完成：关键漏斗/主动健康/成本指标日志与口径见
+   [指标口径](../metrics/companion-funnel-metrics.md)。
+7. ✅ 已完成：规格见
+   [主动提案闭环设计](../superpowers/specs/2026-08-14-companion-proactive-proposal-design.md)；
+   第一版实现（自主契约 + 每周回顾/纪念日/相似图片三机会源 + 敲打）见
+   [round-21 指南](../round-21-companion-chat-proposal-guide.md)。
+
+> 后续进展：站内对话（可解释上下文 + 双档策略）与主动提案第一版已随 Q2 第一批交付；
+> Q3「模型与 MCP 控制中心」与 Q4「图片炼金 MVP」的规格已先行完成，待季度评审立项。
+
 ## 16. 对外沟通版本
 
 ### 30 秒版本
