@@ -24,8 +24,9 @@
 | --- | --- | --- |
 | `COMPANION_CHAT_POLICY` | `DEMO_ONLY` | 对话策略：`DEMO_ONLY`（零外发）或 `MODEL` |
 | `COMPANION_CHAT_DAILY_LIMIT` | `50` | 每主体每日对话轮次上限 |
-| `COMPANION_CHAT_HISTORY_LIMIT` | `20` | 每轮带进模型的最近消息数 |
+| `COMPANION_CHAT_HISTORY_LIMIT` | `20` | 每轮带进模型的最近消息数上限 |
 | `COMPANION_CHAT_MEMORY_LIMIT` | `5` | 每轮带进模型的最近确认记忆数 |
+| `COMPANION_CHAT_CONTEXT_BUDGET` | `12000` | MODEL 档每轮提示词总码点预算（系统提示 + 历史 + 当前消息），超出从最旧历史截断 |
 
 ## API
 
