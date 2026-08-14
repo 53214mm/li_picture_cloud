@@ -244,6 +244,8 @@ test('chat panel reuses the companion bubble and streams replies', async () => {
   assert.match(chat, /listCompanionChatHistory/)
   assert.match(chat, /role === 'COMPANION'/)
   assert.match(chat, /user-bubble/)
+  // 发送失败时恢复草稿，避免用户输入丢失。
+  assert.match(chat, /draft\.value = content/)
   assert.match(page, /CompanionChatPanel/)
   assert.match(api, /\/companion\/chat\/history/)
   assert.match(utils, /parseSse/)
@@ -269,6 +271,10 @@ test('proposal panel gates by contract and supports accept ignore scold', async 
   assert.match(panel, /OPPORTUNITY_LABELS/)
   assert.match(panel, /ANNIVERSARY/)
   assert.match(panel, /SIMILAR_STORY/)
+  // 契约保存后立即按新契约重新评估提案；反馈用正向语气而非错误样式。
+  assert.match(panel, /await loadProposal\(\)/)
+  assert.match(panel, /伙伴安静了，这次提议已被止住。/)
+  assert.match(panel, /已忽略，伙伴不会再提这件事。/)
   assert.match(page, /CompanionProposalPanel/)
   assert.match(api, /\/companion\/contract/)
   assert.match(api, /\/companion\/proposals\/active/)

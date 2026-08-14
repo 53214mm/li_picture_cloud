@@ -138,6 +138,8 @@ async function saveContract() {
       maxFrequencyHours: Number(contractDraft.maxFrequencyHours)
     })
     showContract.value = false
+    // 契约变化可能立刻允许/禁止提案，保存后立即按新契约重新评估一次。
+    await loadProposal()
   } catch (error) {
     contractError.value = error.message || '主动设置保存失败，请稍后重试。'
   } finally {
