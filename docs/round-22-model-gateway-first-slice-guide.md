@@ -62,6 +62,10 @@
 1. **平台试用额度账本**（a47ea9e）：`platform_trial_ledger` 每主体一行（subjectId 唯一），不变量 balance≥reserved（可用额度永不为负）；reserve/settle/release CAS 重试（并发下永不透支），超限抛业务错误停止不自动扣费；伙伴对话平台路径预占→结算/释放闭环；`TrialController`（用户查自己 + 管理员授予）；默认试用额度 `app.model.credential.trial-default-balance`。
 2. **图片故事草稿**（7545917）：`CreationTask` 状态机 + `creation_task`/`creation_lineage` 两表；`StoryDraftService`：创建前逐张图片 PICTURE_VIEW 授权校验、幂等键唯一去重；大纲/草稿由语言路由生成（平台走试用账本 2/3 单位，BYOK 免费且失败不静默回退）；提示词只含图片数量与伙伴生成的大纲，不含用户原文；30 分钟确认超时惰性转 EXPIRED；伙伴页新增「图片故事」面板；E2E 通过 language-stub（@Primary ChatModel + 调用桩）全离线跑通大纲→草稿→保存闭环。
 
+## 第五个切片：表情草稿（提交 cf438e2 / 65c625f）
+
+复用创作任务管线（授权复核/语言路由/试用账本/血缘），新增 `creation_candidate` 追加表（(taskId, seq) 唯一）与 `CreationTask.selectDraft` 转移；`EmojiDraftService` 从授权图片生成文字版表情候选（安全纯文本过滤：无控制字符/链接、≤200 字、上限 8 条，不依赖图像模型），用户选中其一保存为文本作品；`CreationServiceSupport` 抽取故事/表情共享支撑（执行前 PICTURE_VIEW 复核、分类落地线索、CAS 转移、30 分钟确认超时惰性过期）；伙伴页新增「表情草稿」面板（单选来源图片 + 候选单选组 + 选中保存）；列表按玩法种类过滤。
+
 ## 独立审查与修复（第五轮审查）
 
 审查结论：P0 无；P1×1；P2×7，已全部修复并回归测试：
