@@ -26,6 +26,7 @@ public class ModelConnectivityService {
     private final CredentialCipher cipher;
     private final ModelConnectivityTester tester;
     private final ModelUsageService usageService;
+    private final ModelCapabilityProfileService profileService;
     private final EndpointAllowlist allowlist;
 
     public ModelConnectivityService(ModelConnectionRepository connectionRepository,
@@ -33,12 +34,14 @@ public class ModelConnectivityService {
                                     CredentialCipher cipher,
                                     ModelConnectivityTester tester,
                                     ModelUsageService usageService,
+                                    ModelCapabilityProfileService profileService,
                                     EndpointAllowlist allowlist) {
         this.connectionRepository = connectionRepository;
         this.vaultRepository = vaultRepository;
         this.cipher = cipher;
         this.tester = tester;
         this.usageService = usageService;
+        this.profileService = profileService;
         this.allowlist = allowlist;
     }
 
@@ -69,7 +72,20 @@ public class ModelConnectivityService {
         ConnectivityResult result = tester.test(connection.endpointUri(), apiKey,
                 connection.provider());
         recordOutcome(connection, subjectId, result);
+        if (result.reachable()) {
+            snapshotCapabilities(connection, subjectId);
+        }
         return result;
+    }
+
+    /** 探测成功时写能力画像快照；快照失败不得掩盖探测结果（只记安全字段）。 */
+    private void snapshotCapabilities(ModelConnection connection, long subjectId) {
+        try {
+            profileService.snapshot(connection, subjectId);
+        } catch (RuntimeException snapshotFailure) {
+            log.warn("model_capability_snapshot_failed subjectId={} connectionId={}",
+                    subjectId, connection.id());
+        }
     }
 
     private void recordOutcome(ModelConnection connection, long subjectId, ConnectivityResult result) {

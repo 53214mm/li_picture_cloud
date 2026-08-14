@@ -7,6 +7,7 @@ import com.li.lipicturecloud.infrastructure.airuntime.AesGcmCredentialCipher;
 import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleConnectivityTester;
 import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleLanguageClient;
 import com.li.lipicturecloud.infrastructure.airuntime.PropertyEndpointAllowlist;
+import com.li.lipicturecloud.infrastructure.airuntime.StaticModelCapabilityRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -73,6 +74,11 @@ public class ModelGatewayConfiguration {
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             ModelCredentialProperties properties) {
         return OpenAiCompatibleLanguageClient.production(objectMapper, properties.getLanguageTimeout());
+    }
+
+    @Bean
+    public com.li.lipicturecloud.application.airuntime.ModelCapabilityRegistry modelCapabilityRegistry() {
+        return new StaticModelCapabilityRegistry();
     }
 
     private static boolean isDevelopmentEnvironment(Environment environment) {

@@ -3,6 +3,9 @@ package com.li.lipicturecloud.infrastructure.persistence.airuntime;
 import com.li.lipicturecloud.domain.airuntime.CostSource;
 import com.li.lipicturecloud.domain.airuntime.CredentialVault;
 import com.li.lipicturecloud.domain.airuntime.CredentialVaultRepository;
+import com.li.lipicturecloud.domain.airuntime.ModelCapabilities;
+import com.li.lipicturecloud.domain.airuntime.ModelCapabilityProfile;
+import com.li.lipicturecloud.domain.airuntime.ModelCapabilityProfileRepository;
 import com.li.lipicturecloud.domain.airuntime.ModelConnection;
 import com.li.lipicturecloud.domain.airuntime.ModelConnectionRepository;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;
@@ -44,6 +47,9 @@ class ModelGatewayPersistenceIntegrationTest {
 
     @Autowired
     private TaskRoutingRuleRepository routingRepository;
+
+    @Autowired
+    private ModelCapabilityProfileRepository profileRepository;
 
     @Test
     void connectionLifecycleHonorsRevisionCasAndDeletesOnlyOnMatch() {
@@ -134,5 +140,25 @@ class ModelGatewayPersistenceIntegrationTest {
 
         assertThat(routingRepository.delete(created.id(), 1L)).isTrue();
         assertThat(routingRepository.findByOwnerId(801L)).isEmpty();
+    }
+
+    @Test
+    void capabilityProfilesAppendAndKeepTheLatestSnapshot() {
+        ModelCapabilityProfile first = profileRepository.append(ModelCapabilityProfile.snapshot(
+                9L, 801L, ModelProvider.DEEPSEEK, "deepseek-chat", ModelCapabilities.unknown(), NOW));
+        ModelCapabilityProfile second = profileRepository.append(ModelCapabilityProfile.snapshot(
+                9L, 801L, ModelProvider.DEEPSEEK, "deepseek-chat",
+                ModelCapabilities.of(true, false, true, true, false, false, false, 64_000,
+                        ModelCapabilities.SYNC, ModelCapabilities.COST_CHEAP),
+                NOW.plusSeconds(1)));
+
+        assertThat(first.id()).isPositive();
+        assertThat(second.id()).isPositive();
+        assertThat(second.id()).isNotEqualTo(first.id());
+
+        ModelCapabilityProfile latest = profileRepository.findLatestByConnectionId(9L).orElseThrow();
+        assertThat(latest.id()).isEqualTo(second.id());
+        assertThat(latest.text()).isTrue();
+        assertThat(latest.maxContextTokens()).isEqualTo(64_000);
     }
 }

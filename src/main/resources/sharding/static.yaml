@@ -45,6 +45,7 @@ rules:
       - primary.credential_vault
       - primary.model_usage_record
       - primary.task_routing_rule
+      - primary.model_capability_profile
     defaultDataSource: primary
 
 props:

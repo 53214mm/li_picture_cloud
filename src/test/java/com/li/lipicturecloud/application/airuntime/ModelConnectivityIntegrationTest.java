@@ -67,6 +67,9 @@ class ModelConnectivityIntegrationTest {
     private ModelUsageRecordRepository usageRepository;
 
     @Autowired
+    private com.li.lipicturecloud.domain.airuntime.ModelCapabilityProfileRepository profileRepository;
+
+    @Autowired
     private StubTester tester;
 
     @Test
@@ -93,6 +96,8 @@ class ModelConnectivityIntegrationTest {
         assertThat(record.modelCode()).isEqualTo("deepseek-chat");
         // 使用记录只含安全字段。
         assertThat(record.correlationId()).hasSize(36);
+        // 探测成功同时写能力画像快照。
+        assertThat(profileRepository.findLatestByConnectionId(connection.id())).isPresent();
     }
 
     @Test

@@ -37,6 +37,7 @@ class ModelConnectivityServiceTest {
     private CredentialCipher cipher;
     private ModelConnectivityTester tester;
     private ModelUsageService usageService;
+    private ModelCapabilityProfileService profileService;
     private EndpointAllowlist allowlist;
     private ModelConnectivityService service;
 
@@ -47,9 +48,10 @@ class ModelConnectivityServiceTest {
         cipher = mock(CredentialCipher.class);
         tester = mock(ModelConnectivityTester.class);
         usageService = mock(ModelUsageService.class);
+        profileService = mock(ModelCapabilityProfileService.class);
         allowlist = new PropertyEndpointAllowlist(List.of("deepseek.com"));
         service = new ModelConnectivityService(connectionRepository, vaultRepository, cipher,
-                tester, usageService, allowlist);
+                tester, usageService, profileService, allowlist);
     }
 
     private ModelConnection connection() {
@@ -77,10 +79,12 @@ class ModelConnectivityServiceTest {
                 ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK);
         verify(usageService, never()).recordFailure(anyLong(), any(), any(), any(), anyString(),
                 any(), anyString());
+        // 探测成功必须写能力画像快照。
+        verify(profileService).snapshot(any(ModelConnection.class), eq(7L));
     }
 
     @Test
-    void failedConnectionRecordsFailureWithSameSafeCode() {
+    void failedProbeRecordsFailureButSkipsCapabilitySnapshot() {
         when(connectionRepository.findById(9L)).thenReturn(Optional.of(connection()));
         when(vaultRepository.findById(5L)).thenReturn(Optional.of(credential()));
         when(cipher.decrypt(any(CredentialVault.class))).thenReturn("sk-secret");
@@ -93,6 +97,7 @@ class ModelConnectivityServiceTest {
         verify(usageService).recordFailure(7L, ModelTask.CONNECTIVITY_CHECK, 9L,
                 ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK,
                 ConnectivityResult.UPSTREAM_TIMEOUT);
+        verify(profileService, never()).snapshot(any(), anyLong());
     }
 
     @Test
