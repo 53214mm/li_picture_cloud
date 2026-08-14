@@ -46,5 +46,17 @@ class McpToolWhitelistTest {
         assertThat(enabled.revision()).isEqualTo(2L);
 
         assertThatThrownBy(() -> enabled.withId(9L)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> created.withId(0L)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void overflowAndRestoreGuards() {
+        McpToolWhitelist max = McpToolWhitelist.restore(7L, 4L, "tool", true, Long.MAX_VALUE);
+        assertThatThrownBy(() -> max.disable()).isInstanceOf(ArithmeticException.class);
+
+        assertThatThrownBy(() -> McpToolWhitelist.restore(0L, 4L, "tool", true, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> McpToolWhitelist.restore(7L, 0L, "tool", true, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

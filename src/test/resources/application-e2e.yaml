@@ -29,6 +29,8 @@ app:
     credential:
       # E2E 的"测试连接"不得发真实外网请求。
       connectivity-stub: true
+      # E2E 的图片故事生成不得发真实外网请求。
+      language-stub: true
 
 server:
   port: 18124

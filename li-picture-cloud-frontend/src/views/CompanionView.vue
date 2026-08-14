@@ -122,6 +122,8 @@
 
           <CompanionMemoryPanel :refresh-key="panelsRefreshKey" />
 
+          <CompanionStoryPanel :pictures="pictures" :refresh-key="panelsRefreshKey" />
+
           <CompanionGrowthTimeline :records="home.recentGrowth || []" />
         </template>
       </template>
@@ -142,6 +144,7 @@ import CompanionGrowthTimeline from '@/components/companion/CompanionGrowthTimel
 import CompanionMoodPanel from '@/components/companion/CompanionMoodPanel.vue'
 import CompanionRelationshipPanel from '@/components/companion/CompanionRelationshipPanel.vue'
 import CompanionMemoryPanel from '@/components/companion/CompanionMemoryPanel.vue'
+import CompanionStoryPanel from '@/components/companion/CompanionStoryPanel.vue'
 import CompanionChatPanel from '@/components/companion/CompanionChatPanel.vue'
 import CompanionProposalPanel from '@/components/companion/CompanionProposalPanel.vue'
 import {

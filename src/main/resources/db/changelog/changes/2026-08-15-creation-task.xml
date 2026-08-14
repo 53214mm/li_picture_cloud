@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <preConditions onFail="HALT" onError="HALT">
+        <and>
+            <or>
+                <not><tableExists tableName="creation_task"/></not>
+                <and>
+                    <columnExists tableName="creation_task" columnName="id"/>
+                    <columnExists tableName="creation_task" columnName="subjectId"/>
+                    <columnExists tableName="creation_task" columnName="kind"/>
+                    <columnExists tableName="creation_task" columnName="sourcePictureIds"/>
+                    <columnExists tableName="creation_task" columnName="status"/>
+                    <columnExists tableName="creation_task" columnName="outlineText"/>
+                    <columnExists tableName="creation_task" columnName="draftText"/>
+                    <columnExists tableName="creation_task" columnName="resultText"/>
+                    <columnExists tableName="creation_task" columnName="modelConnectionId"/>
+                    <columnExists tableName="creation_task" columnName="idempotencyKey"/>
+                    <columnExists tableName="creation_task" columnName="revision"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="creation_lineage"/></not>
+                <and>
+                    <columnExists tableName="creation_lineage" columnName="id"/>
+                    <columnExists tableName="creation_lineage" columnName="taskId"/>
+                    <columnExists tableName="creation_lineage" columnName="sourcePictureId"/>
+                    <columnExists tableName="creation_lineage" columnName="capabilityId"/>
+                    <columnExists tableName="creation_lineage" columnName="modelCode"/>
+                    <columnExists tableName="creation_lineage" columnName="promptTemplateVersion"/>
+                    <columnExists tableName="creation_lineage" columnName="costSource"/>
+                </and>
+            </or>
+        </and>
+    </preConditions>
+
+    <changeSet id="20260815-04" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="creation_task"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE creation_task (
+    id BIGINT PRIMARY KEY,
+    subjectId BIGINT NOT NULL,
+    kind VARCHAR(32) NOT NULL,
+    sourcePictureIds VARCHAR(512) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    outlineText VARCHAR(1000) NULL,
+    draftText VARCHAR(4000) NULL,
+    resultText VARCHAR(8000) NULL,
+    modelConnectionId BIGINT NULL,
+    idempotencyKey CHAR(36) NOT NULL,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_creation_task_key UNIQUE (subjectId, idempotencyKey)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="creation_task"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260815-05" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="creation_lineage"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE creation_lineage (
+    id BIGINT PRIMARY KEY,
+    taskId BIGINT NOT NULL,
+    sourcePictureId BIGINT NOT NULL,
+    capabilityId VARCHAR(64) NOT NULL,
+    modelCode VARCHAR(64) NOT NULL,
+    promptTemplateVersion VARCHAR(64) NOT NULL,
+    costSource VARCHAR(16) NOT NULL,
+    createdTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+        ]]></sql>
+        <rollback><dropTable tableName="creation_lineage"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260815-06" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_creation_task_subject"
+                              tableName="creation_task"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_creation_task_subject ON creation_task (subjectId, updateTime, id);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_creation_task_subject" tableName="creation_task"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260815-07" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_creation_lineage_task"
+                              tableName="creation_lineage"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_creation_lineage_task ON creation_lineage (taskId, id);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_creation_lineage_task" tableName="creation_lineage"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

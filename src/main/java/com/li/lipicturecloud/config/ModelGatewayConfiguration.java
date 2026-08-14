@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -71,10 +72,45 @@ public class ModelGatewayConfiguration {
     }
 
     @Bean
+    @ConditionalOnProperty(prefix = "app.model.credential", name = "language-stub",
+            havingValue = "false", matchIfMissing = true)
     public com.li.lipicturecloud.application.airuntime.LanguageModelInvoker modelLanguageInvoker(
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             ModelCredentialProperties properties) {
         return OpenAiCompatibleLanguageClient.production(objectMapper, properties.getLanguageTimeout());
+    }
+
+    /** E2E 专用：语言调用不发真实外网请求，返回固定文本。 */
+    @Bean
+    @ConditionalOnProperty(prefix = "app.model.credential", name = "language-stub",
+            havingValue = "true")
+    public com.li.lipicturecloud.application.airuntime.LanguageModelInvoker stubbedModelLanguageInvoker() {
+        return (route, turns) -> reactor.core.publisher.Flux.just(
+                "在晨光里，伙伴轻轻翻开了这些画面，把安静的清晨讲成了一段小小的故事。");
+    }
+
+    /** E2E 专用：平台 ChatModel 同样不发真实外网请求（覆盖故事生成的平台路径）。 */
+    @Bean
+    @ConditionalOnProperty(prefix = "app.model.credential", name = "language-stub",
+            havingValue = "true")
+    @Primary
+    public org.springframework.ai.chat.model.ChatModel stubbedPlatformChatModel() {
+        return new org.springframework.ai.chat.model.ChatModel() {
+            @Override
+            public org.springframework.ai.chat.model.ChatResponse call(
+                    org.springframework.ai.chat.prompt.Prompt prompt) {
+                return new org.springframework.ai.chat.model.ChatResponse(java.util.List.of(
+                        new org.springframework.ai.chat.model.Generation(
+                                new org.springframework.ai.chat.messages.AssistantMessage(
+                                        "在晨光里，伙伴轻轻翻开了这些画面，把安静的清晨讲成了一段小小的故事。"))));
+            }
+
+            @Override
+            public reactor.core.publisher.Flux<org.springframework.ai.chat.model.ChatResponse> stream(
+                    org.springframework.ai.chat.prompt.Prompt prompt) {
+                return reactor.core.publisher.Flux.just(call(prompt));
+            }
+        };
     }
 
     @Bean

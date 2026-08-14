@@ -43,4 +43,7 @@ public class ModelCredentialProperties {
 
     /** E2E 用：true 时连接探测使用固定成功 stub，不发真实外网请求。 */
     private boolean connectivityStub = false;
+
+    /** E2E 用：true 时语言调用返回固定文本 stub，不发真实外网请求。 */
+    private boolean languageStub = false;
 }

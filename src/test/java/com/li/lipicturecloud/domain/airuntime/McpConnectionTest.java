@@ -28,13 +28,21 @@ class McpConnectionTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> McpConnection.create("ok-code", "bad;name", ENDPOINT))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> McpConnection.create("ok-code", "x".repeat(65), ENDPOINT))
+                .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> McpConnection.create("ok-code", "x", URI.create("http://mcp.mxai.cn")))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> McpConnection.create("ok-code", "x",
                 URI.create("https://evil@mcp.mxai.cn"))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> McpConnection.create("ok-code", "x",
                 URI.create("https://mcp.mxai.cn/path?q=1"))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> McpConnection.create("ok-code", "x",
+                URI.create("https://mcp.mxai.cn#frag"))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> McpConnection.create("ok-code", "x",
+                URI.create("https:///nohost"))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> McpConnection.restore(null, "ok-code", "x", ENDPOINT, false, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> McpConnection.restore(0L, "ok-code", "x", ENDPOINT, false, 0L))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> McpConnection.restore(1L, "ok-code", "x", ENDPOINT, false, -1L))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -56,5 +64,13 @@ class McpConnectionTest {
         assertThat(disabled.disable()).isSameAs(disabled);
 
         assertThatThrownBy(() -> disabled.withId(9L)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> created.withId(0L)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void overflowGuards() {
+        McpConnection max = McpConnection.restore(4L, "mxai-mcp-server", "MxAI", ENDPOINT,
+                false, Long.MAX_VALUE);
+        assertThatThrownBy(() -> max.enable()).isInstanceOf(ArithmeticException.class);
     }
 }

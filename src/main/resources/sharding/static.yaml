@@ -49,6 +49,8 @@ rules:
       - primary.mcp_connection
       - primary.mcp_tool_whitelist
       - primary.platform_trial_ledger
+      - primary.creation_task
+      - primary.creation_lineage
     defaultDataSource: primary
 
 props:

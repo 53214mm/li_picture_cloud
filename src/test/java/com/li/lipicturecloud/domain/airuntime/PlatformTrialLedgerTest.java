@@ -82,4 +82,30 @@ class PlatformTrialLedgerTest {
         assertThat(granted.reserved()).isEqualTo(2L);
         assertThat(granted.available()).isEqualTo(28L);
     }
+
+    @Test
+    void withIdAndRestoreGuardPersistedIdentity() {
+        PlatformTrialLedger created = PlatformTrialLedger.create(7L, 10L);
+        PlatformTrialLedger persisted = created.withId(3L);
+        assertThat(persisted.id()).isEqualTo(3L);
+        assertThatThrownBy(() -> persisted.withId(4L)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> created.withId(0L)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> PlatformTrialLedger.restore(null, 7L, 10L, 0L, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> PlatformTrialLedger.restore(0L, 7L, 10L, 0L, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> PlatformTrialLedger.restore(3L, 7L, -1L, 0L, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void arithmeticOverflowIsRejected() {
+        PlatformTrialLedger max = PlatformTrialLedger.restore(3L, 7L, Long.MAX_VALUE, 0L, 0L);
+        assertThatThrownBy(() -> max.grant(1L)).isInstanceOf(ArithmeticException.class);
+
+        // revision 推进溢出（余额与预占都合法的前提下，唯一可达的加法溢出路径）。
+        PlatformTrialLedger maxRevision = PlatformTrialLedger.restore(3L, 7L, 10L, 0L,
+                Long.MAX_VALUE);
+        assertThatThrownBy(() -> maxRevision.reserve(1L)).isInstanceOf(ArithmeticException.class);
+    }
 }
