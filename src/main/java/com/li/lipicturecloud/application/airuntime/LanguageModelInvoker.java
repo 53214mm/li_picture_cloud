@@ -6,7 +6,7 @@ import java.util.List;
 
 /**
  * 语言模型流式调用端口。实现只消费 ModelRouteDecision 中的路由信息，
- * 失败以 {@link LanguageInvocationException}（仅安全错误码）终止流。
+ * 失败以 {@link ModelInvocationException}（仅安全错误码）终止流。
  */
 public interface LanguageModelInvoker {
 

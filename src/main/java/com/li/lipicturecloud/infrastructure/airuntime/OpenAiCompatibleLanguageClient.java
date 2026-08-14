@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.li.lipicturecloud.application.airuntime.ChatTurn;
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
-import com.li.lipicturecloud.application.airuntime.LanguageInvocationException;
+import com.li.lipicturecloud.application.airuntime.ModelInvocationException;
 import com.li.lipicturecloud.application.airuntime.LanguageModelInvoker;
 import com.li.lipicturecloud.application.airuntime.ModelRouteDecision;
 import reactor.core.publisher.Flux;
@@ -27,7 +27,7 @@ import java.util.stream.Stream;
  * OpenAI 兼容语言端点的流式客户端：POST {@code {endpoint}/chat/completions}，
  * stream=true，逐行解析 SSE {@code data:} 帧提取增量文本。
  *
- * <p>失败只抛带安全错误码的 {@link LanguageInvocationException}；日志与异常
+ * <p>失败只抛带安全错误码的 {@link ModelInvocationException}；日志与异常
  * 均不携带提示词、响应正文或凭据。</p>
  */
 public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
@@ -70,7 +70,7 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
                     .POST(HttpRequest.BodyPublishers.ofString(encodeBody(route, turns)))
                     .build();
         } catch (IOException bodyFailure) {
-            throw new LanguageInvocationException(ConnectivityResult.UPSTREAM_ERROR,
+            throw new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
                     "failed to encode model request", bodyFailure);
         }
 
@@ -123,14 +123,14 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
         try {
             JsonNode node = objectMapper.readTree(data);
             if (node.hasNonNull("error")) {
-                throw new LanguageInvocationException(ConnectivityResult.UPSTREAM_ERROR,
+                throw new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
                         "model endpoint reported an error");
             }
             JsonNode content = node.path("choices").path(0).path("delta").path("content");
             return content.isMissingNode() || content.isNull() || content.asText().isEmpty()
                     ? null : content.asText();
         } catch (IOException malformed) {
-            throw new LanguageInvocationException(ConnectivityResult.UPSTREAM_ERROR,
+            throw new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
                     "malformed model stream frame", malformed);
         }
     }
@@ -139,15 +139,15 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
         return statusCode >= 200 && statusCode < 300;
     }
 
-    private static LanguageInvocationException statusFailure(int statusCode) {
+    private static ModelInvocationException statusFailure(int statusCode) {
         String code = (statusCode == 401 || statusCode == 403)
                 ? ConnectivityResult.CREDENTIAL_REJECTED
                 : ConnectivityResult.UPSTREAM_ERROR;
-        return new LanguageInvocationException(code, "model endpoint rejected the request");
+        return new ModelInvocationException(code, "model endpoint rejected the request");
     }
 
     private Throwable normalizeFailure(Throwable failure) {
-        if (failure instanceof LanguageInvocationException) {
+        if (failure instanceof ModelInvocationException) {
             return failure;
         }
         Throwable root = failure;
@@ -157,14 +157,14 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
         if (root instanceof HttpTimeoutException || root instanceof java.net.SocketTimeoutException
                 || root instanceof java.io.InterruptedIOException
                 || root instanceof java.util.concurrent.TimeoutException) {
-            return new LanguageInvocationException(ConnectivityResult.UPSTREAM_TIMEOUT,
+            return new ModelInvocationException(ConnectivityResult.UPSTREAM_TIMEOUT,
                     "model endpoint timed out", failure);
         }
         if (root instanceof UncheckedIOException) {
-            return new LanguageInvocationException(ConnectivityResult.UPSTREAM_ERROR,
+            return new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
                     "model endpoint transport failed", failure);
         }
-        return new LanguageInvocationException(ConnectivityResult.UPSTREAM_ERROR,
+        return new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
                 "model invocation failed", failure);
     }
 }

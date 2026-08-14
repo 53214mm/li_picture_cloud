@@ -32,6 +32,9 @@ public class ModelCapabilityProfileService {
         if (connection.id() == null || subjectId <= 0) {
             throw new IllegalArgumentException("invalid snapshot identity");
         }
+        if (connection.subjectId() != subjectId) {
+            throw new IllegalArgumentException("snapshot subject must own the connection");
+        }
         ModelCapabilities capabilities = registry.capabilitiesFor(connection.provider(),
                 connection.modelCode());
         return profileRepository.append(ModelCapabilityProfile.snapshot(connection.id(),

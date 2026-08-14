@@ -73,8 +73,9 @@ public class RoutedVisualObservationProvider implements VisualObservationProvide
         DashScopeVisionClient byok = new DashScopeVisionClient(byokRestClient, objectMapper,
                 URI.create(route.connection().endpointUri().toString()
                         .replaceFirst("/+$", "") + "/chat/completions"),
-                route.connection().provider().name(), route.connection().modelCode(),
-                route.apiKey());
+                // 与平台路径 "dashscope" 的小写供应商代码保持一致。
+                route.connection().provider().name().toLowerCase(java.util.Locale.ROOT),
+                route.connection().modelCode(), route.apiKey());
         try {
             VisualObservationResult result = byok.observe(content, subjectId);
             recordSuccess(subjectId, route.connection().id(), route.connection().provider(),

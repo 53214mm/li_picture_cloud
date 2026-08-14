@@ -3,6 +3,8 @@ package com.li.lipicturecloud.application.airuntime;
 import com.li.lipicturecloud.domain.airuntime.CredentialVault;
 import com.li.lipicturecloud.domain.airuntime.CredentialVaultRepository;
 import com.li.lipicturecloud.domain.airuntime.CostSource;
+import com.li.lipicturecloud.domain.airuntime.ModelCapabilities;
+import com.li.lipicturecloud.domain.airuntime.ModelCapabilityProfile;
 import com.li.lipicturecloud.domain.airuntime.ModelConnection;
 import com.li.lipicturecloud.domain.airuntime.ModelConnectionRepository;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;
@@ -15,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,6 +33,7 @@ class LanguageRouterTest {
     private CredentialVaultRepository vaultRepository;
     private CredentialCipher cipher;
     private EndpointAllowlist allowlist;
+    private ModelCapabilityProfileService profileService;
     private LanguageRouter router;
 
     @BeforeEach
@@ -39,8 +43,10 @@ class LanguageRouterTest {
         vaultRepository = mock(CredentialVaultRepository.class);
         cipher = mock(CredentialCipher.class);
         allowlist = new PropertyEndpointAllowlist(List.of("deepseek.com"));
-        router = new LanguageRouter(routingRepository, connectionRepository, vaultRepository,
-                cipher, allowlist);
+        profileService = mock(ModelCapabilityProfileService.class);
+        router = new LanguageRouter(routingRepository,
+                new ByokConnectionResolver(connectionRepository, vaultRepository, cipher, allowlist),
+                profileService);
     }
 
     private ModelConnection connection() {
@@ -73,12 +79,45 @@ class LanguageRouterTest {
         when(connectionRepository.findById(9L)).thenReturn(Optional.of(connection()));
         when(vaultRepository.findById(5L)).thenReturn(Optional.of(credential()));
         when(cipher.decrypt(credential())).thenReturn("sk-secret");
+        when(profileService.findLatest(9L)).thenReturn(Optional.of(textProfile()));
 
         ModelRouteDecision decision = router.decide(7L);
 
         assertThat(decision.costSource()).isEqualTo(CostSource.BYOK);
         assertThat(decision.connection().id()).isEqualTo(9L);
         assertThat(decision.apiKey()).isEqualTo("sk-secret");
+    }
+
+    @Test
+    void capabilityGateRejectsMissingOrNonTextProfiles() {
+        when(routingRepository.findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT))
+                .thenReturn(Optional.of(TaskRoutingRule.create(7L, ModelTask.LANGUAGE_AGENT, 9L)
+                        .withId(1L)));
+        when(connectionRepository.findById(9L)).thenReturn(Optional.of(connection()));
+        when(vaultRepository.findById(5L)).thenReturn(Optional.of(credential()));
+        when(cipher.decrypt(credential())).thenReturn("sk-secret");
+
+        when(profileService.findLatest(9L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> router.decide(7L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("尚未生成能力画像");
+
+        ModelCapabilityProfile visionOnly = ModelCapabilityProfile.snapshot(9L, 7L,
+                ModelProvider.DEEPSEEK, "deepseek-chat",
+                ModelCapabilities.of(false, true, false, false, false, false, false, null,
+                        ModelCapabilities.UNKNOWN, null), Instant.parse("2026-08-14T08:00:00Z"))
+                .withId(2L);
+        when(profileService.findLatest(9L)).thenReturn(Optional.of(visionOnly));
+        assertThatThrownBy(() -> router.decide(7L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不支持文本能力");
+    }
+
+    private ModelCapabilityProfile textProfile() {
+        return ModelCapabilityProfile.snapshot(9L, 7L, ModelProvider.DEEPSEEK, "deepseek-chat",
+                ModelCapabilities.of(true, false, true, true, false, false, false, 64_000,
+                        ModelCapabilities.SYNC, ModelCapabilities.COST_CHEAP),
+                Instant.parse("2026-08-14T08:00:00Z")).withId(2L);
     }
 
     @Test

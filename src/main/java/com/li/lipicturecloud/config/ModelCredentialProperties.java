@@ -35,6 +35,9 @@ public class ModelCredentialProperties {
     /** 语言模型流式调用的超时预算。 */
     private Duration languageTimeout = Duration.ofSeconds(60);
 
+    /** 图片创作调用的超时预算（生成较慢，默认更长）。 */
+    private Duration imageTimeout = Duration.ofSeconds(120);
+
     /** E2E 用：true 时连接探测使用固定成功 stub，不发真实外网请求。 */
     private boolean connectivityStub = false;
 }

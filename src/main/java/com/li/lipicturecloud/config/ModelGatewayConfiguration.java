@@ -5,6 +5,7 @@ import com.li.lipicturecloud.application.airuntime.EndpointAllowlist;
 import com.li.lipicturecloud.application.airuntime.ModelConnectivityTester;
 import com.li.lipicturecloud.infrastructure.airuntime.AesGcmCredentialCipher;
 import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleConnectivityTester;
+import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleImageClient;
 import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleLanguageClient;
 import com.li.lipicturecloud.infrastructure.airuntime.PropertyEndpointAllowlist;
 import com.li.lipicturecloud.infrastructure.airuntime.StaticModelCapabilityRegistry;
@@ -79,6 +80,13 @@ public class ModelGatewayConfiguration {
     @Bean
     public com.li.lipicturecloud.application.airuntime.ModelCapabilityRegistry modelCapabilityRegistry() {
         return new StaticModelCapabilityRegistry();
+    }
+
+    @Bean
+    public com.li.lipicturecloud.application.airuntime.ImageModelInvoker modelImageInvoker(
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+            ModelCredentialProperties properties) {
+        return OpenAiCompatibleImageClient.production(objectMapper, properties.getImageTimeout());
     }
 
     private static boolean isDevelopmentEnvironment(Environment environment) {

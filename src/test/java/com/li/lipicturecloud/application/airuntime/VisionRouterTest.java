@@ -46,8 +46,9 @@ class VisionRouterTest {
         cipher = mock(CredentialCipher.class);
         allowlist = new PropertyEndpointAllowlist(List.of("deepseek.com"));
         profileService = mock(ModelCapabilityProfileService.class);
-        router = new VisionRouter(routingRepository, connectionRepository, vaultRepository, cipher,
-                allowlist, profileService);
+        router = new VisionRouter(routingRepository,
+                new ByokConnectionResolver(connectionRepository, vaultRepository, cipher, allowlist),
+                profileService);
     }
 
     private ModelConnection connection() {
@@ -131,6 +132,7 @@ class VisionRouterTest {
         stubByokRule();
         when(connectionRepository.findById(9L)).thenReturn(Optional.of(connection()));
         when(vaultRepository.findById(5L)).thenReturn(Optional.of(credential()));
+        when(cipher.decrypt(credential())).thenReturn("sk-secret");
 
         when(profileService.findLatest(9L)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> router.decide(7L))

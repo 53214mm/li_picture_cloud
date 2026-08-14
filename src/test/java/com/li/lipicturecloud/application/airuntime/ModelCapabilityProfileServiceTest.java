@@ -68,6 +68,13 @@ class ModelCapabilityProfileServiceTest {
     }
 
     @Test
+    void snapshotRejectsForeignConnections() {
+        assertThatThrownBy(() -> service.snapshot(connection(), 8L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("own");
+    }
+
+    @Test
     void latestFailsWhenNoSnapshotExists() {
         when(profileRepository.findLatestByConnectionId(9L)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.latest(9L))

@@ -129,7 +129,7 @@ class RoutedVisualObservationProviderTest {
 
         VisualObservationResult observed = provider.observe(content, 7L);
 
-        assertThat(observed.providerCode()).isEqualTo("DEEPSEEK");
+        assertThat(observed.providerCode()).isEqualTo("deepseek");
         assertThat(observed.modelCode()).isEqualTo("deepseek-chat");
         verify(usageService).recordSuccess(7L, ModelTask.VISION_UNDERSTANDING, 9L,
                 ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK);

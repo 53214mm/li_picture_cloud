@@ -3,7 +3,7 @@ package com.li.lipicturecloud.infrastructure.airuntime;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.li.lipicturecloud.application.airuntime.ChatTurn;
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
-import com.li.lipicturecloud.application.airuntime.LanguageInvocationException;
+import com.li.lipicturecloud.application.airuntime.ModelInvocationException;
 import com.li.lipicturecloud.application.airuntime.ModelRouteDecision;
 import com.li.lipicturecloud.domain.airuntime.ModelConnection;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;
@@ -111,8 +111,8 @@ class OpenAiCompatibleLanguageClientTest {
         Flux<String> stream = client.stream(route, List.of(ChatTurn.user("在吗")));
 
         assertThatThrownBy(stream.collectList()::block)
-                .isInstanceOf(LanguageInvocationException.class)
-                .extracting(invocation -> ((LanguageInvocationException) invocation).safeErrorCode())
+                .isInstanceOf(ModelInvocationException.class)
+                .extracting(invocation -> ((ModelInvocationException) invocation).safeErrorCode())
                 .isEqualTo(ConnectivityResult.CREDENTIAL_REJECTED);
     }
 
@@ -123,8 +123,8 @@ class OpenAiCompatibleLanguageClientTest {
         Flux<String> stream = client.stream(route, List.of(ChatTurn.user("在吗")));
 
         assertThatThrownBy(stream.collectList()::block)
-                .isInstanceOf(LanguageInvocationException.class)
-                .extracting(invocation -> ((LanguageInvocationException) invocation).safeErrorCode())
+                .isInstanceOf(ModelInvocationException.class)
+                .extracting(invocation -> ((ModelInvocationException) invocation).safeErrorCode())
                 .isEqualTo(ConnectivityResult.UPSTREAM_ERROR);
     }
 
@@ -138,8 +138,8 @@ class OpenAiCompatibleLanguageClientTest {
         Flux<String> stream = client.stream(route, List.of(ChatTurn.user("在吗")));
 
         assertThatThrownBy(stream.collectList()::block)
-                .isInstanceOf(LanguageInvocationException.class)
-                .extracting(invocation -> ((LanguageInvocationException) invocation).safeErrorCode())
+                .isInstanceOf(ModelInvocationException.class)
+                .extracting(invocation -> ((ModelInvocationException) invocation).safeErrorCode())
                 .isEqualTo(ConnectivityResult.UPSTREAM_ERROR);
     }
 
@@ -165,8 +165,8 @@ class OpenAiCompatibleLanguageClientTest {
         Flux<String> stream = shortClient.stream(route, List.of(ChatTurn.user("在吗")));
 
         assertThatThrownBy(stream.collectList()::block)
-                .isInstanceOf(LanguageInvocationException.class)
-                .extracting(invocation -> ((LanguageInvocationException) invocation).safeErrorCode())
+                .isInstanceOf(ModelInvocationException.class)
+                .extracting(invocation -> ((ModelInvocationException) invocation).safeErrorCode())
                 .isEqualTo(ConnectivityResult.UPSTREAM_TIMEOUT);
     }
 
@@ -178,12 +178,12 @@ class OpenAiCompatibleLanguageClientTest {
         assertThat(client.extractDelta(": comment")).isNull();
         assertThat(client.extractDelta("data: {\"choices\":[{\"delta\":{}}]}")).isNull();
         assertThatThrownBy(() -> client.extractDelta("data: not-json"))
-                .isInstanceOf(LanguageInvocationException.class)
-                .extracting(invocation -> ((LanguageInvocationException) invocation).safeErrorCode())
+                .isInstanceOf(ModelInvocationException.class)
+                .extracting(invocation -> ((ModelInvocationException) invocation).safeErrorCode())
                 .isEqualTo(ConnectivityResult.UPSTREAM_ERROR);
         assertThatThrownBy(() -> client.extractDelta(
                 "data: {\"error\":{\"message\":\"bad\"}}"))
-                .isInstanceOf(LanguageInvocationException.class);
+                .isInstanceOf(ModelInvocationException.class);
     }
 
     @Test

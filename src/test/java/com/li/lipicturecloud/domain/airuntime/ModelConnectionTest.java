@@ -88,6 +88,10 @@ class ModelConnectionTest {
         assertThatThrownBy(() -> ModelConnection.create(7L, ModelProvider.DEEPSEEK, "主力",
                 URI.create("https://api.example.com/v1#section"), "deepseek-chat", null))
                 .isInstanceOf(IllegalArgumentException.class);
+        // userinfo 混淆主机的端点一律拒绝。
+        assertThatThrownBy(() -> ModelConnection.create(7L, ModelProvider.DEEPSEEK, "主力",
+                URI.create("https://evil@api.example.com/v1"), "deepseek-chat", null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

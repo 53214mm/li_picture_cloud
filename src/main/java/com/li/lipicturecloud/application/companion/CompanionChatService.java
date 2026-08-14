@@ -2,7 +2,7 @@ package com.li.lipicturecloud.application.companion;
 
 import com.li.lipicturecloud.application.airuntime.ChatTurn;
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
-import com.li.lipicturecloud.application.airuntime.LanguageInvocationException;
+import com.li.lipicturecloud.application.airuntime.ModelInvocationException;
 import com.li.lipicturecloud.application.airuntime.LanguageModelInvoker;
 import com.li.lipicturecloud.application.airuntime.ModelRouteDecision;
 import com.li.lipicturecloud.application.airuntime.LanguageRouter;
@@ -249,7 +249,7 @@ public class CompanionChatService {
                             route.connection().modelCode(), CostSource.BYOK);
                 })
                 .doOnError(error -> {
-                    String code = error instanceof LanguageInvocationException invocation
+                    String code = error instanceof ModelInvocationException invocation
                             ? invocation.safeErrorCode() : ConnectivityResult.UPSTREAM_ERROR;
                     log.warn("companion_chat_byok_failed subjectId={} code={}", subject.userId(), code);
                     recordUsageFailure(subject, route.connection().id(), route.connection().provider(),

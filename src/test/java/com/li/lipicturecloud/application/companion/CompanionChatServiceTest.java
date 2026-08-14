@@ -1,7 +1,7 @@
 package com.li.lipicturecloud.application.companion;
 
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
-import com.li.lipicturecloud.application.airuntime.LanguageInvocationException;
+import com.li.lipicturecloud.application.airuntime.ModelInvocationException;
 import com.li.lipicturecloud.application.airuntime.ModelRouteDecision;
 import com.li.lipicturecloud.application.companion.view.ChatHistoryView;
 import com.li.lipicturecloud.config.CompanionFeatureProperties;
@@ -275,13 +275,13 @@ class CompanionChatServiceTest {
         when(languageRouter.decide(7L)).thenReturn(
                 ModelRouteDecision.byok(byokConnection(), "sk-secret"));
         when(languageInvoker.stream(any(ModelRouteDecision.class), anyList()))
-                .thenReturn(Flux.error(new LanguageInvocationException(
+                .thenReturn(Flux.error(new ModelInvocationException(
                         ConnectivityResult.CREDENTIAL_REJECTED, "rejected")));
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
         when(contextAssembler.systemPrompt(11L, 7L, 5)).thenReturn("系统提示");
 
         assertThatThrownBy(() -> service.chat(subject, "在吗").blockLast())
-                .isInstanceOf(LanguageInvocationException.class);
+                .isInstanceOf(ModelInvocationException.class);
 
         verify(chatModelProvider, never()).getIfAvailable();
         verify(modelUsageService).recordFailure(7L, ModelTask.LANGUAGE_AGENT, 9L,

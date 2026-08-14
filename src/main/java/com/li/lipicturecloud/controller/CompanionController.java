@@ -251,7 +251,7 @@ public class CompanionController {
     }
 
     private String chatErrorMessage(Throwable error) {
-        if (error instanceof com.li.lipicturecloud.application.airuntime.LanguageInvocationException invocation) {
+        if (error instanceof com.li.lipicturecloud.application.airuntime.ModelInvocationException invocation) {
             // BYOK 失败大声暴露安全错误码对应的提示，绝不静默回退平台钱包。
             return switch (invocation.safeErrorCode()) {
                 case com.li.lipicturecloud.application.airuntime.ConnectivityResult.CREDENTIAL_REJECTED ->

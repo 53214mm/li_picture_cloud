@@ -50,6 +50,7 @@ test('control center api module mirrors the backend endpoints', async () => {
   assert.match(api, /request\.post\(`\/model\/connections\/\$\{id\}\/disable`\)/)
   assert.match(api, /request\.post\(`\/model\/connections\/\$\{id\}\/rotate-credential`/)
   assert.match(api, /request\.post\(`\/model\/connections\/\$\{id\}\/test`\)/)
+  assert.match(api, /request\.get\(`\/model\/connections\/\$\{id\}\/capability`\)/)
   assert.match(api, /request\.put\(`\/model\/routing\/\$\{task\}`/)
   assert.match(api, /request\.get\('\/model\/usage'/)
 })

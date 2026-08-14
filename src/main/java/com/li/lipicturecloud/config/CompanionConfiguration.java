@@ -78,11 +78,13 @@ public class CompanionConfiguration {
             com.li.lipicturecloud.application.airuntime.ModelUsageService modelUsageService) {
         DashScopeVisionClient platform = DashScopeVisionClient.fromProperties(objectMapper,
                 properties);
-        RestClient byokRestClient = RestClient.builder().requestFactory(
-                        new org.springframework.http.client.JdkClientHttpRequestFactory(
-                                java.net.http.HttpClient.newBuilder()
-                                        .connectTimeout(properties.getVisionTimeout()).build()))
-                .build();
+        // 与平台客户端一致：连接超时 + 读取超时双保险，防止停滞的 BYOK 上游悬挂喂养线程。
+        java.net.http.HttpClient httpClient = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(properties.getVisionTimeout()).build();
+        org.springframework.http.client.JdkClientHttpRequestFactory requestFactory =
+                new org.springframework.http.client.JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(properties.getVisionTimeout());
+        RestClient byokRestClient = RestClient.builder().requestFactory(requestFactory).build();
         return new RoutedVisualObservationProvider(visionRouter, modelUsageService, platform,
                 byokRestClient, objectMapper);
     }

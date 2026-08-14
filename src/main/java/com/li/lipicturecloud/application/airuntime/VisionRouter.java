@@ -1,9 +1,5 @@
 package com.li.lipicturecloud.application.airuntime;
 
-import com.li.lipicturecloud.domain.airuntime.CredentialVault;
-import com.li.lipicturecloud.domain.airuntime.CredentialVaultRepository;
-import com.li.lipicturecloud.domain.airuntime.ModelConnection;
-import com.li.lipicturecloud.domain.airuntime.ModelConnectionRepository;
 import com.li.lipicturecloud.domain.airuntime.ModelTask;
 import com.li.lipicturecloud.domain.airuntime.TaskRoutingRule;
 import com.li.lipicturecloud.domain.airuntime.TaskRoutingRuleRepository;
@@ -24,23 +20,14 @@ import java.util.Optional;
 public class VisionRouter {
 
     private final TaskRoutingRuleRepository routingRepository;
-    private final ModelConnectionRepository connectionRepository;
-    private final CredentialVaultRepository vaultRepository;
-    private final CredentialCipher cipher;
-    private final EndpointAllowlist allowlist;
+    private final ByokConnectionResolver byokResolver;
     private final ModelCapabilityProfileService profileService;
 
     public VisionRouter(TaskRoutingRuleRepository routingRepository,
-                        ModelConnectionRepository connectionRepository,
-                        CredentialVaultRepository vaultRepository,
-                        CredentialCipher cipher,
-                        EndpointAllowlist allowlist,
+                        ByokConnectionResolver byokResolver,
                         ModelCapabilityProfileService profileService) {
         this.routingRepository = routingRepository;
-        this.connectionRepository = connectionRepository;
-        this.vaultRepository = vaultRepository;
-        this.cipher = cipher;
-        this.allowlist = allowlist;
+        this.byokResolver = byokResolver;
         this.profileService = profileService;
     }
 
@@ -55,36 +42,16 @@ public class VisionRouter {
             return ModelRouteDecision.platform();
         }
 
-        long connectionId = rule.get().connectionId();
-        ModelConnection connection = connectionRepository.findById(connectionId)
-                .filter(owned -> owned.subjectId() == subjectId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_ERROR,
-                        "视觉任务路由的连接不存在，请修复或清除路由规则"));
-        if (!connection.enabled()) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                    "视觉任务路由的连接已停用，请启用或清除路由规则");
-        }
-        if (connection.credentialId() == null) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                    "视觉任务路由的连接未绑定凭据，请绑定或清除路由规则");
-        }
-        if (!allowlist.isAllowed(connection.endpointUri())) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                    "视觉任务路由的连接端点不在允许清单内，请修复或清除路由规则");
-        }
+        ModelRouteDecision decision = byokResolver.resolveByok(subjectId,
+                rule.get().connectionId(), "视觉");
         com.li.lipicturecloud.domain.airuntime.ModelCapabilityProfile profile =
-                profileService.findLatest(connectionId)
+                profileService.findLatest(decision.connection().id())
                         .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_ERROR,
                                 "视觉任务路由的连接尚未生成能力画像，请先测试连接"));
         if (!profile.vision()) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR,
                     "视觉任务路由的连接模型不支持视觉理解，请修复或清除路由规则");
         }
-        CredentialVault credential = vaultRepository.findById(connection.credentialId())
-                .filter(owned -> owned.subjectId() == subjectId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_ERROR,
-                        "视觉任务路由的凭据不存在，请修复或清除路由规则"));
-
-        return ModelRouteDecision.byok(connection, cipher.decrypt(credential));
+        return decision;
     }
 }
