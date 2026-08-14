@@ -89,4 +89,14 @@ public interface CompanionGrowthRecordMapper {
               AND eventType = 'PICTURE_REVISITED'
             """)
     long sumRevisitExperience(@Param("companionId") long companionId, @Param("pictureId") long pictureId);
+
+    @Select("""
+            SELECT pictureId FROM companion_growth_record
+            WHERE companionId = #{companionId} AND eventType = 'PICTURE_FED'
+            GROUP BY pictureId
+            ORDER BY MAX(createTime) DESC, MAX(id) DESC
+            LIMIT #{limit}
+            """)
+    List<Long> selectRecentFedPictureIds(@Param("companionId") long companionId,
+                                         @Param("limit") int limit);
 }

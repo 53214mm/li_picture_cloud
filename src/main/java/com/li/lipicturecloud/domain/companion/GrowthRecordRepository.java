@@ -15,4 +15,6 @@ public interface GrowthRecordRepository {
     long countSince(long companionId, Instant since);
     /** 往年同月同日（数据库本地日历）的完整喂养次数（纪念日机会源）。 */
     long countAnniversaryFeeds(long companionId, int month, int day);
+    /** 最近完整喂养过的图片 ID（去重、按最近喂养时间倒序，相似图片机会源）。 */
+    List<Long> findRecentFedPictureIds(long companionId, int limit);
 }
