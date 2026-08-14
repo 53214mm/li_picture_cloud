@@ -46,7 +46,7 @@
     <div v-else class="proposal-body">
       <CompanionMessageBubble :message="proposal.content" />
       <div class="proposal-meta">
-        <span>类型 {{ proposal.opportunityType === 'WEEKLY_REVIEW' ? '每周影像回顾' : proposal.opportunityType }}</span>
+        <span>类型 {{ opportunityLabel(proposal.opportunityType) }}</span>
         <span>冲动得分 {{ Number(proposal.impulseScore).toFixed(2) }}</span>
       </div>
       <div class="proposal-actions">
@@ -84,6 +84,16 @@ const showContract = ref(false)
 const contractSaving = ref(false)
 const contractError = ref('')
 const contractDraft = reactive({ active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 72 })
+
+const OPPORTUNITY_LABELS = Object.freeze({
+  WEEKLY_REVIEW: '每周影像回顾',
+  ANNIVERSARY: '纪念日提醒',
+  SIMILAR_STORY: '相似图片故事'
+})
+
+function opportunityLabel(type) {
+  return OPPORTUNITY_LABELS[type] || type || '伙伴的提议'
+}
 
 onMounted(() => {
   loadProposal()

@@ -20,12 +20,21 @@
 | 记忆操作 | `companion_memory_action`（action=confirm/correct/dismiss/delete） | 每条记忆每次有效操作一条 |
 | 负反馈（代理） | `companion_memory_action` + `action=dismiss` | 第二季度"敲打"落地前，以记忆忽略为负反馈代理 |
 
-## 2. 主动健康（第二季度启用）
+## 2. 主动健康（第二季度已启用）
 
-主动提案功能落地前不产生主动日志。已约定的口径见
-[主动提案闭环设计](../superpowers/specs/2026-08-14-companion-proactive-proposal-design.md) 第 6 节：
-提案展示/接受/忽略/敲打/关闭率、连续未响应抑制次数、守门抑制原因码。
-日志前缀 `companion_proposal_*`，只含 subjectId/proposalId/opportunityType/reasonCode。
+主动提案已落地，实际日志事件（前缀 `companion_proposal_*`，只含
+subjectId/proposalId/opportunityType/reasonCode/type，不含提案文案）：
+
+| 指标 | 日志事件 | 口径说明 |
+| --- | --- | --- |
+| 提案生成 | `companion_proposal_generated`（type=WEEKLY_REVIEW/ANNIVERSARY/SIMILAR_STORY） | 守门通过且机会源有候选时一条 |
+| 守门抑制 | `companion_proposal_gated`（reason=CONTRACT_DISABLED/FREQUENCY_ZERO/QUIET_HOURS/FREQUENCY_BUDGET） | 按原因码聚合可得"安静时段/频率/开关各抑制了多少机会" |
+| 接受/忽略 | `companion_proposal_reaction`（type=ACCEPT/IGNORE） | 展示→接受、展示→忽略转化 |
+| 敲打 | `companion_proposal_reaction`（type=SCOLD）+ `companion_scold_trait_applied` | 前者计敲打率；后者计性格下调次数（30 天满 3 次触发） |
+| 过期 | `companion_proposal_expire_conflict`（仅冲突时）/ 状态迁移 EXPIRED | 未响应抑制在下次读取时惰性发生 |
+
+提案展示率、接受率、忽略率、敲打率、关闭率均可由上述事件推导；
+口径与[主动提案闭环设计](../superpowers/specs/2026-08-14-companion-proactive-proposal-design.md)第 6 节一致。
 
 ## 3. Provider 成本
 
