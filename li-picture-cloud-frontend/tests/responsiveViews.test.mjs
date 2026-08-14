@@ -52,7 +52,12 @@ test('space and AI surfaces define phone layouts', () => {
     'components/companion/CompanionStats.vue',
     'components/companion/CompanionPicturePicker.vue',
     'components/companion/CompanionMessageBubble.vue',
-    'components/companion/CompanionGrowthTimeline.vue'
+    'components/companion/CompanionGrowthTimeline.vue',
+    'components/companion/CompanionMoodPanel.vue',
+    'components/companion/CompanionRelationshipPanel.vue',
+    'components/companion/CompanionMemoryPanel.vue',
+    'components/companion/CompanionChatPanel.vue',
+    'components/companion/CompanionProposalPanel.vue'
   ]) {
     assert.match(read(`src/${file}`), /@media \(max-width: 767px\)/, file)
   }
