@@ -16,6 +16,8 @@ import com.li.lipicturecloud.domain.airuntime.ModelProvider;
 import com.li.lipicturecloud.domain.airuntime.ModelTask;
 import com.li.lipicturecloud.domain.airuntime.ModelUsageRecord;
 import com.li.lipicturecloud.domain.airuntime.ModelUsageRecordRepository;
+import com.li.lipicturecloud.domain.airuntime.PlatformTrialLedger;
+import com.li.lipicturecloud.domain.airuntime.PlatformTrialLedgerRepository;
 import com.li.lipicturecloud.domain.airuntime.TaskRoutingRule;
 import com.li.lipicturecloud.domain.airuntime.TaskRoutingRuleRepository;
 import org.junit.jupiter.api.Test;
@@ -60,6 +62,9 @@ class ModelGatewayPersistenceIntegrationTest {
 
     @Autowired
     private McpToolWhitelistRepository mcpWhitelistRepository;
+
+    @Autowired
+    private PlatformTrialLedgerRepository trialLedgerRepository;
 
     @Test
     void connectionLifecycleHonorsRevisionCasAndDeletesOnlyOnMatch() {
@@ -205,5 +210,31 @@ class ModelGatewayPersistenceIntegrationTest {
 
         assertThat(mcpWhitelistRepository.delete(entry.id(), 1L)).isTrue();
         assertThat(mcpWhitelistRepository.findByConnectionId(created.id())).isEmpty();
+    }
+
+    @Test
+    void trialLedgerHonorsSubjectUniqueKeyAndRevisionCas() {
+        PlatformTrialLedger created = trialLedgerRepository.insert(
+                PlatformTrialLedger.create(801L, 100L));
+        assertThat(created.id()).isPositive();
+
+        // subjectId 唯一键：并发首建输的一方读回赢家行。
+        PlatformTrialLedger duplicate = trialLedgerRepository.insert(
+                PlatformTrialLedger.create(801L, 0L));
+        assertThat(duplicate.id()).isEqualTo(created.id());
+        assertThat(duplicate.balance()).isEqualTo(100L);
+
+        PlatformTrialLedger reserved = created.reserve(10L);
+        assertThat(trialLedgerRepository.save(reserved, 0L)).isTrue();
+        assertThat(trialLedgerRepository.save(reserved, 0L)).isFalse();
+        PlatformTrialLedger stored = trialLedgerRepository.findBySubjectId(801L).orElseThrow();
+        assertThat(stored.reserved()).isEqualTo(10L);
+        assertThat(stored.available()).isEqualTo(90L);
+
+        PlatformTrialLedger settled = stored.settle(6L);
+        assertThat(trialLedgerRepository.save(settled, 1L)).isTrue();
+        PlatformTrialLedger finalState = trialLedgerRepository.findBySubjectId(801L).orElseThrow();
+        assertThat(finalState.balance()).isEqualTo(94L);
+        assertThat(finalState.reserved()).isEqualTo(4L);
     }
 }

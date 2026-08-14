@@ -7,6 +7,7 @@ import com.li.lipicturecloud.application.airuntime.view.McpToolWhitelistView;
 import com.li.lipicturecloud.common.BaseResponse;
 import com.li.lipicturecloud.common.ResultUtils;
 import com.li.lipicturecloud.constant.UserConstant;
+import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.exception.ThrowUtils;
 import com.li.lipicturecloud.model.dto.airuntime.McpServiceRequest;
@@ -52,8 +53,14 @@ public class McpController {
                         || body.getDisplayName() == null || body.getDisplayName().isBlank()
                         || body.getEndpointUri() == null || body.getEndpointUri().isBlank(),
                 ErrorCode.PARAMS_ERROR, "请完整填写服务代码、名称与端点");
-        return ResultUtils.success(McpServiceView.of(mcpConnectionService.upsertService(
-                body.getCode().strip(), body.getDisplayName().strip(), body.getEndpointUri().strip())));
+        try {
+            return ResultUtils.success(McpServiceView.of(mcpConnectionService.upsertService(
+                    body.getCode().strip(), body.getDisplayName().strip(),
+                    body.getEndpointUri().strip())));
+        } catch (IllegalArgumentException malformed) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "MCP 服务参数不合法: "
+                    + malformed.getMessage());
+        }
     }
 
     @PostMapping("/services/{code}/enable")

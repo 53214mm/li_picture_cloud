@@ -65,6 +65,8 @@ public class CompanionChatService {
     private static final int MAX_USER_CODE_POINTS = 500;
     /** 每条历史消息在预算中的角色/结构开销（码点）。 */
     private static final int PER_MESSAGE_OVERHEAD = 16;
+    /** 平台钱包路径每轮对话的试用额度成本。 */
+    private static final long PLATFORM_CHAT_COST = 1L;
 
     private final CompanionRepository companionRepository;
     private final CompanionChatMessageRepository messageRepository;
@@ -78,6 +80,7 @@ public class CompanionChatService {
     private final LanguageRouter languageRouter;
     private final LanguageModelInvoker languageInvoker;
     private final ModelUsageService modelUsageService;
+    private final com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService trialLedger;
     private final Clock clock;
 
     public CompanionChatService(CompanionRepository companionRepository,
@@ -92,6 +95,7 @@ public class CompanionChatService {
                                 LanguageRouter languageRouter,
                                 LanguageModelInvoker languageInvoker,
                                 ModelUsageService modelUsageService,
+                                com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService trialLedger,
                                 Clock clock) {
         this.companionRepository = companionRepository;
         this.messageRepository = messageRepository;
@@ -105,6 +109,7 @@ public class CompanionChatService {
         this.languageRouter = languageRouter;
         this.languageInvoker = languageInvoker;
         this.modelUsageService = modelUsageService;
+        this.trialLedger = trialLedger;
         this.clock = clock;
     }
 
@@ -136,6 +141,12 @@ public class CompanionChatService {
                 == CompanionFeatureProperties.CompanionChatPolicy.MODEL
                 ? languageRouter.decide(subject.userId())
                 : null;
+        // 平台钱包路径：写任何消息前预占试用额度（不足大声失败，不自动扣费）；
+        // 随事务提交，流失败时在事务外释放。
+        boolean platformReserved = route != null && !route.isByok();
+        if (platformReserved) {
+            trialLedger.reserve(subject.userId(), PLATFORM_CHAT_COST);
+        }
         quotaGuard.reserve(subject.userId(), LocalDate.now(clock.withZone(SHANGHAI)),
                 properties.getChatDailyLimit());
         Instant now = clock.instant();
@@ -144,7 +155,7 @@ public class CompanionChatService {
                 subject.userId(), properties.getChatPolicy().name());
 
         if (route != null) {
-            return modelReply(companion, subject, normalized, now, route);
+            return modelReply(companion, subject, normalized, now, route, platformReserved);
         }
         String reply = demoReply(companion.id(), subject.userId(), normalized);
         return Flux.just(reply).doOnComplete(() ->
@@ -152,12 +163,12 @@ public class CompanionChatService {
     }
 
     private Flux<String> modelReply(Companion companion, AuthorizationSubject subject, String message,
-                                    Instant now, ModelRouteDecision route) {
+                                    Instant now, ModelRouteDecision route, boolean platformReserved) {
         List<ChatTurn> turns = assembleTurns(companion, subject, message);
         if (route.isByok()) {
             return byokReply(companion, subject, route, turns, now);
         }
-        return platformReply(companion, subject, turns, now);
+        return platformReply(companion, subject, turns, now, platformReserved);
     }
 
     /**
@@ -204,7 +215,7 @@ public class CompanionChatService {
     }
 
     private Flux<String> platformReply(Companion companion, AuthorizationSubject subject,
-                                       List<ChatTurn> turns, Instant now) {
+                                       List<ChatTurn> turns, Instant now, boolean platformReserved) {
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         if (chatModel == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "伙伴对话模型暂不可用");
@@ -224,13 +235,37 @@ public class CompanionChatService {
                     persistReply(companion, subject, collected.toString(), "dashscope", "qwen-max", now);
                     recordUsageSuccess(subject, null, ModelProvider.DASHSCOPE, "qwen-max",
                             CostSource.PLATFORM);
+                    if (platformReserved) {
+                        settleTrial(subject);
+                    }
                 })
                 .doOnError(error -> {
                     log.warn("companion_chat_model_failed subjectId={} exceptionType={}",
                             subject.userId(), error.getClass().getName());
                     recordUsageFailure(subject, null, ModelProvider.DASHSCOPE, "qwen-max",
                             CostSource.PLATFORM, ConnectivityResult.UPSTREAM_ERROR);
+                    if (platformReserved) {
+                        releaseTrial(subject);
+                    }
                 });
+    }
+
+    /** 平台结算失败不得影响已完成的回复。 */
+    private void settleTrial(AuthorizationSubject subject) {
+        try {
+            trialLedger.settle(subject.userId(), PLATFORM_CHAT_COST);
+        } catch (RuntimeException settleFailure) {
+            log.warn("companion_trial_settle_failed subjectId={}", subject.userId());
+        }
+    }
+
+    /** 平台释放失败不得掩盖模型错误。 */
+    private void releaseTrial(AuthorizationSubject subject) {
+        try {
+            trialLedger.release(subject.userId(), PLATFORM_CHAT_COST);
+        } catch (RuntimeException releaseFailure) {
+            log.warn("companion_trial_release_failed subjectId={}", subject.userId());
+        }
     }
 
     /** BYOK 路径：失败只记录安全错误码，绝不静默切换到平台钱包。 */

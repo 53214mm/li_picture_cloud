@@ -38,6 +38,9 @@ public class ModelCredentialProperties {
     /** 图片创作调用的超时预算（生成较慢，默认更长）。 */
     private Duration imageTimeout = Duration.ofSeconds(120);
 
+    /** 平台试用默认额度（每主体一行账本懒初始化时的硬上限）。 */
+    private long trialDefaultBalance = 100;
+
     /** E2E 用：true 时连接探测使用固定成功 stub，不发真实外网请求。 */
     private boolean connectivityStub = false;
 }

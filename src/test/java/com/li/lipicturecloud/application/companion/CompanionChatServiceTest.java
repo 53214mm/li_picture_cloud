@@ -73,6 +73,7 @@ class CompanionChatServiceTest {
     private com.li.lipicturecloud.application.airuntime.LanguageRouter languageRouter;
     private com.li.lipicturecloud.application.airuntime.LanguageModelInvoker languageInvoker;
     private com.li.lipicturecloud.application.airuntime.ModelUsageService modelUsageService;
+    private com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService trialLedger;
     private CompanionChatService service;
 
     @BeforeEach
@@ -88,6 +89,7 @@ class CompanionChatServiceTest {
         languageRouter = mock(com.li.lipicturecloud.application.airuntime.LanguageRouter.class);
         languageInvoker = mock(com.li.lipicturecloud.application.airuntime.LanguageModelInvoker.class);
         modelUsageService = mock(com.li.lipicturecloud.application.airuntime.ModelUsageService.class);
+        trialLedger = mock(com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService.class);
         when(messageRepository.append(any())).thenAnswer(invocation ->
                 invocation.<CompanionChatMessage>getArgument(0).withId(51L));
         when(messageRepository.findRecent(anyLong(), anyInt())).thenReturn(List.of());
@@ -97,7 +99,7 @@ class CompanionChatServiceTest {
         service = new CompanionChatService(companionRepository, messageRepository, moodRepository,
                 relationshipRepository, memoryRepository, contextAssembler, quotaGuard, properties,
                 chatModelProvider, languageRouter, languageInvoker, modelUsageService,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                trialLedger, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -304,6 +306,51 @@ class CompanionChatServiceTest {
                 .hasMessageContaining("路由的连接已停用");
 
         // 路由决定在任何写入之前：坏路由不得吞掉用户消息或消耗额度。
+        verify(quotaGuard, never()).reserve(anyLong(), any(), anyInt());
+        verify(messageRepository, never()).append(any());
+    }
+
+    @Test
+    void platformPathReservesSettlesAndReleasesTrialBalance() {
+        Companion companion = persistedCompanion();
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(contextAssembler.systemPrompt(11L, 7L, 5)).thenReturn("系统提示");
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatResponse chunk = mock(ChatResponse.class);
+        Generation generation = mock(Generation.class);
+        when(chatModelProvider.getIfAvailable()).thenReturn(chatModel);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(chunk));
+        when(chunk.getResult()).thenReturn(generation);
+        when(generation.getOutput()).thenReturn(new AssistantMessage("伙伴的回复"));
+
+        String reply = service.chat(subject, "你好").blockLast();
+
+        assertThat(reply).isEqualTo("伙伴的回复");
+        verify(trialLedger).reserve(7L, 1L);
+        verify(trialLedger).settle(7L, 1L);
+        verify(trialLedger, never()).release(anyLong(), anyLong());
+
+        // 平台流失败：释放预占，不结算。
+        when(chatModel.stream(any(Prompt.class)))
+                .thenReturn(Flux.error(new IllegalStateException("upstream down")));
+        assertThatThrownBy(() -> service.chat(subject, "你好").blockLast())
+                .isInstanceOf(IllegalStateException.class);
+        verify(trialLedger).release(7L, 1L);
+    }
+
+    @Test
+    void insufficientTrialBalanceFailsBeforeQuotaOrMessage() {
+        Companion companion = persistedCompanion();
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(trialLedger.reserve(7L, 1L)).thenThrow(new BusinessException(
+                ErrorCode.OPERATION_ERROR, "平台试用额度不足：可用 0，需要 1"));
+
+        assertThatThrownBy(() -> service.chat(subject, "你好"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("试用额度不足");
+
         verify(quotaGuard, never()).reserve(anyLong(), any(), anyInt());
         verify(messageRepository, never()).append(any());
     }

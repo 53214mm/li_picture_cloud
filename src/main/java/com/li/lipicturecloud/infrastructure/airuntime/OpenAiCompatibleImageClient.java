@@ -109,8 +109,10 @@ public class OpenAiCompatibleImageClient implements ImageModelInvoker {
             throw new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
                     "image endpoint returned no result");
         }
-        String url = first.path("url").isTextual() ? first.path("url").asText() : null;
-        String base64 = first.path("b64_json").isTextual() ? first.path("b64_json").asText() : null;
+        String url = first.path("url").isTextual() && !first.path("url").asText().isBlank()
+                ? first.path("url").asText() : null;
+        String base64 = first.path("b64_json").isTextual() && !first.path("b64_json").asText().isBlank()
+                ? first.path("b64_json").asText() : null;
         if (url == null && base64 == null) {
             throw new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
                     "image endpoint returned an empty result");

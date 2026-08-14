@@ -20,4 +20,6 @@
              relativeToChangelogFile="true"/>
     <include file="changes/2026-08-15-mcp-whitelist.xml"
              relativeToChangelogFile="true"/>
+    <include file="changes/2026-08-15-trial-ledger.xml"
+             relativeToChangelogFile="true"/>
 </databaseChangeLog>

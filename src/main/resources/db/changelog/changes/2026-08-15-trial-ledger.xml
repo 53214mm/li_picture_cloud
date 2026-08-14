@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <preConditions onFail="HALT" onError="HALT">
+        <or>
+            <not><tableExists tableName="platform_trial_ledger"/></not>
+            <and>
+                <columnExists tableName="platform_trial_ledger" columnName="id"/>
+                <columnExists tableName="platform_trial_ledger" columnName="subjectId"/>
+                <columnExists tableName="platform_trial_ledger" columnName="balance"/>
+                <columnExists tableName="platform_trial_ledger" columnName="reserved"/>
+                <columnExists tableName="platform_trial_ledger" columnName="revision"/>
+            </and>
+        </or>
+    </preConditions>
+
+    <changeSet id="20260815-03" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="platform_trial_ledger"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE platform_trial_ledger (
+    id BIGINT PRIMARY KEY,
+    subjectId BIGINT NOT NULL,
+    balance BIGINT NOT NULL DEFAULT 0,
+    reserved BIGINT NOT NULL DEFAULT 0,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_trial_ledger_subject UNIQUE (subjectId)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="platform_trial_ledger"/></rollback>
+    </changeSet>
+</databaseChangeLog>

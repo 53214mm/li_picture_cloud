@@ -48,6 +48,7 @@ rules:
       - primary.model_capability_profile
       - primary.mcp_connection
       - primary.mcp_tool_whitelist
+      - primary.platform_trial_ledger
     defaultDataSource: primary
 
 props:

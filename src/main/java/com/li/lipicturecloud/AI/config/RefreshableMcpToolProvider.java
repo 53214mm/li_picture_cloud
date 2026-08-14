@@ -116,9 +116,9 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider,
 
                 for (McpSchema.Tool tool : tools.tools()) {
                     String name = tool.name();
-                    // 白名单裁决（fail-closed）：未审核或已停用的工具绝不进入伙伴能力目录。
-                    if (mcpToolAccessDecider != null
-                            && !mcpToolAccessDecider.isToolAllowed(REVIEWED_SERVICE_CODE, name)) {
+                    // 白名单裁决（fail-closed）：裁决器缺失同样拒绝，绝不 fail-open。
+                    if (mcpToolAccessDecider == null
+                            || !mcpToolAccessDecider.isToolAllowed(REVIEWED_SERVICE_CODE, name)) {
                         log.info("mcp_tool_filtered service={} tool={}", REVIEWED_SERVICE_CODE, name);
                         continue;
                     }
@@ -190,6 +190,13 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider,
 
         @Override
         public String call(String toolInput) {
+            // 调用时再裁决一次（fail-closed）：白名单在列举后被停用的工具不得继续可调。
+            if (mcpToolAccessDecider == null
+                    || !mcpToolAccessDecider.isToolAllowed(REVIEWED_SERVICE_CODE, toolName)) {
+                log.warn("mcp_tool_invocation_blocked service={} tool={}",
+                        REVIEWED_SERVICE_CODE, toolName);
+                return "该工具已停用或未通过平台审核，暂不可用。";
+            }
             // ★ 在 call() 入口捕获 User（避免依赖 ThreadLocal 在 reactor 线程中为 null）
             User currentUser = UserContextHolder.get();
             log.info(">>> MCP ToolCallback.call() 被调用 | toolName={} | isGeneration={} | user={}",
