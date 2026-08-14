@@ -53,6 +53,8 @@ public class CompanionChatService {
     private static final Logger log = LoggerFactory.getLogger(CompanionChatService.class);
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final int MAX_USER_CODE_POINTS = 500;
+    /** 每条历史消息在预算中的角色/结构开销（码点）。 */
+    private static final int PER_MESSAGE_OVERHEAD = 16;
 
     private final CompanionRepository companionRepository;
     private final CompanionChatMessageRepository messageRepository;
@@ -142,11 +144,24 @@ public class CompanionChatService {
                 break;
             }
         }
-        for (int i = history.size() - 1; i >= 0; i--) {
+        // 预算守卫：系统提示 + 当前消息优先，历史从最新往最旧填充，超出总预算的部分被截断。
+        int used = codePoints(systemPrompt) + codePoints(message) + PER_MESSAGE_OVERHEAD;
+        List<CompanionChatMessage> included = new ArrayList<>();
+        for (int i = 0; i < history.size(); i++) {
             if (i == latestUserIndex) {
                 continue;
             }
             CompanionChatMessage past = history.get(i);
+            int size = codePoints(past.content()) + PER_MESSAGE_OVERHEAD;
+            if (used + size > properties.getChatContextBudget()) {
+                break;
+            }
+            used += size;
+            included.add(past);
+        }
+        // included 是新→旧，倒序后旧→新加入。
+        for (int i = included.size() - 1; i >= 0; i--) {
+            CompanionChatMessage past = included.get(i);
             messages.add(past.role().name().equals("USER")
                     ? new UserMessage(past.content()) : new AssistantMessage(past.content()));
         }
@@ -238,6 +253,10 @@ public class CompanionChatService {
 
     private static String plain(java.math.BigDecimal value) {
         return value.stripTrailingZeros().toPlainString();
+    }
+
+    private static int codePoints(String value) {
+        return value == null ? 0 : value.codePointCount(0, value.length());
     }
 
     private static int boundedLimit(int limit) {

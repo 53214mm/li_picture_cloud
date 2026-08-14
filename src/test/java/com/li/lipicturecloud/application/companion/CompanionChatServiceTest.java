@@ -18,8 +18,15 @@ import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.ObjectProvider;
+import reactor.core.publisher.Flux;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -143,6 +150,70 @@ class CompanionChatServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(error -> ((BusinessException) error).getCode())
                 .isEqualTo(ErrorCode.NOT_FOUND_ERROR.getCode());
+    }
+
+    @Test
+    void modelReplyDropsOldestHistoryWhenContextBudgetIsExceeded() {
+        Companion companion = persistedCompanion();
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        properties.setChatContextBudget(400);
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatResponse chunk = mock(ChatResponse.class);
+        Generation generation = mock(Generation.class);
+        when(chatModelProvider.getIfAvailable()).thenReturn(chatModel);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(chunk));
+        when(chunk.getResult()).thenReturn(generation);
+        when(generation.getOutput()).thenReturn(new AssistantMessage("伙伴的回复"));
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(contextAssembler.systemPrompt(11L, 7L, 5)).thenReturn("系统提示");
+        // 三条历史（倒序），每条 120 码点；预算 400 只装得下最近的约两条。
+        String longText = "历史消息".repeat(30);
+        CompanionChatMessage latest = CompanionChatMessage.companion(companion.id(), 7L, longText,
+                "internal", "demo-v1", NOW.plusSeconds(3));
+        CompanionChatMessage middle = CompanionChatMessage.user(companion.id(), 7L, longText, NOW.plusSeconds(2));
+        CompanionChatMessage oldest = CompanionChatMessage.companion(companion.id(), 7L, longText,
+                "internal", "demo-v1", NOW.plusSeconds(1));
+        when(messageRepository.findRecent(companion.id(), 20))
+                .thenReturn(List.of(latest, middle, oldest));
+
+        String reply = service.chat(subject, "你好").blockLast();
+
+        assertThat(reply).isEqualTo("伙伴的回复");
+        ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).stream(captor.capture());
+        List<Message> messages = captor.getValue().getInstructions();
+        assertThat(messages).hasSize(4); // 系统 + 2 条历史 + 当前消息
+        assertThat(messages.get(0).getText()).isEqualTo("系统提示");
+        assertThat(messages.get(messages.size() - 1).getText()).isEqualTo("你好");
+    }
+
+    @Test
+    void modelReplyKeepsSystemAndCurrentMessageEvenWhenBudgetIsTiny() {
+        Companion companion = persistedCompanion();
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        properties.setChatContextBudget(50);
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatResponse chunk = mock(ChatResponse.class);
+        Generation generation = mock(Generation.class);
+        when(chatModelProvider.getIfAvailable()).thenReturn(chatModel);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(chunk));
+        when(chunk.getResult()).thenReturn(generation);
+        when(generation.getOutput()).thenReturn(new AssistantMessage("伙伴的回复"));
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(contextAssembler.systemPrompt(11L, 7L, 5)).thenReturn("系统提示");
+        when(messageRepository.findRecent(companion.id(), 20))
+                .thenReturn(List.of(CompanionChatMessage.companion(companion.id(), 7L,
+                        "历史消息".repeat(30), "internal", "demo-v1", NOW.plusSeconds(3))));
+
+        service.chat(subject, "你好").blockLast();
+
+        ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).stream(captor.capture());
+        // 极小预算下历史全部被丢弃，但系统提示与当前消息必须保留。
+        List<Message> messages = captor.getValue().getInstructions();
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(0).getText()).isEqualTo("系统提示");
+        assertThat(messages.get(1).getText()).isEqualTo("你好");
     }
 
     private Companion persistedCompanion() {

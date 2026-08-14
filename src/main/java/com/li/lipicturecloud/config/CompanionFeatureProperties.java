@@ -43,6 +43,8 @@ public class CompanionFeatureProperties {
     private int chatDailyLimit = 50;
     private int chatHistoryLimit = 20;
     private int chatMemoryLimit = 5;
+    /** MODEL 档每轮提示词（系统提示 + 历史 + 当前消息）的总码点预算，超出部分从最旧历史截断。 */
+    private int chatContextBudget = 12000;
 
     /** 伙伴对话策略。 */
     public enum CompanionChatPolicy {
