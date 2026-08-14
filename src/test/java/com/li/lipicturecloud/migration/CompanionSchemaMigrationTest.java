@@ -32,6 +32,15 @@ class CompanionSchemaMigrationTest {
             assertMoodRelationshipMemoryTables(dataSource, 1);
             assertChatTables(dataSource, 1);
             assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 1);
+
+            rollback(dataSource, modelGatewayChangeSetCount(dataSource));
+            // 模型网关 migration 全部回滚后，其余伙伴表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+            assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 0);
 
             rollback(dataSource, proposalChangeSetCount(dataSource));
             // 提案 migration 全部回滚后，其余伙伴表不受影响。
@@ -62,12 +71,14 @@ class CompanionSchemaMigrationTest {
             assertMoodRelationshipMemoryTables(dataSource, 0);
             assertChatTables(dataSource, 0);
             assertProposalTables(dataSource, 0);
+            assertModelGatewayTables(dataSource, 0);
 
             update(dataSource);
             assertCompanionTables(dataSource, 1, 1);
             assertMoodRelationshipMemoryTables(dataSource, 1);
             assertChatTables(dataSource, 1);
             assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 1);
         }
     }
 
@@ -340,6 +351,13 @@ class CompanionSchemaMigrationTest {
                 """, Integer.class);
     }
 
+    private static int modelGatewayChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-14-model-gateway.xml'
+                """, Integer.class);
+    }
+
     private static void assertMoodRelationshipMemoryTables(DataSource dataSource, int expectedTableCount) {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         for (String table : List.of("companion_mood", "companion_relationship", "companion_memory")) {
@@ -366,6 +384,18 @@ class CompanionSchemaMigrationTest {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         for (String table : List.of("companion_autonomy_contract", "companion_proposal",
                 "companion_proposal_reaction")) {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
+                    """, Integer.class, table);
+            assertThat(count).as(table).isEqualTo(expectedTableCount);
+        }
+    }
+
+    private static void assertModelGatewayTables(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        for (String table : List.of("model_connection", "credential_vault",
+                "model_usage_record", "task_routing_rule")) {
             Integer count = jdbcTemplate.queryForObject("""
                     SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
                     WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?

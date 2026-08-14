@@ -14,4 +14,6 @@
              relativeToChangelogFile="true"/>
     <include file="changes/2026-08-14-companion-proposal.xml"
              relativeToChangelogFile="true"/>
+    <include file="changes/2026-08-14-model-gateway.xml"
+             relativeToChangelogFile="true"/>
 </databaseChangeLog>

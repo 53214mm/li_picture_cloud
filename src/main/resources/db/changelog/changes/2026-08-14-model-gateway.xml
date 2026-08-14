@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <preConditions onFail="HALT" onError="HALT">
+        <and>
+            <or>
+                <not><tableExists tableName="model_connection"/></not>
+                <and>
+                    <columnExists tableName="model_connection" columnName="id"/>
+                    <columnExists tableName="model_connection" columnName="subjectId"/>
+                    <columnExists tableName="model_connection" columnName="provider"/>
+                    <columnExists tableName="model_connection" columnName="displayName"/>
+                    <columnExists tableName="model_connection" columnName="endpointUri"/>
+                    <columnExists tableName="model_connection" columnName="modelCode"/>
+                    <columnExists tableName="model_connection" columnName="credentialId"/>
+                    <columnExists tableName="model_connection" columnName="enabled"/>
+                    <columnExists tableName="model_connection" columnName="revision"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="credential_vault"/></not>
+                <and>
+                    <columnExists tableName="credential_vault" columnName="id"/>
+                    <columnExists tableName="credential_vault" columnName="subjectId"/>
+                    <columnExists tableName="credential_vault" columnName="provider"/>
+                    <columnExists tableName="credential_vault" columnName="tail4"/>
+                    <columnExists tableName="credential_vault" columnName="cipherText"/>
+                    <columnExists tableName="credential_vault" columnName="algorithm"/>
+                    <columnExists tableName="credential_vault" columnName="revision"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="model_usage_record"/></not>
+                <and>
+                    <columnExists tableName="model_usage_record" columnName="id"/>
+                    <columnExists tableName="model_usage_record" columnName="subjectId"/>
+                    <columnExists tableName="model_usage_record" columnName="task"/>
+                    <columnExists tableName="model_usage_record" columnName="connectionId"/>
+                    <columnExists tableName="model_usage_record" columnName="provider"/>
+                    <columnExists tableName="model_usage_record" columnName="modelCode"/>
+                    <columnExists tableName="model_usage_record" columnName="costSource"/>
+                    <columnExists tableName="model_usage_record" columnName="success"/>
+                    <columnExists tableName="model_usage_record" columnName="safeErrorCode"/>
+                    <columnExists tableName="model_usage_record" columnName="correlationId"/>
+                    <columnExists tableName="model_usage_record" columnName="createdTime"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="task_routing_rule"/></not>
+                <and>
+                    <columnExists tableName="task_routing_rule" columnName="id"/>
+                    <columnExists tableName="task_routing_rule" columnName="subjectId"/>
+                    <columnExists tableName="task_routing_rule" columnName="task"/>
+                    <columnExists tableName="task_routing_rule" columnName="connectionId"/>
+                    <columnExists tableName="task_routing_rule" columnName="revision"/>
+                </and>
+            </or>
+        </and>
+    </preConditions>
+
+    <changeSet id="20260814-31" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="model_connection"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE model_connection (
+    id BIGINT PRIMARY KEY,
+    subjectId BIGINT NOT NULL,
+    provider VARCHAR(32) NOT NULL,
+    displayName VARCHAR(64) NOT NULL,
+    endpointUri VARCHAR(255) NOT NULL,
+    modelCode VARCHAR(64) NOT NULL,
+    credentialId BIGINT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_model_connection UNIQUE (subjectId, displayName)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="model_connection"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260814-32" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="credential_vault"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE credential_vault (
+    id BIGINT PRIMARY KEY,
+    subjectId BIGINT NOT NULL,
+    provider VARCHAR(32) NOT NULL,
+    tail4 VARCHAR(8) NOT NULL,
+    cipherText VARCHAR(1024) NOT NULL,
+    algorithm VARCHAR(32) NOT NULL,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+        ]]></sql>
+        <rollback><dropTable tableName="credential_vault"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260814-33" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="model_usage_record"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE model_usage_record (
+    id BIGINT PRIMARY KEY,
+    subjectId BIGINT NOT NULL,
+    task VARCHAR(32) NOT NULL,
+    connectionId BIGINT NULL,
+    provider VARCHAR(32) NOT NULL,
+    modelCode VARCHAR(64) NOT NULL,
+    costSource VARCHAR(16) NOT NULL,
+    success BOOLEAN NOT NULL,
+    safeErrorCode VARCHAR(64) NULL,
+    correlationId CHAR(36) NOT NULL,
+    createdTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+        ]]></sql>
+        <rollback><dropTable tableName="model_usage_record"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260814-34" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="task_routing_rule"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE task_routing_rule (
+    id BIGINT PRIMARY KEY,
+    subjectId BIGINT NOT NULL,
+    task VARCHAR(32) NOT NULL,
+    connectionId BIGINT NULL,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_task_routing UNIQUE (subjectId, task)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="task_routing_rule"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260814-35" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_model_usage_subject"
+                              tableName="model_usage_record"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_model_usage_subject
+    ON model_usage_record (subjectId, createdTime, id);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_model_usage_subject"
+                       tableName="model_usage_record"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

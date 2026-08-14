@@ -41,6 +41,10 @@ rules:
       - primary.companion_autonomy_contract
       - primary.companion_proposal
       - primary.companion_proposal_reaction
+      - primary.model_connection
+      - primary.credential_vault
+      - primary.model_usage_record
+      - primary.task_routing_rule
     defaultDataSource: primary
 
 props:
