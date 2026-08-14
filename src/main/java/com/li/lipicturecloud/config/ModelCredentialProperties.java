@@ -3,6 +3,7 @@ package com.li.lipicturecloud.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
 import java.util.List;
 
 /**
@@ -27,4 +28,7 @@ public class ModelCredentialProperties {
             "api.mistral.ai",
             "open.bigmodel.cn",
             "api.siliconflow.cn");
+
+    /** 连接探测的超时预算。 */
+    private Duration connectivityTimeout = Duration.ofSeconds(5);
 }

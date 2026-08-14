@@ -2,7 +2,9 @@ package com.li.lipicturecloud.config;
 
 import com.li.lipicturecloud.application.airuntime.CredentialCipher;
 import com.li.lipicturecloud.application.airuntime.EndpointAllowlist;
+import com.li.lipicturecloud.application.airuntime.ModelConnectivityTester;
 import com.li.lipicturecloud.infrastructure.airuntime.AesGcmCredentialCipher;
+import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleConnectivityTester;
 import com.li.lipicturecloud.infrastructure.airuntime.PropertyEndpointAllowlist;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +48,11 @@ public class ModelGatewayConfiguration {
     @Bean
     public EndpointAllowlist modelEndpointAllowlist(ModelCredentialProperties properties) {
         return new PropertyEndpointAllowlist(properties.getEndpointAllowlist());
+    }
+
+    @Bean
+    public ModelConnectivityTester modelConnectivityTester(ModelCredentialProperties properties) {
+        return OpenAiCompatibleConnectivityTester.production(properties.getConnectivityTimeout());
     }
 
     private static boolean isDevelopmentEnvironment(Environment environment) {
