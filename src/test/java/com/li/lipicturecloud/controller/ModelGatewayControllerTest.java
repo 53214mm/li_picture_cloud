@@ -191,7 +191,7 @@ class ModelGatewayControllerTest {
 
         when(profileService.findLatest(9L)).thenReturn(Optional.empty());
         mockMvc.perform(get("/model/connections/9/capability"))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(40400));
     }
 

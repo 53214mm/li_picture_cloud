@@ -105,6 +105,12 @@
                     :class="{ failed: !connection.probeResult.reachable }">
                 {{ probeLabel(connection.probeResult) }}
               </span>
+              <span v-if="connection.capability" class="capability-chips" data-testid="capability-chips">
+                支持：{{ supportedCapabilities(connection.capability).join(' · ') || '暂无已知能力' }}
+                <template v-if="connection.capability.maxContextTokens">
+                  · 上下文 {{ connection.capability.maxContextTokens }}
+                </template>
+              </span>
             </div>
             <div class="connection-actions">
               <button v-if="!connection.enabled" class="btn btn-sm" type="button"
@@ -210,6 +216,7 @@ import {
   costSourceLabel,
   providerLabel,
   safeErrorLabel,
+  supportedCapabilities,
   taskLabel
 } from '@/constants/modelGateway'
 import {
@@ -220,6 +227,7 @@ import {
   deleteModelRouting,
   disableModelConnection,
   enableModelConnection,
+  getModelConnectionCapability,
   listModelConnections,
   listModelCredentials,
   listModelRouting,
@@ -337,6 +345,15 @@ async function probeConnection(connection) {
   try {
     const response = await testModelConnection(connection.id)
     connection.probeResult = response
+    connection.capability = null
+    if (response?.reachable) {
+      try {
+        connection.capability = await getModelConnectionCapability(connection.id)
+      } catch {
+        // 画像缺失不掩盖探测结果。
+        connection.capability = null
+      }
+    }
     await loadUsageOnly()
   } catch (failure) {
     connection.probeResult = { reachable: false, safeErrorCode: 'UPSTREAM_ERROR' }
@@ -460,6 +477,7 @@ input, select { padding: .6rem .75rem; border: 2px solid var(--black); backgroun
 .connection-meta { font-size: .75rem; color: var(--gray-600); }
 .probe-result { justify-self: start; padding: .15rem .45rem; background: #e6f4ea; color: #075d2a; font-size: .75rem; font-weight: 700; }
 .probe-result.failed { background: #fdeaea; color: var(--red); }
+.capability-chips { justify-self: start; color: var(--gray-600); font-size: .75rem; }
 .connection-actions { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; }
 .rotate-panel { margin: 0 1.5rem 1.5rem; padding: 1rem; border: 2px dashed var(--black); display: grid; gap: .8rem; }
 .rotate-panel p { font-size: .85rem; color: var(--gray-600); }

@@ -6,6 +6,7 @@ import {
   costSourceLabel,
   providerLabel,
   safeErrorLabel,
+  supportedCapabilities,
   taskLabel
 } from '../src/constants/modelGateway.js'
 
@@ -20,6 +21,22 @@ test('model gateway labels resolve known codes and fall back safely', () => {
   assert.equal(safeErrorLabel('CREDENTIAL_REJECTED'), '凭据被拒')
   assert.equal(safeErrorLabel('UPSTREAM_TIMEOUT'), '上游超时')
   assert.equal(safeErrorLabel(null), '未知错误')
+})
+
+test('capability chips list only explicitly supported capabilities', () => {
+  const profile = {
+    text: true,
+    vision: false,
+    toolCall: true,
+    structuredOutput: true,
+    reasoning: false,
+    embedding: false,
+    imageGeneration: false,
+    maxContextTokens: 64000
+  }
+  assert.deepEqual(supportedCapabilities(profile), ['文本', '工具调用', '结构化输出'])
+  assert.deepEqual(supportedCapabilities(null), [])
+  assert.deepEqual(supportedCapabilities({}), [])
 })
 
 test('control center api module mirrors the backend endpoints', async () => {
@@ -52,6 +69,9 @@ test('control center never renders ciphertext and only collects api keys in inpu
   assert.match(view, /绝不静默回退扣费/)
   // 探测结果只展示安全错误码映射后的文案。
   assert.match(view, /safeErrorLabel\(result\.safeErrorCode\)/)
+  // 能力画像只列出明确支持的能力。
+  assert.match(view, /supportedCapabilities\(connection\.capability\)\.join\(' · '\)/)
+  assert.match(view, /getModelConnectionCapability\(connection\.id\)/)
   // 拦截器已解包 data，页面不得再出现 .data 二次解包。
   assert.doesNotMatch(view, /\.data \?\? \[\]/)
   assert.doesNotMatch(view, /response\.data/)

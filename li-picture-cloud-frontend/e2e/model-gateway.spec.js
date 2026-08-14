@@ -39,6 +39,12 @@ test('control center manages credentials connections routing and usage', async (
   await expect(connectionList.getByText(/已启用/)).toBeVisible()
   await page.getByRole('button', { name: '测试连接' }).click()
   await expect(page.getByText('探测通过')).toBeVisible()
+  // 探测成功写能力画像：DeepSeek 语言模型只展示明确支持的能力，视觉按不支持处理不展示。
+  await expect(page.getByTestId('capability-chips')).toContainText('文本')
+  await expect(page.getByTestId('capability-chips')).toContainText('工具调用')
+  await expect(page.getByTestId('capability-chips')).toContainText('结构化输出')
+  await expect(page.getByTestId('capability-chips')).toContainText('上下文 64000')
+  await expect(page.getByTestId('capability-chips')).not.toContainText('视觉理解')
   // 探测写一条使用记录，只含安全字段。
   const usage = page.getByTestId('usage-table')
   await expect(usage).toBeVisible()

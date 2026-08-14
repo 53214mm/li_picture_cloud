@@ -12,6 +12,8 @@ export const rotateModelCredential = (id, apiKey) =>
   request.post(`/model/connections/${id}/rotate-credential`, { apiKey })
 export const deleteModelConnection = id => request.delete(`/model/connections/${id}`)
 export const testModelConnection = id => request.post(`/model/connections/${id}/test`)
+export const getModelConnectionCapability = id =>
+  request.get(`/model/connections/${id}/capability`)
 
 export const listModelRouting = () => request.get('/model/routing')
 export const upsertModelRouting = (task, connectionId) =>

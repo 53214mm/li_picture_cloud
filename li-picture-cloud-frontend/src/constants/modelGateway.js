@@ -38,3 +38,19 @@ const SAFE_ERROR_LABEL = {
 export function safeErrorLabel(code) {
   return SAFE_ERROR_LABEL[code] || code || '未知错误'
 }
+
+const CAPABILITY_LABELS = [
+  { key: 'text', label: '文本' },
+  { key: 'vision', label: '视觉理解' },
+  { key: 'toolCall', label: '工具调用' },
+  { key: 'structuredOutput', label: '结构化输出' },
+  { key: 'reasoning', label: '深度推理' },
+  { key: 'embedding', label: '向量嵌入' },
+  { key: 'imageGeneration', label: '图像生成' }
+]
+
+/** 画像只列出明确支持的能力；未知能力一律不展示（按不支持处理）。 */
+export function supportedCapabilities(profile) {
+  if (!profile) return []
+  return CAPABILITY_LABELS.filter(item => profile[item.key] === true).map(item => item.label)
+}
