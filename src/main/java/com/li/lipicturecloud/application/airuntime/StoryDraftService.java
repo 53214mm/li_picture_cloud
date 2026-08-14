@@ -102,7 +102,8 @@ public class StoryDraftService {
             }
             String text = invoke(route, OUTLINE_PROMPT_TEMPLATE.formatted(
                     task.sourcePictureIds().size(), support.grounding(task.sourcePictureIds())));
-            CreationTask completed = support.transition(task,
+            // 关键：转移成功后把 task 推进到当前状态，后续失败必须基于最新状态写 FAILED。
+            task = support.transition(task,
                     task.completeOutline(text, route.isByok() ? route.connection().id() : null,
                             clock.instant()));
             recordLineage(task, CAPABILITY_OUTLINE, support.modelCode(route),
@@ -110,7 +111,7 @@ public class StoryDraftService {
             if (platform) {
                 trialLedger.settle(subject.userId(), OUTLINE_TRIAL_COST);
             }
-            return completed;
+            return task;
         } catch (RuntimeException failure) {
             if (platform) {
                 support.releaseTrial(trialLedger, subject.userId(), OUTLINE_TRIAL_COST);
@@ -150,14 +151,14 @@ public class StoryDraftService {
                 trialLedger.reserve(subject.userId(), DRAFT_TRIAL_COST);
             }
             String text = invoke(route, DRAFT_PROMPT_TEMPLATE.formatted(task.outlineText()));
-            CreationTask completed = support.transition(task,
-                    task.completeDraft(text, clock.instant()));
+            // 关键：转移成功后把 task 推进到当前状态，后续失败必须基于最新状态写 FAILED。
+            task = support.transition(task, task.completeDraft(text, clock.instant()));
             recordLineage(task, CAPABILITY_DRAFT, support.modelCode(route),
                     support.costSource(route));
             if (platform) {
                 trialLedger.settle(subject.userId(), DRAFT_TRIAL_COST);
             }
-            return completed;
+            return task;
         } catch (RuntimeException failure) {
             if (platform) {
                 support.releaseTrial(trialLedger, subject.userId(), DRAFT_TRIAL_COST);
@@ -185,7 +186,7 @@ public class StoryDraftService {
         Objects.requireNonNull(subject, "subject");
         return taskRepository.findBySubjectId(subject.userId(), limit).stream()
                 .filter(task -> task.kind() == CreationKind.STORY_DRAFT)
-                .map(task -> support.requireOwned(subject, task.id()))
+                .map(support::applyExpiry)
                 .toList();
     }
 

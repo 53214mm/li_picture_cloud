@@ -102,7 +102,8 @@ public class EmojiDraftService {
                     task.sourcePictureIds().size(), support.grounding(task.sourcePictureIds())));
             List<String> candidates = parseCandidates(text);
             candidateRepository.appendAll(task.id(), candidates, clock.instant());
-            CreationTask completed = support.transition(task,
+            // 关键：转移成功后把 task 推进到当前状态，后续失败必须基于最新状态写 FAILED。
+            task = support.transition(task,
                     task.completeOutline(null, route.isByok() ? route.connection().id() : null,
                             clock.instant()));
             recordLineage(task, CAPABILITY_CANDIDATES, support.modelCode(route),
@@ -110,7 +111,7 @@ public class EmojiDraftService {
             if (platform) {
                 trialLedger.settle(subject.userId(), GENERATE_TRIAL_COST);
             }
-            return completed;
+            return task;
         } catch (RuntimeException failure) {
             if (platform) {
                 support.releaseTrial(trialLedger, subject.userId(), GENERATE_TRIAL_COST);
@@ -154,7 +155,7 @@ public class EmojiDraftService {
         Objects.requireNonNull(subject, "subject");
         return taskRepository.findBySubjectId(subject.userId(), limit).stream()
                 .filter(task -> task.kind() == CreationKind.EMOJI_DRAFT)
-                .map(task -> support.requireOwned(subject, task.id()))
+                .map(support::applyExpiry)
                 .toList();
     }
 

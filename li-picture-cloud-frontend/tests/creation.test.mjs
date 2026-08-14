@@ -54,5 +54,7 @@ test('emoji panel picks one picture and drives candidate selection', async () =>
   assert.match(panel, /data-testid="emoji-result"/)
   // 单选一张来源图片。
   assert.match(panel, /type="radio" name="emoji-source"/)
+  // 候选单选组必须按任务独立命名（动态绑定，不能是字面量）。
+  assert.match(panel, /:name="`emoji-pick-\$\{task\.id\}`"/)
   assert.match(panel, /crypto\.randomUUID\(\)/)
 })

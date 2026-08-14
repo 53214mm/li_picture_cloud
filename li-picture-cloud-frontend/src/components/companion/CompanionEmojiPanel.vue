@@ -37,7 +37,7 @@
                class="emoji-candidates" role="radiogroup" :aria-label="`任务 ${task.id} 的表情候选`">
             <label v-for="candidate in candidates[task.id]" :key="candidate.seq"
                    class="emoji-candidate">
-              <input type="radio" name="`emoji-pick-${task.id}`" :value="candidate.seq"
+              <input type="radio" :name="`emoji-pick-${task.id}`" :value="candidate.seq"
                      v-model="selectedCandidate[task.id]">
               <span>{{ candidate.text }}</span>
             </label>

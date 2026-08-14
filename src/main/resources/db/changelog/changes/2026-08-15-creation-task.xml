@@ -123,17 +123,4 @@ CREATE TABLE creation_candidate (
         ]]></sql>
         <rollback><dropTable tableName="creation_candidate"/></rollback>
     </changeSet>
-
-    <changeSet id="20260815-09" author="li-picture-cloud">
-        <preConditions onFail="MARK_RAN" onError="HALT">
-            <not><indexExists indexName="idx_creation_candidate_task"
-                              tableName="creation_candidate"/></not>
-        </preConditions>
-        <sql splitStatements="false" stripComments="true"><![CDATA[
-CREATE INDEX idx_creation_candidate_task ON creation_candidate (taskId, seq);
-        ]]></sql>
-        <rollback>
-            <dropIndex indexName="idx_creation_candidate_task" tableName="creation_candidate"/>
-        </rollback>
-    </changeSet>
 </databaseChangeLog>

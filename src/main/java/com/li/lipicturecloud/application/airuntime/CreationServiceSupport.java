@@ -101,8 +101,15 @@ public class CreationServiceSupport {
         try {
             trialLedger.release(subjectId, amount);
         } catch (RuntimeException releaseFailure) {
-            // 释放失败不得掩盖生成错误。
+            // 释放失败不得掩盖生成错误；只记安全字段，预占保留待后续人工处理。
+            org.slf4j.LoggerFactory.getLogger(CreationServiceSupport.class)
+                    .warn("creation_trial_release_failed subjectId={} amount={}", subjectId, amount);
         }
+    }
+
+    /** 惰性应用确认超时过期；列表路径用，避免逐任务回查。 */
+    public CreationTask applyExpiry(CreationTask task) {
+        return expireIfStale(task);
     }
 
     public static String modelCode(ModelRouteDecision route) {

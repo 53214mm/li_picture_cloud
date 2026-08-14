@@ -32,6 +32,15 @@ class CreationCandidateTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new CreationCandidate(null, 9L, 0, "看 https://evil.test", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
+        // 链接检测大小写不敏感；双向/零宽/分隔符一律拒绝。
+        assertThatThrownBy(() -> new CreationCandidate(null, 9L, 0, "看 HTTPS://EVIL.TEST", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CreationCandidate(null, 9L, 0, "带\u202E双向控制", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CreationCandidate(null, 9L, 0, "带\u200B零宽", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CreationCandidate(null, 9L, 0, "带\u2028行分隔", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new CreationCandidate(null, 9L, 0, "x", null))
                 .isInstanceOf(NullPointerException.class);
     }

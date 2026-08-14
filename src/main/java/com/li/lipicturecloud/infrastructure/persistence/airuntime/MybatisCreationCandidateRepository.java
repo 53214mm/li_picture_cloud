@@ -23,6 +23,7 @@ public class MybatisCreationCandidateRepository implements CreationCandidateRepo
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public List<CreationCandidate> appendAll(long taskId, List<String> texts, Instant now) {
         Objects.requireNonNull(texts, "texts");
         Objects.requireNonNull(now, "now");

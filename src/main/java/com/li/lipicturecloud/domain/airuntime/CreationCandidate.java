@@ -35,11 +35,22 @@ public record CreationCandidate(
                     + MAX_TEXT_CODE_POINTS + " characters");
         }
         if (stripped.codePoints().anyMatch(Character::isISOControl)
-                || stripped.contains("http://") || stripped.contains("https://")) {
+                || stripped.codePoints().anyMatch(CreationCandidate::isUnsafeFormatChar)
+                || stripped.toLowerCase(java.util.Locale.ROOT).contains("http://")
+                || stripped.toLowerCase(java.util.Locale.ROOT).contains("https://")) {
             throw new IllegalArgumentException("candidate text must be safe plain text");
         }
         text = stripped;
         Objects.requireNonNull(createdTime, "createdTime");
+    }
+
+    /** 拒绝双向控制符、零宽字符与行分隔符，防止渲染层被视觉欺骗。 */
+    private static boolean isUnsafeFormatChar(int codePoint) {
+        return (codePoint >= 0x200B && codePoint <= 0x200F)      // 零宽/格式控制
+                || (codePoint >= 0x202A && codePoint <= 0x202E)  // 双向嵌入控制
+                || (codePoint >= 0x2066 && codePoint <= 0x2069)  // 双向隔离控制
+                || codePoint == 0xFEFF                          // BOM/零宽不换行空格
+                || codePoint == 0x2028 || codePoint == 0x2029;   // 行/段分隔符
     }
 
     public CreationCandidate withId(long persistedId) {
