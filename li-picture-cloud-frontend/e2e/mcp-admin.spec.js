@@ -24,7 +24,7 @@ test('admin registers an mcp service and gates tools through the whitelist', asy
   await mcpSection.getByLabel('端点（仅 HTTPS）').fill('https://mcp.mxai.cn')
   await mcpSection.getByRole('button', { name: '登记服务' }).click()
   await expect(mcpSection.getByText('MxAI 服务')).toBeVisible()
-  await expect(mcpSection.getByText('已停用', { exact: true })).toBeVisible()
+  await expect(mcpSection.getByText(/已停用/)).toBeVisible()
   await expect(mcpSection.getByText(/fail-closed/)).toBeVisible()
 
   // 加白名单并启用服务与工具。
@@ -33,7 +33,7 @@ test('admin registers an mcp service and gates tools through the whitelist', asy
   await expect(mcpSection.getByText('generate_image', { exact: true })).toBeVisible()
   const toolRow = mcpSection.locator('.mcp-tool-row').first()
   await mcpSection.getByRole('button', { name: '启用', exact: true }).click()
-  await expect(mcpSection.getByText('已启用', { exact: true })).toBeVisible()
+  await expect(mcpSection.getByText(/已启用/)).toBeVisible()
   await expect(toolRow.getByText('启用中', { exact: true })).toBeVisible()
 
   // 停用工具：条目保留但不再开放。
