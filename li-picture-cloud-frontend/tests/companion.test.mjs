@@ -223,6 +223,14 @@ test('parses sse chunks across fragmented buffers and names events', () => {
 
   const error = parseSse('event:error\ndata:伙伴走神了\n\n')
   assert.deepEqual(error.parsed, [{ name: 'error', data: '伙伴走神了' }])
+
+  // CRLF 变体（部分代理/网关会转换换行）同样可解析。
+  const crlf = parseSse('data:第一段\r\n\r\ndata:第二段\r\n\r\n')
+  assert.deepEqual(crlf.parsed, [
+    { name: 'message', data: '第一段' },
+    { name: 'message', data: '第二段' }
+  ])
+  assert.equal(crlf.remainder, '')
 })
 
 test('chat panel reuses the companion bubble and streams replies', async () => {

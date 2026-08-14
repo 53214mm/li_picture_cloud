@@ -77,11 +77,11 @@ export function formatSignedDelta(value) {
 
 /**
  * 把 SSE 文本缓冲切分为已解析事件与剩余缓冲。
- * SseEmitter 输出形如 `data:chunk\n\n` 或 `event:done\ndata:\n\n`。
+ * SseEmitter 输出形如 `data:chunk\n\n` 或 `event:done\ndata:\n\n`；CRLF 变体先归一化。
  */
 export function parseSse(buffer) {
   const parsed = []
-  let remainder = String(buffer)
+  let remainder = String(buffer).replace(/\r\n/g, '\n')
   while (true) {
     const boundary = remainder.indexOf('\n\n')
     if (boundary === -1) break

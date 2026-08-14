@@ -178,4 +178,20 @@ ALTER TABLE companion_proposal DROP CONSTRAINT uk_companion_proposal_pending;
             ]]></sql>
         </rollback>
     </changeSet>
+
+    <changeSet id="20260814-28" author="li-picture-cloud">
+        <!-- findRecent（无状态条件、按时间倒序）的专用索引。 -->
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_companion_proposal_recent"
+                              tableName="companion_proposal"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_companion_proposal_recent
+    ON companion_proposal (companionId, createTime, id);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_companion_proposal_recent"
+                       tableName="companion_proposal"/>
+        </rollback>
+    </changeSet>
 </databaseChangeLog>
