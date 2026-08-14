@@ -214,7 +214,7 @@ function formatTime(value) {
 .memory-source a { color: var(--blue); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
 .invalidated-note { margin-top: .6rem; padding: .6rem .8rem; border: 1px dashed var(--gray-400); color: var(--gray-600); font-size: .78rem; }
 .memory-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .85rem; }
-.memory-action { min-height: 40px; padding: .35rem .7rem; border: 2px solid var(--black); background: var(--white); font-size: .75rem; font-weight: 800; cursor: pointer; }
+.memory-action { min-height: 44px; padding: .35rem .7rem; border: 2px solid var(--black); background: var(--white); font-size: .75rem; font-weight: 800; cursor: pointer; }
 .memory-action:hover:not(:disabled) { background: var(--yellow); }
 .memory-action.confirm:hover:not(:disabled) { background: #d9f2e3; }
 .memory-action.delete { border-color: var(--red); color: var(--red); }
@@ -224,7 +224,7 @@ function formatTime(value) {
 .correct-editor label { display: block; margin-bottom: .4rem; font-size: .78rem; font-weight: 800; }
 .correct-editor textarea { width: 100%; padding: .5rem; border: 2px solid var(--black); font: inherit; font-size: .85rem; resize: vertical; }
 .correct-actions { display: flex; gap: .5rem; margin-top: .6rem; }
-.correct-actions .btn { min-height: 40px; font-size: .78rem; }
+.correct-actions .btn { min-height: 44px; font-size: .78rem; }
 .correct-error, .action-error { margin-top: .5rem; color: var(--red); font-size: .78rem; }
 @media (max-width: 767px) {
   .memory-card > header, .memory-list { padding-inline: 1.25rem; }
