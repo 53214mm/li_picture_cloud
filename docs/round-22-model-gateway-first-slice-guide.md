@@ -52,6 +52,11 @@
 2. **视觉接入网关**（29de8c7）：`VisionRouter`（VISION_UNDERSTANDING 路由，BYOK 优先、平台回退、坏路由大声失败、能力画像视觉门禁）；`RoutedVisualObservationProvider`（平台默认走既有 DashScope 路径行为不变；BYOK 复用同一 OpenAI 兼容客户端按调用实例化）；`VisualObservationProvider` 接口升级为 `observe(content, subjectId)` 返回 `VisualObservationResult`（候选 + 真实来源），消除并发下"最后一次调用"状态错乱；语言/视觉共用 `ModelRouteDecision`；两条视觉路径都写 `VISION_UNDERSTANDING` 使用记录（BYOK/PLATFORM 正确分账）。
 3. **控制中心展示**（80487b0）：`GET /api/model/connections/{id}/capability`（归属校验 + 安全视图）；前端探测成功后展示"支持：文本 · 工具调用 · 结构化输出 · 上下文 64000"能力徽章，未知能力不展示；E2E 断言 DeepSeek 语言连接不展示视觉能力。
 
+## 第三个切片：图像创作路由 + MCP 白名单（提交 02dd225 / eb1d99b / 1526fbe）
+
+1. **图像创作路由**（02dd225）：`ImageRouter`（imageGeneration 能力门禁，BYOK 优先；平台账本上线前平台路由大声失败）；`OpenAiCompatibleImageClient`（POST {endpoint}/images/generations，解析 url/b64_json，响应 1 MiB 上限，401/403→CREDENTIAL_REJECTED）；`ImageCreationService`（提示词 1-2000 字无控制字符、尺寸白名单 1024x1024/1536x1024/1024x1536/auto，成功/失败都写 IMAGE_CREATION 使用记录）；`ModelInvocationException` 通用化；`ByokConnectionResolver` 三个路由器共享同一套坏路由大声失败语义，语言路由补齐 text 能力门禁。
+2. **MCP 白名单**（eb1d99b/1526fbe）：`mcp_connection`（code 唯一）+ `mcp_tool_whitelist`（(connectionId,toolName) 唯一 + revision CAS）；`DbMcpToolAccessDecider` fail-closed（服务缺失/停用、工具未入白名单或停用一律拒绝）；`RefreshableMcpToolProvider` 工具注册按白名单过滤（平台审核服务代码 mxai-mcp-server），任何白名单写操作后立即使工具缓存失效；`McpController` 全部端点 `@AuthCheck(mustRole=admin)`；前端管理区仅 `userStore.isAdmin` 可见；E2E 新增管理员种子用户与 mcp-admin 故事线。任意 MCP URL 仍不开放——端点只由平台管理员登记，且必须是纯净 HTTPS URL。
+
 ## 独立审查与修复（第五轮审查）
 
 审查结论：P0 无；P1×1；P2×7，已全部修复并回归测试：
