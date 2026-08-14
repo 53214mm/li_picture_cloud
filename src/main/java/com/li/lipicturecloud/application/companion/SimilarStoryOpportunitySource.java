@@ -16,9 +16,11 @@ import java.util.Optional;
  * 相似图片故事机会：最近完整喂养过的图片所属空间，最近 7 天又出现其他图片时产生。
  *
  * <p>只读取图片的空间归属与计数，不读取图片内容；空间不存在或图片已不可用则静默跳过。
- * 冲动得分固定偏低（50 分位），让每周回顾与纪念日优先。</p>
+ * 机会源优先级第 3（机会源按 @Order 顺序短路选择；冲动得分只随提案落库供观测，
+ * 不参与跨机会源的优先级比较）。</p>
  */
 @Component
+@org.springframework.core.annotation.Order(3)
 public class SimilarStoryOpportunitySource implements CompanionOpportunitySource {
 
     private static final int RECENT_FED_SCAN = 5;
@@ -44,9 +46,10 @@ public class SimilarStoryOpportunitySource implements CompanionOpportunitySource
                 continue;
             }
             long recent = pictureRepository.countRecentInSpace(spaceId, now.minus(Duration.ofDays(7)));
-            // 至少两张（包含喂过的那张之外还有别的），才值得提议"看看新的像不像"。
+            // 至少两张（包含喂过的那张之外还有别的），才值得提议"看看新的像不像"；
+            // 不满足时继续扫描下一张喂养图，而不是终止整个机会源。
             if (recent < 2) {
-                return Optional.empty();
+                continue;
             }
             String content = String.format(
                     "你最近喂我图片的那个空间，最近又攒下了 %d 张图片。要我看看它们和上次那张像不像吗？",

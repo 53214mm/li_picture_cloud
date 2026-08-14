@@ -84,4 +84,23 @@ class SimilarStoryOpportunitySourceTest {
         assertThat(source.findOpportunity(11L, 7L, NOW)).isEmpty();
         verify(pictureRepository, never()).findAssetById(anyLong());
     }
+
+    @Test
+    void keepsScanningWhenTheFirstFedPicturesSpaceIsQuiet() {
+        // 第一张喂养图的空间只有 1 张（安静），第二张的空间最近有 3 张 → 仍应产生提案。
+        when(growthRepository.findRecentFedPictureIds(11L, 5)).thenReturn(List.of(101L, 102L));
+        when(pictureRepository.findAssetById(101L))
+                .thenReturn(Optional.of(new PictureAsset(101L, 7L, 30L)));
+        when(pictureRepository.countRecentInSpace(30L, NOW.minus(java.time.Duration.ofDays(7))))
+                .thenReturn(1L);
+        when(pictureRepository.findAssetById(102L))
+                .thenReturn(Optional.of(new PictureAsset(102L, 7L, 31L)));
+        when(pictureRepository.countRecentInSpace(31L, NOW.minus(java.time.Duration.ofDays(7))))
+                .thenReturn(3L);
+
+        Optional<ProposalOpportunity> opportunity = source.findOpportunity(11L, 7L, NOW);
+
+        assertThat(opportunity).isPresent();
+        assertThat(opportunity.get().content()).contains("3 张图片");
+    }
 }

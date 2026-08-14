@@ -69,7 +69,7 @@ public class CompanionProposalService {
         this.contractRepository = contractRepository;
         this.proposalRepository = proposalRepository;
         this.reactionRepository = reactionRepository;
-        // 机会源按注册顺序尝试，第一个有候选的产生提案。
+        // 机会源按 @Order 优先级短路尝试（每周回顾 → 纪念日 → 相似图片），第一个有候选的产生提案。
         this.opportunitySources = List.copyOf(opportunitySources);
         this.balance = balance;
         this.clock = clock;

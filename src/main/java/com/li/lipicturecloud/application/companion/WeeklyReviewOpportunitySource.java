@@ -16,9 +16,10 @@ import java.util.Optional;
 
 /**
  * 每周影像回顾机会：过去 7 天至少喂养一次时产生，冲动得分来自当前情绪与关系。
- * 纪念日与相似图片机会由各自的机会源实现。
+ * 机会源优先级第 1（每周回顾优先于纪念日与相似图片）。
  */
 @Component
+@org.springframework.core.annotation.Order(1)
 public class WeeklyReviewOpportunitySource implements CompanionOpportunitySource {
 
     private static final BigDecimal HUNDRED = new BigDecimal("100.00");

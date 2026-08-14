@@ -133,6 +133,37 @@ class CompanionProposalServiceTest {
     }
 
     @Test
+    void opportunitySourcesShortCircuitInOrder() {
+        Companion companion = persistedCompanion();
+        CompanionOpportunitySource emptySource = mock(CompanionOpportunitySource.class);
+        CompanionOpportunitySource hitSource = mock(CompanionOpportunitySource.class);
+        CompanionOpportunitySource thirdSource = mock(CompanionOpportunitySource.class);
+        CompanionProposalService localService = new CompanionProposalService(companionRepository,
+                contractRepository, proposalRepository, reactionRepository,
+                List.of(emptySource, hitSource, thirdSource), CompanionBalance.v1(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        when(contractRepository.createIfAbsent(companion.id(), 7L))
+                .thenAnswer(invocation -> CompanionAutonomyContract.initial(
+                        invocation.getArgument(0), invocation.getArgument(1)).updated(
+                        true, LocalTime.of(23, 0), LocalTime.of(8, 0), 72));
+        when(emptySource.findOpportunity(companion.id(), 7L, NOW)).thenReturn(Optional.empty());
+        when(hitSource.findOpportunity(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.ANNIVERSARY,
+                        new BigDecimal("20.00"), "往年的今天我们相遇过。")));
+
+        CompanionProposalView view = localService.active(subject);
+
+        assertThat(view).isNotNull();
+        assertThat(view.opportunityType()).isEqualTo("ANNIVERSARY");
+        verify(emptySource).findOpportunity(companion.id(), 7L, NOW);
+        verify(hitSource).findOpportunity(companion.id(), 7L, NOW);
+        // 命中后短路：第三个机会源不再调用。
+        verify(thirdSource, never()).findOpportunity(anyLong(), anyLong(), any());
+        verify(proposalRepository).append(any());
+    }
+
+    @Test
     void scoldSuppressesProposalAndRepeatedScoldsAdjustCuriosity() {
         Companion companion = persistedCompanion();
         CompanionProposal pending = CompanionProposal.pending(companion.id(), 7L,

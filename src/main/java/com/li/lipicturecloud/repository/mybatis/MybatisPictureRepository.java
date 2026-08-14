@@ -29,15 +29,18 @@ public class MybatisPictureRepository implements PictureRepository, PictureAsset
 
     @Override
     public Optional<PictureAsset> findAssetById(long pictureId) {
-        return findById(pictureId).map(picture ->
-                new PictureAsset(picture.getId(), picture.getUserId(), picture.getSpaceId()));
+        // 投影查询：只取归属三列，不加载 URL/名称/简介等字段。
+        return Optional.ofNullable(pictureMapper.selectAssetColumns(pictureId))
+                .map(picture -> new PictureAsset(picture.getId(), picture.getUserId(), picture.getSpaceId()));
     }
 
     @Override
     public long countRecentInSpace(long spaceId, Instant since) {
-        // 逻辑删除由 MyBatis-Plus 全局配置自动过滤。
+        // 逻辑删除由 @TableLogic 自动过滤；这里只统计已通过审核的图片，
+        // 避免把用户看不到的待审/驳回图片计入"新来了 N 张"。
         return pictureMapper.selectCount(new LambdaQueryWrapper<Picture>()
                 .eq(Picture::getSpaceId, spaceId)
+                .eq(Picture::getReviewStatus, 1)
                 .ge(Picture::getCreateTime, Date.from(Objects.requireNonNull(since, "since"))));
     }
 

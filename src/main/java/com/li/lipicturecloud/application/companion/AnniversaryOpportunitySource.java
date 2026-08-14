@@ -18,9 +18,11 @@ import java.util.Optional;
 /**
  * 纪念日机会：往年同月同日（上海日历）至少完整喂养过一次时产生。
  *
- * <p>只依赖成长记录（不查询图片表），文案确定性生成；冲动得分同样来自情绪与关系。</p>
+ * <p>只依赖成长记录（不查询图片表），文案确定性生成；冲动得分同样来自情绪与关系。
+ * 机会源优先级第 2（次于每周回顾，先于相似图片）。</p>
  */
 @Component
+@org.springframework.core.annotation.Order(2)
 public class AnniversaryOpportunitySource implements CompanionOpportunitySource {
 
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
