@@ -57,6 +57,11 @@
 1. **图像创作路由**（02dd225）：`ImageRouter`（imageGeneration 能力门禁，BYOK 优先；平台账本上线前平台路由大声失败）；`OpenAiCompatibleImageClient`（POST {endpoint}/images/generations，解析 url/b64_json，响应 1 MiB 上限，401/403→CREDENTIAL_REJECTED）；`ImageCreationService`（提示词 1-2000 字无控制字符、尺寸白名单 1024x1024/1536x1024/1024x1536/auto，成功/失败都写 IMAGE_CREATION 使用记录）；`ModelInvocationException` 通用化；`ByokConnectionResolver` 三个路由器共享同一套坏路由大声失败语义，语言路由补齐 text 能力门禁。
 2. **MCP 白名单**（eb1d99b/1526fbe）：`mcp_connection`（code 唯一）+ `mcp_tool_whitelist`（(connectionId,toolName) 唯一 + revision CAS）；`DbMcpToolAccessDecider` fail-closed（服务缺失/停用、工具未入白名单或停用一律拒绝）；`RefreshableMcpToolProvider` 工具注册按白名单过滤（平台审核服务代码 mxai-mcp-server），任何白名单写操作后立即使工具缓存失效；`McpController` 全部端点 `@AuthCheck(mustRole=admin)`；前端管理区仅 `userStore.isAdmin` 可见；E2E 新增管理员种子用户与 mcp-admin 故事线。任意 MCP URL 仍不开放——端点只由平台管理员登记，且必须是纯净 HTTPS URL。
 
+## 第四个切片：平台试用账本 + Q4 图片故事草稿（提交 a47ea9e / 7545917 / 66d2b96 / a4cee57）
+
+1. **平台试用额度账本**（a47ea9e）：`platform_trial_ledger` 每主体一行（subjectId 唯一），不变量 balance≥reserved（可用额度永不为负）；reserve/settle/release CAS 重试（并发下永不透支），超限抛业务错误停止不自动扣费；伙伴对话平台路径预占→结算/释放闭环；`TrialController`（用户查自己 + 管理员授予）；默认试用额度 `app.model.credential.trial-default-balance`。
+2. **图片故事草稿**（7545917）：`CreationTask` 状态机 + `creation_task`/`creation_lineage` 两表；`StoryDraftService`：创建前逐张图片 PICTURE_VIEW 授权校验、幂等键唯一去重；大纲/草稿由语言路由生成（平台走试用账本 2/3 单位，BYOK 免费且失败不静默回退）；提示词只含图片数量与伙伴生成的大纲，不含用户原文；30 分钟确认超时惰性转 EXPIRED；伙伴页新增「图片故事」面板；E2E 通过 language-stub（@Primary ChatModel + 调用桩）全离线跑通大纲→草稿→保存闭环。
+
 ## 独立审查与修复（第五轮审查）
 
 审查结论：P0 无；P1×1；P2×7，已全部修复并回归测试：
