@@ -255,6 +255,7 @@ test('chat panel reuses the companion bubble and streams replies', async () => {
 
 test('proposal panel gates by contract and supports accept ignore scold', async () => {
   const panel = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionProposalPanel.vue', import.meta.url)), 'utf8')
+  const memory = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionMemoryPanel.vue', import.meta.url)), 'utf8')
   const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/CompanionView.vue', import.meta.url)), 'utf8')
   const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/companion.js', import.meta.url)), 'utf8')
 
@@ -275,6 +276,11 @@ test('proposal panel gates by contract and supports accept ignore scold', async 
   assert.match(panel, /await loadProposal\(\)/)
   assert.match(panel, /伙伴安静了，这次提议已被止住。/)
   assert.match(panel, /已忽略，伙伴不会再提这件事。/)
+  // 喂养成功后通过 refreshKey 通知面板刷新。
+  assert.match(panel, /refreshKey/)
+  assert.match(memory, /refreshKey/)
+  assert.match(page, /panelsRefreshKey/)
+  assert.match(page, /:refresh-key="panelsRefreshKey"/)
   assert.match(page, /CompanionProposalPanel/)
   assert.match(api, /\/companion\/contract/)
   assert.match(api, /\/companion\/proposals\/active/)

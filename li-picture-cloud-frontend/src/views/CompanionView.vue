@@ -118,9 +118,9 @@
 
           <CompanionChatPanel />
 
-          <CompanionProposalPanel />
+          <CompanionProposalPanel :refresh-key="panelsRefreshKey" />
 
-          <CompanionMemoryPanel />
+          <CompanionMemoryPanel :refresh-key="panelsRefreshKey" />
 
           <CompanionGrowthTimeline :records="home.recentGrowth || []" />
         </template>
@@ -168,6 +168,7 @@ const pendingAttempt = ref(null)
 const feedBusy = ref(false)
 const feedError = ref('')
 const feedNotice = ref('')
+const panelsRefreshKey = ref(0)
 
 const authError = computed(() => userStore.authBootstrapError)
 const feedButtonLabel = computed(() => {
@@ -277,6 +278,8 @@ async function submitFeed() {
     const result = await feedCompanion(pendingAttempt.value)
     // applyFeedResult 会合并回放记录，同时按 revision 防止旧回放把当前伙伴显示倒退。
     home.value = applyFeedResult(home.value, result)
+    // 喂养可能产生新的记忆候选/机会，通知面板按新状态刷新。
+    panelsRefreshKey.value += 1
     feedNotice.value = wasRetry
       ? '这次喂养已安全完成，没有重复成长。'
       : result.outcome === 'FAMILIARITY'

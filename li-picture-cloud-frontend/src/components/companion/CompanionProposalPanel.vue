@@ -65,7 +65,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import {
   acceptCompanionProposal,
   getActiveCompanionProposal,
@@ -75,6 +75,8 @@ import {
   updateCompanionContract
 } from '@/api/companion'
 import CompanionMessageBubble from '@/components/companion/CompanionMessageBubble.vue'
+
+const props = defineProps({ refreshKey: { type: Number, default: 0 } })
 
 const proposal = ref(null)
 const loading = ref(false)
@@ -101,6 +103,8 @@ onMounted(() => {
   loadProposal()
   loadContract()
 })
+// 喂养等动作可能让守门状态变化，由父组件自增 refreshKey 触发重新评估。
+watch(() => props.refreshKey, () => { loadProposal() })
 
 async function loadProposal() {
   loading.value = true

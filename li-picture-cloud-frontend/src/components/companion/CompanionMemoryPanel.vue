@@ -67,7 +67,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { MEMORY_STATUS } from '@/constants/companion'
 import CompanionMessageBubble from '@/components/companion/CompanionMessageBubble.vue'
 import {
@@ -77,6 +77,8 @@ import {
   dismissCompanionMemory,
   deleteCompanionMemory
 } from '@/api/companion'
+
+const props = defineProps({ refreshKey: { type: Number, default: 0 } })
 
 const memories = ref([])
 const loading = ref(false)
@@ -94,6 +96,8 @@ const ACTIONS = Object.freeze({
 })
 
 onMounted(loadMemories)
+// 喂养等动作产生新记忆候选后，由父组件自增 refreshKey 触发刷新。
+watch(() => props.refreshKey, () => { loadMemories() })
 
 function statusMeta(status) {
   return MEMORY_STATUS[status] || { label: status || '未知', tone: 'pending' }
