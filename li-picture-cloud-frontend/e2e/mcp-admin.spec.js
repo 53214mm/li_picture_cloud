@@ -53,4 +53,8 @@ test('admin registers an mcp service and gates tools through the whitelist', asy
   expect(loginResponse.ok()).toBeTruthy()
   await page.goto('/model-gateway')
   await expect(page.getByTestId('mcp-section')).toHaveCount(0)
+
+  // 服务端契约锁定：非管理员调用管理面 API 必须被拒绝。
+  const forbidden = await page.request.get('/api/model/mcp/services')
+  expect([401, 403]).toContain(forbidden.status())
 })

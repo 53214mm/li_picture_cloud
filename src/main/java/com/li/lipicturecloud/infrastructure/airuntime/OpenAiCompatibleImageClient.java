@@ -10,8 +10,6 @@ import com.li.lipicturecloud.application.airuntime.ModelRouteDecision;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
@@ -90,8 +88,6 @@ public class OpenAiCompatibleImageClient implements ImageModelInvoker {
             return parseResult(response);
         } catch (ModelInvocationException failure) {
             throw failure;
-        } catch (HttpClientErrorException | HttpServerErrorException status) {
-            throw statusFailure(status.getStatusCode().value());
         } catch (ResourceAccessException transport) {
             throw new ModelInvocationException(isTimeout(transport)
                     ? ConnectivityResult.UPSTREAM_TIMEOUT : ConnectivityResult.UPSTREAM_ERROR,
