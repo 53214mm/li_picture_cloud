@@ -196,7 +196,7 @@ test('enabling the contract produces a gated weekly review proposal', async ({ p
 
   // 开启契约：全天允许（起止相同 = 不设安静时段），频率保持 72 小时。
   await page.getByRole('button', { name: '主动设置' }).click()
-  await page.getByRole('checkbox').check()
+  await page.getByRole('checkbox', { name: /允许伙伴主动提议/ }).check()
   await page.locator('.contract-times input').nth(0).fill('00:00')
   await page.locator('.contract-times input').nth(1).fill('00:00')
   await page.getByRole('button', { name: '保存主动设置' }).click()
@@ -213,7 +213,7 @@ test('enabling the contract produces a gated weekly review proposal', async ({ p
 
   // 关闭契约后刷新，保持关闭。
   await page.getByRole('button', { name: '主动设置' }).click()
-  await page.getByRole('checkbox').uncheck()
+  await page.getByRole('checkbox', { name: /允许伙伴主动提议/ }).uncheck()
   await page.getByRole('button', { name: '保存主动设置' }).click()
   await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
     .toBeVisible()

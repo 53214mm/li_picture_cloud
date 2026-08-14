@@ -24,7 +24,8 @@ test('creates a story draft from an authorized picture through outline draft and
   await expect(page.getByText('还没有故事。选好图片，开始第一次创作吧。')).toBeVisible()
 
   // 选择授权图片并开始创作（幂等键由前端生成，服务端按唯一键去重）。
-  await page.getByLabel('旅行样片', { exact: false }).check()
+  await page.locator('.story-picture-choice').filter({ hasText: '旅行样片' })
+    .locator('input').check()
   await page.getByRole('button', { name: '开始创作故事' }).click()
 
   // PENDING → 生成大纲 → 等待确认，展示固定 stub 大纲文本。
