@@ -150,6 +150,7 @@ function extractMessage(failure, fallback) {
 .story-picture-choice { display: grid; gap: .3rem; padding: .4rem; border: 2px solid var(--gray-200); cursor: pointer; font-size: .72rem; font-weight: 700; }
 .story-picture-choice.checked { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue); }
 .story-picture-choice input { position: absolute; opacity: 0; }
+.story-picture-choice:has(input:focus-visible) { outline: 3px solid var(--blue); outline-offset: 2px; }
 .story-picture-choice img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--gray-100); }
 .story-list { list-style: none; }
 .story-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .8rem; padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-200); }

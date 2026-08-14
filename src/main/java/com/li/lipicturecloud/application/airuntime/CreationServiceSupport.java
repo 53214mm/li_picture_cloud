@@ -107,9 +107,13 @@ public class CreationServiceSupport {
         }
     }
 
-    /** 惰性应用确认超时过期；列表路径用，避免逐任务回查。 */
+    /** 惰性应用确认超时过期；列表路径用，避免逐任务回查。并发冲突时返回原任务，绝不拖垮整个列表。 */
     public CreationTask applyExpiry(CreationTask task) {
-        return expireIfStale(task);
+        try {
+            return expireIfStale(task);
+        } catch (RuntimeException conflict) {
+            return task;
+        }
     }
 
     public static String modelCode(ModelRouteDecision route) {
