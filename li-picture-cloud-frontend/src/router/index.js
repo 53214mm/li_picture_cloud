@@ -81,6 +81,12 @@ if (COMPANION_UI_ENABLED) {
     component: () => import('@/views/CompanionView.vue'),
     meta: { requiresAuth: true }
   })
+  routes.push({
+    path: '/model-gateway',
+    name: 'model-gateway',
+    component: () => import('@/views/ModelGatewayView.vue'),
+    meta: { requiresAuth: true }
+  })
 }
 
 const router = createRouter({
