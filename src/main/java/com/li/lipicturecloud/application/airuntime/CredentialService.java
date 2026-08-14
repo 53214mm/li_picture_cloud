@@ -1,5 +1,6 @@
 package com.li.lipicturecloud.application.airuntime;
 
+import com.li.lipicturecloud.application.airuntime.view.CredentialVaultView;
 import com.li.lipicturecloud.domain.airuntime.CredentialVault;
 import com.li.lipicturecloud.domain.airuntime.CredentialVaultRepository;
 import com.li.lipicturecloud.domain.airuntime.EncryptedCredential;

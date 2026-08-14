@@ -25,6 +25,10 @@ app:
     feeding-enabled: true
     processing-timeout: 5m
     nutrition-policy: DEMO_ONLY
+  model:
+    credential:
+      # E2E 的"测试连接"不得发真实外网请求。
+      connectivity-stub: true
 
 server:
   port: 18124

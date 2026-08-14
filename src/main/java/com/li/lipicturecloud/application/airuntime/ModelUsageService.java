@@ -45,6 +45,14 @@ public class ModelUsageService {
                 clock.instant()));
     }
 
+    /** 最近使用记录（倒序），limit 由仓储钳制在 [1, 100]。 */
+    public java.util.List<ModelUsageRecord> listRecent(long subjectId, int limit) {
+        if (subjectId <= 0) {
+            throw new IllegalArgumentException("subjectId must be positive");
+        }
+        return usageRepository.findRecent(subjectId, limit);
+    }
+
     private static void checkArguments(long subjectId, ModelTask task, ModelProvider provider,
                                        String modelCode, CostSource costSource) {
         if (subjectId <= 0) {

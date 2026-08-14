@@ -1,4 +1,4 @@
-package com.li.lipicturecloud.application.airuntime;
+package com.li.lipicturecloud.application.airuntime.view;
 
 import com.li.lipicturecloud.domain.airuntime.CredentialVault;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;

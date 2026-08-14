@@ -9,6 +9,7 @@ import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleLanguageCl
 import com.li.lipicturecloud.infrastructure.airuntime.PropertyEndpointAllowlist;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -52,8 +53,19 @@ public class ModelGatewayConfiguration {
     }
 
     @Bean
+    @ConditionalOnProperty(prefix = "app.model.credential", name = "connectivity-stub",
+            havingValue = "false", matchIfMissing = true)
     public ModelConnectivityTester modelConnectivityTester(ModelCredentialProperties properties) {
         return OpenAiCompatibleConnectivityTester.production(properties.getConnectivityTimeout());
+    }
+
+    /** E2E 专用：连接探测不发真实外网请求，返回固定成功。 */
+    @Bean
+    @ConditionalOnProperty(prefix = "app.model.credential", name = "connectivity-stub",
+            havingValue = "true")
+    public ModelConnectivityTester stubbedModelConnectivityTester() {
+        return (endpointUri, apiKey, provider) ->
+                com.li.lipicturecloud.application.airuntime.ConnectivityResult.success();
     }
 
     @Bean
