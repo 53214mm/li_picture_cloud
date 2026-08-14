@@ -59,4 +59,12 @@ public record CredentialVault(
         return new CredentialVault(persistedId, subjectId, provider, tail4, cipherText,
                 algorithm, revision);
     }
+
+    public CredentialVault rotateTo(String nextTail4, String nextCipherText) {
+        if (id == null) {
+            throw new IllegalStateException("cannot rotate an unpersisted credential");
+        }
+        return new CredentialVault(id, subjectId, provider, nextTail4, nextCipherText,
+                algorithm, Math.addExact(revision, 1L));
+    }
 }

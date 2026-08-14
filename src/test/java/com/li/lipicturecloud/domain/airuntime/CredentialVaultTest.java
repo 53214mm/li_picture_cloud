@@ -78,4 +78,24 @@ class CredentialVaultTest {
         assertThatThrownBy(() -> persisted.withId(12L)).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> created.withId(0L)).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void rotateToRequiresPersistenceAndAdvancesRevisionByOne() {
+        CredentialVault unpersisted = CredentialVault.create(7L, ModelProvider.DEEPSEEK, "aB12",
+                CIPHER);
+        assertThatThrownBy(() -> unpersisted.rotateTo("cD34", "next-cipher"))
+                .isInstanceOf(IllegalStateException.class);
+
+        CredentialVault persisted = unpersisted.withId(11L);
+        CredentialVault rotated = persisted.rotateTo("cD34", "next-cipher");
+        assertThat(rotated.tail4()).isEqualTo("cD34");
+        assertThat(rotated.cipherText()).isEqualTo("next-cipher");
+        assertThat(rotated.revision()).isEqualTo(1L);
+        assertThat(rotated.algorithm()).isEqualTo(persisted.algorithm());
+
+        assertThatThrownBy(() -> CredentialVault.restore(11L, 7L, ModelProvider.DEEPSEEK, "cD34",
+                "next-cipher", CredentialVault.ALGORITHM_AES_GCM_V1, Long.MAX_VALUE)
+                .rotateTo("eF56", "third-cipher"))
+                .isInstanceOf(ArithmeticException.class);
+    }
 }

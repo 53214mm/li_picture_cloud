@@ -53,6 +53,11 @@ app:
     vision-timeout: ${COMPANION_VISION_TIMEOUT}
     vision-max-bytes: ${COMPANION_VISION_MAX_BYTES}
     vision-daily-limit: ${COMPANION_VISION_DAILY_LIMIT}
+  model:
+    credential:
+      # 生产凭据主密钥必须由部署者提供；缺失时启动失败，绝不回退到任何固定密钥。
+      master-key: ${MODEL_CREDENTIAL_MASTER_KEY}
+      endpoint-allowlist: ${MODEL_ENDPOINT_ALLOWLIST}
   collaboration:
     store: redis
     state-ttl: ${COLLABORATION_STATE_TTL:24h}

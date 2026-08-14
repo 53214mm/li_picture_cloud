@@ -92,6 +92,11 @@ app:
     vision-timeout: ${COMPANION_VISION_TIMEOUT:20s}
     vision-max-bytes: ${COMPANION_VISION_MAX_BYTES:8MB}
     vision-daily-limit: ${COMPANION_VISION_DAILY_LIMIT:10}
+  model:
+    credential:
+      # 32 字节主密钥（64 位十六进制或 Base64）；生产环境缺失时启动失败，本地/测试回退到固定开发密钥。
+      master-key: ${MODEL_CREDENTIAL_MASTER_KEY:}
+      endpoint-allowlist: ${MODEL_ENDPOINT_ALLOWLIST:api.deepseek.com,api.openai.com,api.anthropic.com,generativelanguage.googleapis.com,api.moonshot.cn,dashscope.aliyuncs.com,api.mistral.ai,open.bigmodel.cn,api.siliconflow.cn}
   collaboration:
     store: ${COLLABORATION_STORE:redis}
     state-ttl: ${COLLABORATION_STATE_TTL:24h}
