@@ -60,6 +60,10 @@ test('control center manages credentials connections routing and usage', async (
   await expect(page.locator('.routing-row').first().locator('select')).toHaveValue(/^\d+$/)
   await page.reload()
   await expect(page.locator('.routing-row').first().locator('select')).toHaveValue(/^\d+$/)
+  // 清理前先清除路由规则：悬空规则会让后续语言任务大声失败（fail-loud 语义），
+  // 其它 E2E 故事线依赖平台默认路由。
+  await page.locator('.routing-row').first().getByRole('button', { name: '清除规则' }).click()
+  await expect(page.locator('.routing-row').first().locator('select')).toHaveValue('')
 
   // 5. 轮换凭据：生成新保险库条目并绑定到连接，旧条目保留。
   await page.getByRole('button', { name: '轮换凭据' }).click()
