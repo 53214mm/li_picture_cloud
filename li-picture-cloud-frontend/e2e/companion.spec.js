@@ -58,7 +58,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByText('伙伴记得一张让它练习了观察与叙事的演示图片，它把这次练习记进了档案。')).toBeVisible()
   // 站内对话与主动提案面板：Demo 档聊天不调模型，契约默认关闭所以没有主动提案。
   await expect(page.getByText('和伙伴说说话')).toBeVisible()
-  await expect(page.getByText('伙伴现在没有主动提议，开启主动设置后，它会挑合适的时刻轻轻出现。')).toBeVisible()
+  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。')).toBeVisible()
 
   const homeResponse = await page.request.get('/api/companion/me')
   expect(homeResponse.ok()).toBeTruthy()
