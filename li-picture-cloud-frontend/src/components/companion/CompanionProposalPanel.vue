@@ -57,10 +57,11 @@
         <button class="btn scold" type="button" :disabled="busy" data-testid="proposal-scold"
                 title="敲打会立即止住这次提议" @click="react('scold')">敲打它</button>
       </div>
-      <p v-if="actionError" class="proposal-error" role="alert">{{ actionError }}</p>
-      <p v-else-if="actionNoticeText" class="proposal-notice" role="status">{{ actionNoticeText }}</p>
       <p class="scold-hint">敲打只抑制这一次提议；反复敲打才会缓慢影响它"好奇"的性格倾向。</p>
     </div>
+    <!-- 面板级反馈：提案处理后被清空，反馈必须留在提案块之外才可见。 -->
+    <p v-if="actionError" class="proposal-error" role="alert">{{ actionError }}</p>
+    <p v-else-if="actionNoticeText" class="proposal-notice" role="status">{{ actionNoticeText }}</p>
   </section>
 </template>
 
@@ -192,6 +193,7 @@ async function react(kind) {
 .contract-actions .btn { min-height: 40px; font-size: .8rem; }
 .contract-error, .proposal-error { margin-top: .5rem; color: var(--red); font-size: .8rem; }
 .proposal-notice { margin-top: .5rem; color: #075d2a; font-size: .8rem; font-weight: 700; }
+.proposal-card > .proposal-error, .proposal-card > .proposal-notice { margin: 0; padding: .75rem 1.5rem 1rem; }
 .proposal-state { padding: 2rem 1.5rem; color: var(--gray-600); }
 .proposal-state.error { color: var(--red); }
 .proposal-state.error .btn { margin-top: 1rem; }

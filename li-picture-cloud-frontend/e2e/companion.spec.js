@@ -1,10 +1,18 @@
 import { test, expect } from '@playwright/test'
 
-test('awakens a companion and recovers one private-picture feed without double growth', async ({ page }) => {
-  const login = await page.request.post('/api/user/login', {
+// 同一个后端进程内的串行故事线：测试 1 完成唤醒与喂养，
+// 测试 2 操作测试 1 留下的记忆候选，测试 3 开启契约并验证提案闭环。
+test.describe.configure({ mode: 'serial' })
+
+async function login(page) {
+  const response = await page.request.post('/api/user/login', {
     data: { userAccount: 'companion_e2e', userPassword: 'LocalUser123!' }
   })
-  expect(login.ok(), `login failed: ${login.status()} ${await login.text()}`).toBeTruthy()
+  expect(response.ok(), `login failed: ${response.status()} ${await response.text()}`).toBeTruthy()
+}
+
+test('awakens a companion and recovers one private-picture feed without double growth', async ({ page }) => {
+  await login(page)
 
   await page.goto('/companion')
   await expect(page).toHaveURL(/\/companion$/)
@@ -143,4 +151,70 @@ test('awakens a companion and recovers one private-picture feed without double g
   await page.reload()
   await expect(labels.nth(0)).toHaveText('Qwen 视觉营养 · 已分析图片内容')
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
+})
+
+test('memory lifecycle supports confirm correct ignore and delete', async ({ page }) => {
+  await login(page)
+  await page.goto('/companion')
+  await expect(page).toHaveURL(/\/companion$/)
+
+  // 测试 1 留下了一条待确认记忆候选。
+  const status = page.getByTestId('memory-status').first()
+  await expect(status).toHaveText('待确认')
+
+  // 确认 → 已确认。
+  await page.locator('[data-action="confirm"]').first().click()
+  await expect(status).toHaveText('已确认')
+
+  // 纠正：改写文案，保留最初候选。
+  await page.locator('[data-action="correct"]').first().click()
+  await page.getByLabel('纠正这条记忆').fill('伙伴重新想起：那是安静的清晨。')
+  await page.getByRole('button', { name: '保存纠正' }).click()
+  await expect(page.getByText('伙伴重新想起：那是安静的清晨。')).toBeVisible()
+  await expect(status).toHaveText('已确认')
+
+  // 忽略 → 已忽略；再确认回来。
+  await page.locator('[data-action="dismiss"]').first().click()
+  await expect(status).toHaveText('已忽略')
+  await page.locator('[data-action="confirm"]').first().click()
+  await expect(status).toHaveText('已确认')
+
+  // 删除 → 从列表消失（删除是终态且不再展示）。
+  await page.locator('[data-action="delete"]').first().click()
+  await expect(page.getByTestId('memory-status')).toHaveCount(0)
+  await expect(page.getByText('伙伴重新想起：那是安静的清晨。')).toBeHidden()
+})
+
+test('enabling the contract produces a gated weekly review proposal', async ({ page }) => {
+  await login(page)
+  await page.goto('/companion')
+  await expect(page).toHaveURL(/\/companion$/)
+
+  // 默认契约关闭：没有主动提案。
+  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+    .toBeVisible()
+
+  // 开启契约：全天允许（起止相同 = 不设安静时段），频率保持 72 小时。
+  await page.getByRole('button', { name: '主动设置' }).click()
+  await page.getByRole('checkbox').check()
+  await page.locator('.contract-times input').nth(0).fill('00:00')
+  await page.locator('.contract-times input').nth(1).fill('00:00')
+  await page.getByRole('button', { name: '保存主动设置' }).click()
+
+  // 契约保存后立即重新评估：测试 1 的喂养产生每周回顾提案。
+  await expect(page.getByText('这周你喂了我 1 次。想听我讲一段我们的故事吗？')).toBeVisible()
+  await expect(page.getByText('类型 每周影像回顾')).toBeVisible()
+
+  // 接受提案 → 终态并给出正向反馈，提案消失。
+  await page.getByTestId('proposal-accept').click()
+  await expect(page.getByText('好呀，伙伴已经记下了。')).toBeVisible()
+  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+    .toBeVisible()
+
+  // 关闭契约后刷新，保持关闭。
+  await page.getByRole('button', { name: '主动设置' }).click()
+  await page.getByRole('checkbox').uncheck()
+  await page.getByRole('button', { name: '保存主动设置' }).click()
+  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+    .toBeVisible()
 })
