@@ -31,23 +31,23 @@ test('creates a story draft from an authorized picture through outline draft and
   // PENDING → 生成大纲 → 等待确认，展示固定 stub 大纲文本。
   const storyList = page.getByTestId('story-list')
   await expect(storyList.getByText('待开始')).toBeVisible()
-  await page.getByRole('button', { name: '生成大纲' }).click()
-  await expect(page.getByText('等待确认')).toBeVisible()
-  await expect(page.getByText('在晨光里，伙伴轻轻翻开了这些画面，把安静的清晨讲成了一段小小的故事。'))
+  await storyList.getByRole('button', { name: '生成大纲' }).click()
+  await expect(storyList.getByText('等待确认')).toBeVisible()
+  await expect(storyList.getByText('在晨光里，伙伴轻轻翻开了这些画面，把安静的清晨讲成了一段小小的故事。'))
     .toBeVisible()
 
   // 生成草稿 → 等待确认，展示草稿。
-  await page.getByRole('button', { name: '生成草稿' }).click()
-  await expect(page.getByRole('button', { name: '保存作品' })).toBeVisible()
+  await storyList.getByRole('button', { name: '生成草稿' }).click()
+  await expect(storyList.getByRole('button', { name: '保存作品' })).toBeVisible()
 
   // 保存作品 → SAVED 终态，作品文本可见。
-  await page.getByRole('button', { name: '保存作品' }).click()
-  await expect(page.getByText('已保存')).toBeVisible()
-  await expect(page.getByTestId('story-result')).toContainText('在晨光里，伙伴轻轻翻开了这些画面')
+  await storyList.getByRole('button', { name: '保存作品' }).click()
+  await expect(storyList.getByText('已保存')).toBeVisible()
+  await expect(storyList.getByTestId('story-result')).toContainText('在晨光里，伙伴轻轻翻开了这些画面')
 
   // 刷新后保持已保存状态。
   await page.reload()
-  await expect(page.getByText('已保存')).toBeVisible()
+  await expect(page.getByTestId('story-list').getByText('已保存')).toBeVisible()
 
   // 血缘只含安全字段：接口返回幂等键而不是任何模型原文或密钥。
   const listResponse = await page.request.get('/api/creation/story')

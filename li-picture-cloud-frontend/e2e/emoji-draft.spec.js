@@ -29,24 +29,24 @@ test('creates emoji candidates from an authorized picture and saves the picked o
 
   const emojiList = page.getByTestId('emoji-list')
   await expect(emojiList.getByText('待开始')).toBeVisible()
-  await page.getByRole('button', { name: '生成候选' }).click()
-  await expect(page.getByText('等待确认')).toBeVisible()
+  await emojiList.getByRole('button', { name: '生成候选' }).click()
+  await expect(emojiList.getByText('等待确认')).toBeVisible()
 
   // 候选来自 E2E 语言 stub；选中第一条。
   const candidate = emojiList.locator('.emoji-candidate').first()
   await expect(candidate).toContainText('在晨光里，伙伴轻轻翻开了这些画面')
   await candidate.locator('input').check()
-  await page.getByRole('button', { name: '选中保存' }).click()
-  await expect(page.getByRole('button', { name: '保存作品' })).toBeVisible()
+  await emojiList.getByRole('button', { name: '选中保存' }).click()
+  await expect(emojiList.getByRole('button', { name: '保存作品' })).toBeVisible()
 
   // 保存作品 → SAVED 终态，作品文本可见。
-  await page.getByRole('button', { name: '保存作品' }).click()
-  await expect(page.getByText('已保存')).toBeVisible()
-  await expect(page.getByTestId('emoji-result')).toContainText('在晨光里，伙伴轻轻翻开了这些画面')
+  await emojiList.getByRole('button', { name: '保存作品' }).click()
+  await expect(emojiList.getByText('已保存')).toBeVisible()
+  await expect(emojiList.getByTestId('emoji-result')).toContainText('在晨光里，伙伴轻轻翻开了这些画面')
 
   // 刷新后保持已保存状态。
   await page.reload()
-  await expect(page.getByText('已保存')).toBeVisible()
+  await expect(page.getByTestId('emoji-list').getByText('已保存')).toBeVisible()
 
   const listResponse = await page.request.get('/api/creation/emoji')
   expect(listResponse.ok()).toBeTruthy()

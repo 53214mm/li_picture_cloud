@@ -95,7 +95,7 @@ watch(() => props.refreshKey, loadTasks)
 
 async function loadTasks() {
   try {
-    tasks.value = (await listEmojiTasks()) ?? []
+    tasks.value = ((await listEmojiTasks()) ?? []).filter(task => task.kind === 'EMOJI_DRAFT')
     for (const task of tasks.value) {
       if (task.status === 'AWAITING_CONFIRM') {
         candidates[task.id] = (await listEmojiCandidates(task.id)) ?? []

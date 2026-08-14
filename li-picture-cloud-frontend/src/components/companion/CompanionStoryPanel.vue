@@ -91,7 +91,7 @@ watch(() => props.refreshKey, loadTasks)
 
 async function loadTasks() {
   try {
-    tasks.value = (await listStories()) ?? []
+    tasks.value = ((await listStories()) ?? []).filter(task => task.kind === 'STORY_DRAFT')
     error.value = ''
   } catch (failure) {
     error.value = extractMessage(failure, '故事列表加载失败')

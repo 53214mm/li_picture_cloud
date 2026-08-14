@@ -152,7 +152,10 @@ public class EmojiDraftService {
 
     public List<CreationTask> list(AuthorizationSubject subject, int limit) {
         Objects.requireNonNull(subject, "subject");
-        return taskRepository.findBySubjectId(subject.userId(), limit);
+        return taskRepository.findBySubjectId(subject.userId(), limit).stream()
+                .filter(task -> task.kind() == CreationKind.EMOJI_DRAFT)
+                .map(task -> support.requireOwned(subject, task.id()))
+                .toList();
     }
 
     public List<CreationCandidate> candidates(AuthorizationSubject subject, long taskId) {
