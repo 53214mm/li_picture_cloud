@@ -84,6 +84,9 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
                     return Flux.fromStream(response.body());
                 })
                 .mapNotNull(this::extractDelta)
+                // HttpRequest.timeout 只覆盖到响应头；对 SSE 正文叠加逐帧空闲超时，
+                // 上游 200 后停滞不发帧时也能及时终止而不是无限悬挂。
+                .timeout(timeout)
                 .onErrorMap(this::normalizeFailure);
     }
 
@@ -152,7 +155,8 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
             root = root.getCause();
         }
         if (root instanceof HttpTimeoutException || root instanceof java.net.SocketTimeoutException
-                || root instanceof java.io.InterruptedIOException) {
+                || root instanceof java.io.InterruptedIOException
+                || root instanceof java.util.concurrent.TimeoutException) {
             return new LanguageInvocationException(ConnectivityResult.UPSTREAM_TIMEOUT,
                     "model endpoint timed out", failure);
         }

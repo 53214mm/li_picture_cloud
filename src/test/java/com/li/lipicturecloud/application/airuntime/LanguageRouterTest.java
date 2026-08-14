@@ -10,10 +10,12 @@ import com.li.lipicturecloud.domain.airuntime.ModelTask;
 import com.li.lipicturecloud.domain.airuntime.TaskRoutingRule;
 import com.li.lipicturecloud.domain.airuntime.TaskRoutingRuleRepository;
 import com.li.lipicturecloud.exception.BusinessException;
+import com.li.lipicturecloud.infrastructure.airuntime.PropertyEndpointAllowlist;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,6 +29,7 @@ class LanguageRouterTest {
     private ModelConnectionRepository connectionRepository;
     private CredentialVaultRepository vaultRepository;
     private CredentialCipher cipher;
+    private EndpointAllowlist allowlist;
     private LanguageRouter router;
 
     @BeforeEach
@@ -35,7 +38,9 @@ class LanguageRouterTest {
         connectionRepository = mock(ModelConnectionRepository.class);
         vaultRepository = mock(CredentialVaultRepository.class);
         cipher = mock(CredentialCipher.class);
-        router = new LanguageRouter(routingRepository, connectionRepository, vaultRepository, cipher);
+        allowlist = new PropertyEndpointAllowlist(List.of("deepseek.com"));
+        router = new LanguageRouter(routingRepository, connectionRepository, vaultRepository,
+                cipher, allowlist);
     }
 
     private ModelConnection connection() {
@@ -113,6 +118,20 @@ class LanguageRouterTest {
         assertThatThrownBy(() -> router.decide(7L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("凭据不存在");
+    }
+
+    @Test
+    void rejectsEndpointsThatLeftTheAllowlist() {
+        when(routingRepository.findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT))
+                .thenReturn(Optional.of(TaskRoutingRule.create(7L, ModelTask.LANGUAGE_AGENT, 9L)
+                        .withId(1L)));
+        ModelConnection blocked = ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK, "主力",
+                URI.create("https://evil.example.com/v1"), "deepseek-chat", 5L, true, 1L);
+        when(connectionRepository.findById(9L)).thenReturn(Optional.of(blocked));
+
+        assertThatThrownBy(() -> router.decide(7L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不在允许清单内");
     }
 
     @Test

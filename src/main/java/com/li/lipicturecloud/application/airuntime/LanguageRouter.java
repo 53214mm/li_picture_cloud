@@ -26,15 +26,18 @@ public class LanguageRouter {
     private final ModelConnectionRepository connectionRepository;
     private final CredentialVaultRepository vaultRepository;
     private final CredentialCipher cipher;
+    private final EndpointAllowlist allowlist;
 
     public LanguageRouter(TaskRoutingRuleRepository routingRepository,
                           ModelConnectionRepository connectionRepository,
                           CredentialVaultRepository vaultRepository,
-                          CredentialCipher cipher) {
+                          CredentialCipher cipher,
+                          EndpointAllowlist allowlist) {
         this.routingRepository = routingRepository;
         this.connectionRepository = connectionRepository;
         this.vaultRepository = vaultRepository;
         this.cipher = cipher;
+        this.allowlist = allowlist;
     }
 
     public LanguageRouteDecision decide(long subjectId) {
@@ -56,6 +59,11 @@ public class LanguageRouter {
         if (!connection.enabled()) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR,
                     "语言任务路由的连接已停用，请启用或清除路由规则");
+        }
+        // 发送密钥前的最后一道防线：即使创建时通过白名单，配置收紧后也必须再验一次。
+        if (!allowlist.isAllowed(connection.endpointUri())) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR,
+                    "语言任务路由的连接端点不在允许清单内，请修复或清除路由规则");
         }
         if (connection.credentialId() == null) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR,

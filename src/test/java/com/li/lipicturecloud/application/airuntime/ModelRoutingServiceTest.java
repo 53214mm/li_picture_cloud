@@ -97,6 +97,23 @@ class ModelRoutingServiceTest {
     }
 
     @Test
+    void lostFirstWriteRaceStillAppliesTheRequestedRouteViaCas() {
+        when(routingRepository.findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT))
+                .thenReturn(Optional.empty());
+        when(connectionRepository.findById(9L)).thenReturn(Optional.of(connection(9L, 7L)));
+        // 并发首写输了：仓储读回赢家行（connectionId=5），与本次请求的 9 不一致。
+        when(routingRepository.insert(any(TaskRoutingRule.class)))
+                .thenReturn(TaskRoutingRule.restore(2L, 7L, ModelTask.LANGUAGE_AGENT, 5L, 0L));
+        when(routingRepository.save(any(TaskRoutingRule.class), eq(0L))).thenReturn(true);
+
+        TaskRoutingRule result = service.upsert(7L, ModelTask.LANGUAGE_AGENT, 9L);
+
+        assertThat(result.connectionId()).isEqualTo(9L);
+        assertThat(result.revision()).isEqualTo(1L);
+        verify(routingRepository).save(any(TaskRoutingRule.class), eq(0L));
+    }
+
+    @Test
     void deleteRemovesExistingRuleAndToleratesMissingOne() {
         TaskRoutingRule existing = TaskRoutingRule.restore(1L, 7L, ModelTask.LANGUAGE_AGENT,
                 9L, 2L);

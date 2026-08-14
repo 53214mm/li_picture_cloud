@@ -144,6 +144,33 @@ class OpenAiCompatibleLanguageClientTest {
     }
 
     @Test
+    void stalledSseBodyTimesOutInsteadOfHangingForever() throws Exception {
+        stub.createContext("/chat/completions", exchange -> {
+            lastBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            exchange.sendResponseHeaders(200, 0);
+            exchange.getResponseBody().write("data: {\"choices\":[{\"delta\":{\"content\":\"你\"}}]}\n\n"
+                    .getBytes(StandardCharsets.UTF_8));
+            exchange.getResponseBody().flush();
+            try {
+                Thread.sleep(3_000); // 首帧后停滞：请求超时只覆盖到响应头，必须由流级空闲超时兜底。
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            exchange.close();
+        });
+        TestableClient shortClient = new TestableClient(new ObjectMapper(),
+                HttpClient.newHttpClient(), Duration.ofMillis(400));
+        shortClient.endpointOverride = URI.create("http://127.0.0.1:" + port + "/chat/completions");
+
+        Flux<String> stream = shortClient.stream(route, List.of(ChatTurn.user("在吗")));
+
+        assertThatThrownBy(stream.collectList()::block)
+                .isInstanceOf(LanguageInvocationException.class)
+                .extracting(invocation -> ((LanguageInvocationException) invocation).safeErrorCode())
+                .isEqualTo(ConnectivityResult.UPSTREAM_TIMEOUT);
+    }
+
+    @Test
     void extractDeltaParsesContentAndRejectsMalformedFrames() {
         assertThat(client.extractDelta("data: {\"choices\":[{\"delta\":{\"content\":\"好\"}}]}"))
                 .isEqualTo("好");

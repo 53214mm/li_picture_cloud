@@ -290,4 +290,21 @@ class CompanionChatServiceTest {
         // 只有用户消息落库，不留下半截回复。
         verify(messageRepository, times(1)).append(any());
     }
+
+    @Test
+    void brokenRouteFailsBeforeQuotaOrMessageAreWritten() {
+        Companion companion = persistedCompanion();
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        when(languageRouter.decide(7L)).thenThrow(new BusinessException(
+                ErrorCode.OPERATION_ERROR, "语言任务路由的连接已停用，请启用或清除路由规则"));
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+
+        assertThatThrownBy(() -> service.chat(subject, "你好"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("路由的连接已停用");
+
+        // 路由决定在任何写入之前：坏路由不得吞掉用户消息或消耗额度。
+        verify(quotaGuard, never()).reserve(anyLong(), any(), anyInt());
+        verify(messageRepository, never()).append(any());
+    }
 }

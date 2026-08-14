@@ -26,17 +26,20 @@ public class ModelConnectivityService {
     private final CredentialCipher cipher;
     private final ModelConnectivityTester tester;
     private final ModelUsageService usageService;
+    private final EndpointAllowlist allowlist;
 
     public ModelConnectivityService(ModelConnectionRepository connectionRepository,
                                     CredentialVaultRepository vaultRepository,
                                     CredentialCipher cipher,
                                     ModelConnectivityTester tester,
-                                    ModelUsageService usageService) {
+                                    ModelUsageService usageService,
+                                    EndpointAllowlist allowlist) {
         this.connectionRepository = connectionRepository;
         this.vaultRepository = vaultRepository;
         this.cipher = cipher;
         this.tester = tester;
         this.usageService = usageService;
+        this.allowlist = allowlist;
     }
 
     public ConnectivityResult testConnection(long connectionId, long subjectId) {
@@ -53,6 +56,10 @@ public class ModelConnectivityService {
         }
         if (!connection.enabled()) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "连接已停用，无法探测");
+        }
+        // 发送密钥前的最后一道防线：创建时通过的白名单在配置收紧后必须重新校验。
+        if (!allowlist.isAllowed(connection.endpointUri())) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "连接端点不在允许清单内，无法探测");
         }
         CredentialVault credential = vaultRepository.findById(connection.credentialId())
                 .filter(owned -> owned.subjectId() == subjectId)

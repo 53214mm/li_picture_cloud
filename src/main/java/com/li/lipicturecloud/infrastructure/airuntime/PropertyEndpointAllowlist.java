@@ -33,6 +33,11 @@ public class PropertyEndpointAllowlist implements EndpointAllowlist {
         if (!"https".equalsIgnoreCase(endpoint.getScheme())) {
             return false;
         }
+        // 只放行标准端口与未显式声明端口的形式，避免白名单主机上的任意端口出站。
+        int port = endpoint.getPort();
+        if (port != -1 && port != 443) {
+            return false;
+        }
         String host = endpoint.getHost();
         if (host == null) {
             return false;

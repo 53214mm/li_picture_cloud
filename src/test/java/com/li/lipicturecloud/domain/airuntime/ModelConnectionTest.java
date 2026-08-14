@@ -81,6 +81,16 @@ class ModelConnectionTest {
     }
 
     @Test
+    void rejectsEndpointsWithQueryOrFragment() {
+        assertThatThrownBy(() -> ModelConnection.create(7L, ModelProvider.DEEPSEEK, "主力",
+                URI.create("https://api.example.com/v1?tenant=a"), "deepseek-chat", null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> ModelConnection.create(7L, ModelProvider.DEEPSEEK, "主力",
+                URI.create("https://api.example.com/v1#section"), "deepseek-chat", null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void withIdAssignsPersistedIdExactlyOnce() {
         ModelConnection created = ModelConnection.create(7L, ModelProvider.DEEPSEEK, "主力",
                 HTTPS, "deepseek-chat", null);

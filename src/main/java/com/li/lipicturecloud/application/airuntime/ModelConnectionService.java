@@ -39,7 +39,7 @@ public class ModelConnectionService {
         Objects.requireNonNull(provider, "provider");
         requireAllowedEndpoint(endpoint);
         if (credentialId != null) {
-            requireOwnedCredential(credentialId, subjectId);
+            requireOwnedCredential(credentialId, subjectId, provider);
         }
         return connectionRepository.insert(ModelConnection.create(subjectId, provider,
                 displayName, endpoint, modelCode, credentialId));
@@ -51,7 +51,7 @@ public class ModelConnectionService {
         if (connection.credentialId() == null) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "连接必须先绑定凭据才能启用");
         }
-        requireOwnedCredential(connection.credentialId(), subjectId);
+        requireOwnedCredential(connection.credentialId(), subjectId, connection.provider());
         return saveOrConflict(connection.enable(), connection.revision());
     }
 
@@ -60,12 +60,21 @@ public class ModelConnectionService {
         return saveOrConflict(connection.disable(), connection.revision());
     }
 
-    /** 用新明文创建一条凭据并原子轮换到该连接上。 */
+    /** 用新明文创建一条凭据并轮换到该连接上；CAS 冲突时基于最新版本重试一次，避免新凭据成为孤儿。 */
     public ModelConnection rotateCredential(long id, long subjectId, String newPlaintext) {
         ModelConnection connection = requireOwnedConnection(id, subjectId);
         Long nextCredentialId = credentialService.store(subjectId, connection.provider(),
                 newPlaintext).id();
-        return saveOrConflict(connection.rotateCredential(nextCredentialId), connection.revision());
+        ModelConnection after = connection.rotateCredential(nextCredentialId);
+        if (connectionRepository.save(after, connection.revision())) {
+            return after;
+        }
+        ModelConnection latest = requireOwnedConnection(id, subjectId);
+        after = latest.rotateCredential(nextCredentialId);
+        if (!connectionRepository.save(after, latest.revision())) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "连接状态发生并发冲突，请重试");
+        }
+        return after;
     }
 
     public boolean delete(long id, long subjectId) {
@@ -90,10 +99,12 @@ public class ModelConnectionService {
         return connection;
     }
 
-    private void requireOwnedCredential(long credentialId, long subjectId) {
+    private void requireOwnedCredential(long credentialId, long subjectId, ModelProvider provider) {
         vaultRepository.findById(credentialId)
                 .filter(credential -> credential.subjectId() == subjectId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PARAMS_ERROR, "凭据不存在或不属于当前用户"));
+                .filter(credential -> credential.provider() == provider)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PARAMS_ERROR,
+                        "凭据不存在、不属于当前用户或与连接供应商不匹配"));
     }
 
     private void requireAllowedEndpoint(URI endpoint) {

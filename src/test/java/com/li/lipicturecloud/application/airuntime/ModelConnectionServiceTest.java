@@ -79,6 +79,15 @@ class ModelConnectionServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("凭据不存在");
 
+        // 供应商不匹配的凭据不允许绑定。
+        CredentialVault otherProvider = CredentialVault.restore(5L, 7L, ModelProvider.OPENAI,
+                "1234", "cipher", CredentialVault.ALGORITHM_AES_GCM_V1, 0L);
+        when(vaultRepository.findById(5L)).thenReturn(Optional.of(otherProvider));
+        assertThatThrownBy(() -> service.create(7L, ModelProvider.DEEPSEEK, "主力",
+                ALLOWED, "deepseek-chat", 5L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不匹配");
+
         verify(connectionRepository, never()).insert(any());
     }
 
@@ -156,6 +165,26 @@ class ModelConnectionServiceTest {
 
         assertThat(rotated.credentialId()).isEqualTo(22L);
         assertThat(rotated.revision()).isEqualTo(3L);
+    }
+
+    @Test
+    void rotateCredentialRetriesOnceOnCasConflictSoTheNewCredentialIsNeverOrphaned() {
+        ModelConnection existing = ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK,
+                "主力", ALLOWED, "deepseek-chat", 5L, true, 2L);
+        when(credentialService.store(7L, ModelProvider.DEEPSEEK, "sk-new-5678"))
+                .thenReturn(CredentialVault.restore(22L, 7L, ModelProvider.DEEPSEEK,
+                        "5678", "cipher-v2", CredentialVault.ALGORITHM_AES_GCM_V1, 0L));
+        // 第一次 CAS 冲突；重读拿到最新版本 5，第二次 CAS 成功。
+        when(connectionRepository.findById(9L)).thenReturn(Optional.of(existing),
+                Optional.of(ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK,
+                        "主力", ALLOWED, "deepseek-chat", 5L, true, 5L)));
+        when(connectionRepository.save(any(ModelConnection.class), eq(2L))).thenReturn(false);
+        when(connectionRepository.save(any(ModelConnection.class), eq(5L))).thenReturn(true);
+
+        ModelConnection rotated = service.rotateCredential(9L, 7L, "sk-new-5678");
+
+        assertThat(rotated.credentialId()).isEqualTo(22L);
+        assertThat(rotated.revision()).isEqualTo(6L);
     }
 
     @Test

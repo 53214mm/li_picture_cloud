@@ -39,6 +39,9 @@ public record ModelConnection(
         if (!"https".equalsIgnoreCase(endpointUri.getScheme())) {
             throw new IllegalArgumentException("endpointUri must use https");
         }
+        if (endpointUri.getRawQuery() != null || endpointUri.getRawFragment() != null) {
+            throw new IllegalArgumentException("endpointUri must not contain query or fragment");
+        }
         if (modelCode == null || !MODEL_CODE.matcher(modelCode).matches()) {
             throw new IllegalArgumentException("modelCode must match " + MODEL_CODE.pattern());
         }

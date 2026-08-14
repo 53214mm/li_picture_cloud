@@ -44,4 +44,15 @@ public record LanguageRouteDecision(
     public boolean isByok() {
         return costSource == CostSource.BYOK;
     }
+
+    /** 记录的隐式 toString 会打印 apiKey 组件，这里显式遮蔽，杜绝未来日志/序列化误伤。 */
+    @Override
+    public String toString() {
+        return "LanguageRouteDecision[costSource=" + costSource
+                + ", connection=" + (connection == null ? null
+                : "ModelConnection[id=" + connection.id() + ", provider=" + connection.provider()
+                + ", endpointUri=" + connection.endpointUri() + ", modelCode="
+                + connection.modelCode() + ", credentialId=" + connection.credentialId() + "]")
+                + ", apiKey=***]";
+    }
 }

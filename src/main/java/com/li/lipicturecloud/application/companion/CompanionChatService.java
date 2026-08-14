@@ -123,12 +123,19 @@ public class CompanionChatService {
     /**
      * 额度预占与用户消息落库同事务提交；流式回复在事务外异步产生，
      * 模型失败不退还额度（防滥用设计），也不会留下半截回复。
+     *
+     * <p>MODEL 档的路由决定在任何写入之前完成：BYOK 路由坏了要大声失败，
+     * 但不得把用户刚发出的消息和额度一起回滚掉。</p>
      */
     @org.springframework.transaction.annotation.Transactional
     public Flux<String> chat(AuthorizationSubject subject, String message) {
         Objects.requireNonNull(subject, "subject");
         String normalized = validateMessage(message);
         Companion companion = requireCompanion(subject);
+        LanguageRouteDecision route = properties.getChatPolicy()
+                == CompanionFeatureProperties.CompanionChatPolicy.MODEL
+                ? languageRouter.decide(subject.userId())
+                : null;
         quotaGuard.reserve(subject.userId(), LocalDate.now(clock.withZone(SHANGHAI)),
                 properties.getChatDailyLimit());
         Instant now = clock.instant();
@@ -136,16 +143,16 @@ public class CompanionChatService {
         log.info("companion_chat_message_sent subjectId={} policy={}",
                 subject.userId(), properties.getChatPolicy().name());
 
-        if (properties.getChatPolicy() == CompanionFeatureProperties.CompanionChatPolicy.MODEL) {
-            return modelReply(companion, subject, normalized, now);
+        if (route != null) {
+            return modelReply(companion, subject, normalized, now, route);
         }
         String reply = demoReply(companion.id(), subject.userId(), normalized);
         return Flux.just(reply).doOnComplete(() ->
                 persistReply(companion, subject, reply, "internal", "demo-v1", now));
     }
 
-    private Flux<String> modelReply(Companion companion, AuthorizationSubject subject, String message, Instant now) {
-        LanguageRouteDecision route = languageRouter.decide(subject.userId());
+    private Flux<String> modelReply(Companion companion, AuthorizationSubject subject, String message,
+                                    Instant now, LanguageRouteDecision route) {
         List<ChatTurn> turns = assembleTurns(companion, subject, message);
         if (route.isByok()) {
             return byokReply(companion, subject, route, turns, now);

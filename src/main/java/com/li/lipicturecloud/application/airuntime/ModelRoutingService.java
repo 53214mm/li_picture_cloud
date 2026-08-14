@@ -40,16 +40,26 @@ public class ModelRoutingService {
                             "连接不存在或不属于当前用户"));
         }
         return routingRepository.findBySubjectAndTask(subjectId, task)
-                .map(existing -> {
-                    TaskRoutingRule after = existing.routeTo(connectionId);
-                    if (!routingRepository.save(after, existing.revision())) {
-                        throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                                "路由规则发生并发冲突，请重试");
+                .map(existing -> saveOrConflict(existing, connectionId))
+                .orElseGet(() -> {
+                    TaskRoutingRule inserted = routingRepository.insert(
+                            TaskRoutingRule.create(subjectId, task, connectionId));
+                    if (Objects.equals(inserted.connectionId(), connectionId)) {
+                        return inserted;
                     }
-                    return after;
-                })
-                .orElseGet(() -> routingRepository.insert(
-                        TaskRoutingRule.create(subjectId, task, connectionId)));
+                    // 并发首写输给了另一写入者：仓储读回的是赢家行，不代表本次请求意图，
+                    // 基于赢家行再走一次 CAS 覆盖，绝不静默丢弃本次路由目标。
+                    return saveOrConflict(inserted, connectionId);
+                });
+    }
+
+    private TaskRoutingRule saveOrConflict(TaskRoutingRule existing, Long connectionId) {
+        TaskRoutingRule after = existing.routeTo(connectionId);
+        if (!routingRepository.save(after, existing.revision())) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR,
+                    "路由规则发生并发冲突，请重试");
+        }
+        return after;
     }
 
     public List<TaskRoutingRule> list(long subjectId) {

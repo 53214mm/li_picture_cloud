@@ -24,8 +24,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 连接探测全链路：真实加密器、真实仓储、stub 探测器；验证凭据永不以明文出现于记录中。
+ *
+ * <p>嵌套 @TestConfiguration 使本类拥有独立于其他伙伴测试的 Spring 上下文，
+ * 因此必须使用独立的 H2 内存库名，避免与共享 li_picture_cloud 库的 Liquibase 初始化冲突。</p>
  */
-@SpringBootTest
+@SpringBootTest(properties = "spring.datasource.url="
+        + "jdbc:h2:mem:model_connectivity_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE")
 @ActiveProfiles("test")
 @Transactional
 class ModelConnectivityIntegrationTest {

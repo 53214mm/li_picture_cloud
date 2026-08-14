@@ -31,6 +31,14 @@ class PropertyEndpointAllowlistTest {
     }
 
     @Test
+    void onlyAllowsStandardOrUnspecifiedPorts() {
+        assertThat(allowlist.isAllowed(URI.create("https://api.deepseek.com/v1"))).isTrue();
+        assertThat(allowlist.isAllowed(URI.create("https://api.deepseek.com:443/v1"))).isTrue();
+        assertThat(allowlist.isAllowed(URI.create("https://api.deepseek.com:8443/v1"))).isFalse();
+        assertThat(allowlist.isAllowed(URI.create("https://api.openai.com:8080/v1"))).isFalse();
+    }
+
+    @Test
     void rejectsNonHttpsAndNullHosts() {
         assertThat(allowlist.isAllowed(URI.create("file:///etc/passwd"))).isFalse();
         assertThat(allowlist.isAllowed(URI.create("https:///nohost"))).isFalse();

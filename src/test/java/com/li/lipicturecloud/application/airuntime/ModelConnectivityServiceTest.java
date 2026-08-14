@@ -8,11 +8,13 @@ import com.li.lipicturecloud.domain.airuntime.ModelConnectionRepository;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;
 import com.li.lipicturecloud.domain.airuntime.ModelTask;
 import com.li.lipicturecloud.exception.BusinessException;
+import com.li.lipicturecloud.infrastructure.airuntime.PropertyEndpointAllowlist;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,6 +37,7 @@ class ModelConnectivityServiceTest {
     private CredentialCipher cipher;
     private ModelConnectivityTester tester;
     private ModelUsageService usageService;
+    private EndpointAllowlist allowlist;
     private ModelConnectivityService service;
 
     @BeforeEach
@@ -44,8 +47,9 @@ class ModelConnectivityServiceTest {
         cipher = mock(CredentialCipher.class);
         tester = mock(ModelConnectivityTester.class);
         usageService = mock(ModelUsageService.class);
+        allowlist = new PropertyEndpointAllowlist(List.of("deepseek.com"));
         service = new ModelConnectivityService(connectionRepository, vaultRepository, cipher,
-                tester, usageService);
+                tester, usageService, allowlist);
     }
 
     private ModelConnection connection() {
@@ -138,6 +142,15 @@ class ModelConnectivityServiceTest {
         when(vaultRepository.findById(5L)).thenReturn(Optional.of(foreignCredential));
         assertThatThrownBy(() -> service.testConnection(9L, 7L))
                 .isInstanceOf(BusinessException.class).hasMessageContaining("凭据不存在");
+
+        // 发送密钥前的白名单复查：创建时通过、配置收紧后被拒绝。
+        ModelConnection blocked = ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK, "主力",
+                URI.create("https://evil.example.com/v1"), "deepseek-chat", 5L, true, 1L);
+        when(connectionRepository.findById(9L)).thenReturn(Optional.of(blocked));
+        when(vaultRepository.findById(5L)).thenReturn(Optional.of(credential()));
+        assertThatThrownBy(() -> service.testConnection(9L, 7L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不在允许清单内");
 
         verify(tester, never()).test(any(), anyString(), any());
         verify(usageService, Mockito.never()).recordSuccess(anyLong(), any(), any(), any(),
