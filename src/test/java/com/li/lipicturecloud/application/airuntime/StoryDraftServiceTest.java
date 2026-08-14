@@ -10,6 +10,7 @@ import com.li.lipicturecloud.domain.airuntime.CreationTaskRepository;
 import com.li.lipicturecloud.domain.airuntime.ModelConnection;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;
 import com.li.lipicturecloud.exception.BusinessException;
+import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,7 @@ class StoryDraftServiceTest {
     private CreationTaskRepository taskRepository;
     private CreationLineageRepository lineageRepository;
     private SpaceAuthorizationAccessService authorization;
+    private com.li.lipicturecloud.repository.PictureRepository pictureRepository;
     private LanguageRouter languageRouter;
     private LanguageModelInvoker languageInvoker;
     private PlatformTrialLedgerService trialLedger;
@@ -60,6 +62,13 @@ class StoryDraftServiceTest {
         taskRepository = mock(CreationTaskRepository.class);
         lineageRepository = mock(CreationLineageRepository.class);
         authorization = mock(SpaceAuthorizationAccessService.class);
+        pictureRepository = mock(com.li.lipicturecloud.repository.PictureRepository.class);
+        com.li.lipicturecloud.model.entity.Picture picture =
+                new com.li.lipicturecloud.model.entity.Picture();
+        picture.setId(102L);
+        picture.setCategory("旅行");
+        when(pictureRepository.findById(102L)).thenReturn(java.util.Optional.of(picture));
+        when(pictureRepository.findById(103L)).thenReturn(java.util.Optional.empty());
         languageRouter = mock(LanguageRouter.class);
         languageInvoker = mock(LanguageModelInvoker.class);
         trialLedger = mock(PlatformTrialLedgerService.class);
@@ -77,8 +86,8 @@ class StoryDraftServiceTest {
                     return response;
                 });
         service = new StoryDraftService(taskRepository, lineageRepository, authorization,
-                languageRouter, languageInvoker, chatModelProvider, trialLedger,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                pictureRepository, languageRouter, languageInvoker, chatModelProvider,
+                trialLedger, Clock.fixed(NOW, ZoneOffset.UTC));
         when(taskRepository.save(any(CreationTask.class), anyLong())).thenReturn(true);
         when(languageRouter.decide(7L)).thenReturn(ModelRouteDecision.platform());
         when(languageInvoker.stream(any(ModelRouteDecision.class), any()))
@@ -116,6 +125,8 @@ class StoryDraftServiceTest {
 
         assertThat(result.status()).isEqualTo(CreationStatus.AWAITING_CONFIRM);
         assertThat(result.outlineText()).isEqualTo("生成文本");
+        // 执行前重新校验授权（规格 §5），创建校验之外的第二次。
+        verify(authorization).checkForUser("picture:view", 102L, 7L);
         verify(trialLedger).reserve(7L, StoryDraftService.OUTLINE_TRIAL_COST);
         verify(trialLedger).settle(7L, StoryDraftService.OUTLINE_TRIAL_COST);
         ArgumentCaptor<CreationLineage> lineage = ArgumentCaptor.forClass(CreationLineage.class);
@@ -123,6 +134,12 @@ class StoryDraftServiceTest {
         assertThat(lineage.getValue().capabilityId())
                 .isEqualTo(StoryDraftService.CAPABILITY_OUTLINE);
         assertThat(lineage.getValue().costSource()).isEqualTo(CostSource.PLATFORM.name());
+        // 大纲提示词带有安全分类落地线索。
+        ArgumentCaptor<org.springframework.ai.chat.prompt.Prompt> prompt =
+                ArgumentCaptor.forClass(org.springframework.ai.chat.prompt.Prompt.class);
+        verify(chatModel).call(prompt.capture());
+        assertThat(prompt.getValue().getInstructions().get(1).getText())
+                .contains("图片分类：旅行");
     }
 
     @Test
@@ -155,6 +172,35 @@ class StoryDraftServiceTest {
         verify(trialLedger).release(7L, StoryDraftService.OUTLINE_TRIAL_COST);
         verify(trialLedger, never()).settle(anyLong(), anyLong());
         // 任务转入 FAILED 终态。
+        verify(taskRepository).save(org.mockito.ArgumentMatchers.argThat(t ->
+                t.status() == CreationStatus.FAILED), anyLong());
+    }
+
+    @Test
+    void insufficientTrialBalanceAlsoFailsTheTaskInsteadOfLeavingItStuck() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.PENDING, 0L, null, null)));
+        when(trialLedger.reserve(7L, StoryDraftService.OUTLINE_TRIAL_COST))
+                .thenThrow(new BusinessException(ErrorCode.OPERATION_ERROR, "平台试用额度不足"));
+
+        assertThatThrownBy(() -> service.outline(SUBJECT, 9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("试用额度不足");
+        // 任务转入 FAILED 终态，而不是停留在 OUTLINING。
+        verify(taskRepository).save(org.mockito.ArgumentMatchers.argThat(t ->
+                t.status() == CreationStatus.FAILED), anyLong());
+    }
+
+    @Test
+    void brokenByokRouteFailsTheTaskInsteadOfLeavingItStuck() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.PENDING, 0L, null, null)));
+        when(languageRouter.decide(7L)).thenThrow(new BusinessException(
+                ErrorCode.OPERATION_ERROR, "语言任务路由的连接已停用，请启用或清除路由规则"));
+
+        assertThatThrownBy(() -> service.outline(SUBJECT, 9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("路由的连接已停用");
         verify(taskRepository).save(org.mockito.ArgumentMatchers.argThat(t ->
                 t.status() == CreationStatus.FAILED), anyLong());
     }

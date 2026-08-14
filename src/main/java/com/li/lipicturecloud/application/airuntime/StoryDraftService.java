@@ -42,13 +42,17 @@ public class StoryDraftService {
     private static final String SYSTEM_PROMPT = "你是图像伙伴。为用户选择的图片写一个温暖的第一人称短篇故事。"
             + "只输出简体中文正文，不输出 markdown、标题、链接或图片里的原文。";
     private static final String OUTLINE_PROMPT_TEMPLATE =
-            "用户选了 %d 张图片。请先为这个故事写一段 60 字以内的大纲，只说情节走向，不要展开细节。";
+            "用户选了 %d 张图片%s。请先为这个故事写一段 60 字以内的大纲，只说情节走向，不要展开细节。";
     private static final String DRAFT_PROMPT_TEMPLATE =
             "大纲：%s%n请按大纲把故事写成 200 字以内的草稿，语气温暖克制。";
+    /** 允许进入提示词的粗粒度分类标签（拒绝控制字符与超长标签，绝不携带图片名或标签原文）。 */
+    private static final java.util.regex.Pattern SAFE_CATEGORY =
+            java.util.regex.Pattern.compile("[\\p{L}\\p{N} _\\-]{1,16}");
 
     private final CreationTaskRepository taskRepository;
     private final CreationLineageRepository lineageRepository;
     private final SpaceAuthorizationAccessService authorization;
+    private final com.li.lipicturecloud.repository.PictureRepository pictureRepository;
     private final LanguageRouter languageRouter;
     private final LanguageModelInvoker languageInvoker;
     private final ObjectProvider<ChatModel> chatModelProvider;
@@ -58,6 +62,7 @@ public class StoryDraftService {
     public StoryDraftService(CreationTaskRepository taskRepository,
                              CreationLineageRepository lineageRepository,
                              SpaceAuthorizationAccessService authorization,
+                             com.li.lipicturecloud.repository.PictureRepository pictureRepository,
                              LanguageRouter languageRouter,
                              LanguageModelInvoker languageInvoker,
                              ObjectProvider<ChatModel> chatModelProvider,
@@ -66,6 +71,7 @@ public class StoryDraftService {
         this.taskRepository = taskRepository;
         this.lineageRepository = lineageRepository;
         this.authorization = authorization;
+        this.pictureRepository = pictureRepository;
         this.languageRouter = languageRouter;
         this.languageInvoker = languageInvoker;
         this.chatModelProvider = chatModelProvider;
@@ -91,15 +97,22 @@ public class StoryDraftService {
 
     public CreationTask outline(AuthorizationSubject subject, long taskId) {
         CreationTask task = requireOwned(subject, taskId);
-        task = transition(task, task.startOutlining(clock.instant()));
-        ModelRouteDecision route = languageRouter.decide(subject.userId());
-        boolean platform = !route.isByok();
-        if (platform) {
-            trialLedger.reserve(subject.userId(), OUTLINE_TRIAL_COST);
-        }
         try {
+            task = transition(task, task.startOutlining(clock.instant()));
+        } catch (IllegalStateException wrongState) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
+        }
+        boolean platform = false;
+        try {
+            // 执行前重新校验：分享撤销/移动后不得让旧选择越过权限边界（规格 §5）。
+            reauthorizePictures(subject, task);
+            ModelRouteDecision route = languageRouter.decide(subject.userId());
+            platform = !route.isByok();
+            if (platform) {
+                trialLedger.reserve(subject.userId(), OUTLINE_TRIAL_COST);
+            }
             String text = invoke(route, OUTLINE_PROMPT_TEMPLATE.formatted(
-                    task.sourcePictureIds().size()));
+                    task.sourcePictureIds().size(), grounding(task.sourcePictureIds())));
             CreationTask completed = transition(task,
                     task.completeOutline(text, route.isByok() ? route.connection().id() : null,
                             clock.instant()));
@@ -119,18 +132,29 @@ public class StoryDraftService {
 
     public CreationTask confirmOutline(AuthorizationSubject subject, long taskId) {
         CreationTask task = requireOwned(subject, taskId);
-        return transition(task, task.confirmOutline(clock.instant()));
+        try {
+            return transition(task, task.confirmOutline(clock.instant()));
+        } catch (IllegalStateException wrongState) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
+        }
     }
 
     public CreationTask draft(AuthorizationSubject subject, long taskId) {
         CreationTask task = requireOwned(subject, taskId);
-        task = transition(task, task.confirmOutline(clock.instant()));
-        ModelRouteDecision route = languageRouter.decide(subject.userId());
-        boolean platform = !route.isByok();
-        if (platform) {
-            trialLedger.reserve(subject.userId(), DRAFT_TRIAL_COST);
-        }
         try {
+            task = transition(task, task.confirmOutline(clock.instant()));
+        } catch (IllegalStateException wrongState) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
+        }
+        boolean platform = false;
+        try {
+            // 执行前重新校验：分享撤销/移动后不得让旧选择越过权限边界（规格 §5）。
+            reauthorizePictures(subject, task);
+            ModelRouteDecision route = languageRouter.decide(subject.userId());
+            platform = !route.isByok();
+            if (platform) {
+                trialLedger.reserve(subject.userId(), DRAFT_TRIAL_COST);
+            }
             String text = invoke(route, DRAFT_PROMPT_TEMPLATE.formatted(task.outlineText()));
             CreationTask completed = transition(task,
                     task.completeDraft(text, clock.instant()));
@@ -150,8 +174,12 @@ public class StoryDraftService {
 
     public CreationTask save(AuthorizationSubject subject, long taskId) {
         CreationTask task = requireOwned(subject, taskId);
-        CreationTask saving = transition(task, task.confirmDraft(clock.instant()));
-        return transition(saving, saving.completeSave(saving.draftText(), clock.instant()));
+        try {
+            CreationTask saving = transition(task, task.confirmDraft(clock.instant()));
+            return transition(saving, saving.completeSave(saving.draftText(), clock.instant()));
+        } catch (IllegalStateException wrongState) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
+        }
     }
 
     public List<CreationTask> list(AuthorizationSubject subject, int limit) {
@@ -159,6 +187,27 @@ public class StoryDraftService {
         return taskRepository.findBySubjectId(subject.userId(), limit).stream()
                 .map(this::expireIfStale)
                 .toList();
+    }
+
+    private void reauthorizePictures(AuthorizationSubject subject, CreationTask task) {
+        for (Long pictureId : task.sourcePictureIds()) {
+            authorization.checkForUser(PICTURE_VIEW, pictureId, subject.userId());
+        }
+    }
+
+    /** 从图片的粗粒度分类构建安全的落地线索；不携带图片名、标签或任何用户原文。 */
+    private String grounding(List<Long> pictureIds) {
+        String categories = pictureIds.stream()
+                .map(pictureRepository::findById)
+                .flatMap(java.util.Optional::stream)
+                .map(com.li.lipicturecloud.model.entity.Picture::getCategory)
+                .filter(Objects::nonNull)
+                .map(String::strip)
+                .filter(category -> SAFE_CATEGORY.matcher(category).matches())
+                .distinct()
+                .limit(5)
+                .collect(Collectors.joining("、"));
+        return categories.isEmpty() ? "" : "（图片分类：" + categories + "）";
     }
 
     private String invoke(ModelRouteDecision route, String userPrompt) {

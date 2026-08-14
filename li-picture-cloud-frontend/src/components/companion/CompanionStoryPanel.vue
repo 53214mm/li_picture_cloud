@@ -83,6 +83,8 @@ const selectedIds = ref([])
 const creating = ref(false)
 const busyTaskId = ref(null)
 const error = ref('')
+// 重试同一次创建必须沿用同一幂等键，避免网络失败重试产生重复任务。
+const pendingIdempotencyKey = ref(null)
 
 onMounted(loadTasks)
 watch(() => props.refreshKey, loadTasks)
@@ -99,11 +101,15 @@ async function loadTasks() {
 async function submitCreate() {
   creating.value = true
   try {
+    if (!pendingIdempotencyKey.value) {
+      pendingIdempotencyKey.value = crypto.randomUUID()
+    }
     await createStory({
       pictureIds: selectedIds.value,
-      idempotencyKey: crypto.randomUUID()
+      idempotencyKey: pendingIdempotencyKey.value
     })
     selectedIds.value = []
+    pendingIdempotencyKey.value = null
     await loadTasks()
   } catch (failure) {
     error.value = extractMessage(failure, '创作开始失败')
