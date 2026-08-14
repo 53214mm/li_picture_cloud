@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <preConditions onFail="HALT" onError="HALT">
+        <and>
+            <or>
+                <not><tableExists tableName="mcp_connection"/></not>
+                <and>
+                    <columnExists tableName="mcp_connection" columnName="id"/>
+                    <columnExists tableName="mcp_connection" columnName="code"/>
+                    <columnExists tableName="mcp_connection" columnName="displayName"/>
+                    <columnExists tableName="mcp_connection" columnName="endpointUri"/>
+                    <columnExists tableName="mcp_connection" columnName="enabled"/>
+                    <columnExists tableName="mcp_connection" columnName="revision"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="mcp_tool_whitelist"/></not>
+                <and>
+                    <columnExists tableName="mcp_tool_whitelist" columnName="id"/>
+                    <columnExists tableName="mcp_tool_whitelist" columnName="connectionId"/>
+                    <columnExists tableName="mcp_tool_whitelist" columnName="toolName"/>
+                    <columnExists tableName="mcp_tool_whitelist" columnName="enabled"/>
+                    <columnExists tableName="mcp_tool_whitelist" columnName="revision"/>
+                </and>
+            </or>
+        </and>
+    </preConditions>
+
+    <changeSet id="20260815-01" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="mcp_connection"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE mcp_connection (
+    id BIGINT PRIMARY KEY,
+    code VARCHAR(64) NOT NULL,
+    displayName VARCHAR(64) NOT NULL,
+    endpointUri VARCHAR(255) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_mcp_connection_code UNIQUE (code)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="mcp_connection"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260815-02" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="mcp_tool_whitelist"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE mcp_tool_whitelist (
+    id BIGINT PRIMARY KEY,
+    connectionId BIGINT NOT NULL,
+    toolName VARCHAR(128) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_mcp_tool_whitelist UNIQUE (connectionId, toolName)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="mcp_tool_whitelist"/></rollback>
+    </changeSet>
+</databaseChangeLog>

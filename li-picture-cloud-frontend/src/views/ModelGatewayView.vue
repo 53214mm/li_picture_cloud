@@ -172,6 +172,79 @@
         <p class="routing-note">选择"平台默认"表示显式走平台钱包；一旦绑定用户连接，连接不可用时对话会直接报错，绝不静默回退扣费。</p>
       </section>
 
+      <section v-if="userStore.isAdmin" class="gateway-card" aria-labelledby="mcp-title"
+               data-testid="mcp-section">
+        <header>
+          <div>
+            <span class="eyebrow">MCP 白名单（平台管理）</span>
+            <h2 id="mcp-title">只开放审核过的服务与工具</h2>
+          </div>
+        </header>
+        <form class="connection-form" @submit.prevent="submitMcpService">
+          <label>
+            <span>服务代码</span>
+            <input v-model="mcpServiceForm.code" required maxlength="64"
+                   placeholder="mxai-mcp-server">
+          </label>
+          <label>
+            <span>服务名称</span>
+            <input v-model="mcpServiceForm.displayName" required maxlength="64"
+                   placeholder="MxAI 服务">
+          </label>
+          <label>
+            <span>端点（仅 HTTPS）</span>
+            <input v-model="mcpServiceForm.endpointUri" type="url" required
+                   placeholder="https://mcp.example.cn">
+          </label>
+          <button class="btn" type="submit" :disabled="mcpBusy">登记服务</button>
+        </form>
+        <ul v-if="mcpServices.length" class="mcp-list">
+          <li v-for="service in mcpServices" :key="service.id" class="mcp-row">
+            <div class="mcp-main">
+              <strong>{{ service.displayName }}</strong>
+              <code>{{ service.code }}</code>
+              <span class="connection-meta">
+                {{ service.endpointUri }} · {{ service.enabled ? '已启用' : '已停用' }}
+              </span>
+              <span v-if="!service.tools || service.tools.length === 0" class="mcp-note">
+                未登记任何工具：fail-closed，伙伴能力目录不会出现该服务工具。
+              </span>
+            </div>
+            <div class="connection-actions">
+              <button v-if="!service.enabled" class="btn btn-sm" type="button"
+                      :disabled="mcpBusy" @click="toggleMcpService(service, true)">启用</button>
+              <button v-else class="btn btn-sm btn-outline" type="button"
+                      :disabled="mcpBusy" @click="toggleMcpService(service, false)">停用</button>
+            </div>
+            <div v-if="service.tools" class="mcp-tools">
+              <form class="mcp-tool-add" @submit.prevent="submitMcpTool(service)">
+                <label>
+                  <span class="visually-hidden">工具名</span>
+                  <input v-model="service.newToolName" required maxlength="128"
+                         placeholder="例如 generate_image">
+                </label>
+                <button class="btn btn-sm" type="submit" :disabled="mcpBusy">加白名单</button>
+              </form>
+              <ul class="mcp-tool-list">
+                <li v-for="tool in service.tools" :key="tool.id" class="mcp-tool-row">
+                  <code>{{ tool.toolName }}</code>
+                  <span :class="tool.enabled ? 'usage-success' : 'usage-failure'">
+                    {{ tool.enabled ? '启用中' : '已停用' }}
+                  </span>
+                  <button class="btn btn-sm btn-outline" type="button" :disabled="mcpBusy"
+                          @click="toggleMcpTool(service, tool, !tool.enabled)">
+                    {{ tool.enabled ? '停用' : '启用' }}
+                  </button>
+                  <button class="btn btn-sm btn-danger-outline" type="button" :disabled="mcpBusy"
+                          @click="removeMcpToolFor(service, tool)">移出白名单</button>
+                </li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+        <p v-else class="empty-state">还没有登记的 MCP 服务。未登记即不可达，任意 URL 不开放。</p>
+      </section>
+
       <section class="gateway-card" aria-labelledby="usage-title">
         <header>
           <div>
@@ -210,6 +283,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import { useUserStore } from '@/stores/user'
 import {
   MODEL_PROVIDERS,
   MODEL_TASKS,
@@ -220,31 +294,43 @@ import {
   taskLabel
 } from '@/constants/modelGateway'
 import {
+  addMcpTool,
   createModelConnection,
   createModelCredential,
   deleteModelConnection,
   deleteModelCredential,
   deleteModelRouting,
+  disableMcpService,
+  disableMcpTool,
   disableModelConnection,
+  enableMcpService,
+  enableMcpTool,
   enableModelConnection,
   getModelConnectionCapability,
+  listMcpServices,
+  listMcpTools,
   listModelConnections,
   listModelCredentials,
   listModelRouting,
   listModelUsage,
+  removeMcpTool,
   rotateModelCredential,
   testModelConnection,
+  upsertMcpService,
   upsertModelRouting
 } from '@/api/modelGateway'
 
+const userStore = useUserStore()
 const error = ref('')
 const credentials = ref([])
 const connections = ref([])
 const routing = ref([])
 const usage = ref([])
+const mcpServices = ref([])
 const credentialBusy = ref(false)
 const connectionBusy = ref(false)
 const routingBusy = ref(false)
+const mcpBusy = ref(false)
 const probingId = ref(null)
 const rotating = ref(null)
 
@@ -257,17 +343,22 @@ const connectionForm = reactive({
   credentialId: null
 })
 const rotateForm = reactive({ apiKey: '' })
+const mcpServiceForm = reactive({ code: '', displayName: '', endpointUri: '' })
 
 onMounted(loadAll)
 
 async function loadAll() {
   try {
-    const [credentialList, connectionList, routingList, usageList] = await Promise.all([
+    const tasks = [
       listModelCredentials(),
       listModelConnections(),
       listModelRouting(),
       listModelUsage()
-    ])
+    ]
+    if (userStore.isAdmin) {
+      tasks.push(loadMcpServices())
+    }
+    const [credentialList, connectionList, routingList, usageList] = await Promise.all(tasks)
     credentials.value = credentialList ?? []
     connections.value = connectionList ?? []
     routing.value = routingList ?? []
@@ -276,6 +367,15 @@ async function loadAll() {
   } catch (failure) {
     error.value = extractMessage(failure, '加载控制中心失败，请刷新重试')
   }
+}
+
+async function loadMcpServices() {
+  const services = await listMcpServices()
+  const withTools = await Promise.all((services ?? []).map(async service => ({
+    ...service,
+    tools: (await listMcpTools(service.code)) ?? []
+  })))
+  mcpServices.value = withTools
 }
 
 async function submitCredential() {
@@ -438,6 +538,75 @@ function probeLabel(result) {
   return result.reachable ? '探测通过' : `探测失败：${safeErrorLabel(result.safeErrorCode)}`
 }
 
+async function submitMcpService() {
+  mcpBusy.value = true
+  try {
+    await upsertMcpService({
+      code: mcpServiceForm.code,
+      displayName: mcpServiceForm.displayName,
+      endpointUri: mcpServiceForm.endpointUri
+    })
+    mcpServiceForm.code = ''
+    mcpServiceForm.displayName = ''
+    mcpServiceForm.endpointUri = ''
+    await loadMcpServices()
+  } catch (failure) {
+    error.value = extractMessage(failure, 'MCP 服务登记失败')
+  } finally {
+    mcpBusy.value = false
+  }
+}
+
+async function toggleMcpService(service, enabled) {
+  mcpBusy.value = true
+  try {
+    await (enabled ? enableMcpService(service.code) : disableMcpService(service.code))
+    await loadMcpServices()
+  } catch (failure) {
+    error.value = extractMessage(failure, enabled ? 'MCP 服务启用失败' : 'MCP 服务停用失败')
+  } finally {
+    mcpBusy.value = false
+  }
+}
+
+async function submitMcpTool(service) {
+  mcpBusy.value = true
+  try {
+    await addMcpTool(service.code, service.newToolName)
+    service.newToolName = ''
+    await loadMcpServices()
+  } catch (failure) {
+    error.value = extractMessage(failure, '白名单新增失败')
+  } finally {
+    mcpBusy.value = false
+  }
+}
+
+async function toggleMcpTool(service, tool, enabled) {
+  mcpBusy.value = true
+  try {
+    await (enabled ? enableMcpTool(service.code, tool.toolName)
+      : disableMcpTool(service.code, tool.toolName))
+    await loadMcpServices()
+  } catch (failure) {
+    error.value = extractMessage(failure, '白名单切换失败')
+  } finally {
+    mcpBusy.value = false
+  }
+}
+
+async function removeMcpToolFor(service, tool) {
+  mcpBusy.value = true
+  try {
+    await removeMcpTool(service.code, tool.toolName)
+    await loadMcpServices()
+  } catch (failure) {
+    error.value = extractMessage(failure, '白名单移除失败')
+  } finally {
+    mcpBusy.value = false
+  }
+}
+
 function formatTime(value) {
   if (!value) return ''
   return new Date(value).toLocaleString()
@@ -491,6 +660,17 @@ input, select { padding: .6rem .75rem; border: 2px solid var(--black); backgroun
 .usage-table th { background: var(--gray-100); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
 .usage-success { color: #075d2a; font-weight: 700; }
 .usage-failure { color: var(--red); font-weight: 700; }
+.mcp-list { list-style: none; border-top: 2px solid var(--black); }
+.mcp-row { padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-200); display: grid; gap: .8rem; }
+.mcp-main { display: grid; gap: .2rem; }
+.mcp-main code { justify-self: start; padding: .15rem .4rem; background: var(--gray-100); border: 1px solid var(--gray-300); }
+.mcp-note { padding: .5rem .7rem; border-left: 4px solid var(--red); background: var(--gray-100); color: var(--gray-600); font-size: .75rem; }
+.mcp-tools { display: grid; gap: .6rem; border-top: 1px dashed var(--gray-300); padding-top: .8rem; }
+.mcp-tool-add { display: flex; gap: .6rem; align-items: end; }
+.mcp-tool-add label { flex: 1; }
+.mcp-tool-list { list-style: none; display: grid; gap: .5rem; }
+.mcp-tool-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.mcp-tool-row code { padding: .15rem .4rem; background: var(--gray-100); border: 1px solid var(--gray-300); }
 .btn-danger-outline { border-color: var(--red); color: var(--red); background: var(--white); }
 .btn-danger-outline:hover { background: var(--red); color: var(--white); }
 @media (max-width: 767px) {

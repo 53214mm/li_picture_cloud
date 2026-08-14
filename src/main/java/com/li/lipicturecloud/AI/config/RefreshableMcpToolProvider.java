@@ -35,7 +35,8 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Component
-public class RefreshableMcpToolProvider implements ToolCallbackProvider {
+public class RefreshableMcpToolProvider implements ToolCallbackProvider,
+        com.li.lipicturecloud.application.airuntime.McpToolCacheInvalidator {
 
     @Value("${mxai.api-key}")
     private String apiKey;
@@ -50,6 +51,11 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
     private McpSyncHttpClientRequestCustomizer mcpAuthCustomizer;
     @Resource
     private McpGeneratedImageHandler generatedImageHandler;
+    @Resource
+    private com.li.lipicturecloud.application.airuntime.McpToolAccessDecider mcpToolAccessDecider;
+
+    /** 平台审核服务代码：与 spring.ai.mcp.client.sse.connections 中的连接名对应。 */
+    private static final String REVIEWED_SERVICE_CODE = "mxai-mcp-server";
 
     /** 缓存 MCP 工具回调列表，避免每次请求都连接 MCP 列举工具 */
     private volatile ToolCallback[] cachedCallbacks = new ToolCallback[0];
@@ -110,6 +116,12 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
 
                 for (McpSchema.Tool tool : tools.tools()) {
                     String name = tool.name();
+                    // 白名单裁决（fail-closed）：未审核或已停用的工具绝不进入伙伴能力目录。
+                    if (mcpToolAccessDecider != null
+                            && !mcpToolAccessDecider.isToolAllowed(REVIEWED_SERVICE_CODE, name)) {
+                        log.info("mcp_tool_filtered service={} tool={}", REVIEWED_SERVICE_CODE, name);
+                        continue;
+                    }
                     String desc = tool.description() != null ? tool.description() : "";
                     // ★ 从 MCP 服务端获取真实的 JSON Schema
                     String inputSchema = "{}";
@@ -139,6 +151,15 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
     }
 
     // ======================== ToolCallback 实现 ========================
+
+    /** 白名单/启停变更后立即使缓存失效，下一次列举重新裁决。 */
+    @Override
+    public void invalidateToolCache() {
+        synchronized (this) {
+            cachedCallbacks = new ToolCallback[0];
+            lastRefreshTime = 0;
+        }
+    }
 
     /**
      * 每次调用都新建 MCP 连接的自定义 ToolCallback。

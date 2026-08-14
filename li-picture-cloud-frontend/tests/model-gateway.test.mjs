@@ -91,3 +91,18 @@ test('control center routing keeps platform default explicit', async () => {
   assert.match(view, /const connectionId = rawValue === '' \? null : rawValue/)
   assert.doesNotMatch(view, /Number\(rawValue\)/)
 })
+
+test('mcp admin section is admin-gated and fail-closed', async () => {
+  const view = await readFile(fileURLToPath(new globalThis.URL('../src/views/ModelGatewayView.vue', import.meta.url)), 'utf8')
+  const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/modelGateway.js', import.meta.url)), 'utf8')
+
+  // 仅平台管理员可见。
+  assert.match(view, /v-if="userStore\.isAdmin".*data-testid="mcp-section"/s)
+  // fail-closed 语义明确展示。
+  assert.match(view, /fail-closed/)
+  assert.match(view, /未登记即不可达，任意 URL 不开放/)
+  assert.match(api, /request\.get\('\/model\/mcp\/services'\)/)
+  assert.match(api, /request\.post\(`\/model\/mcp\/services\/\$\{code\}\/enable`\)/)
+  assert.match(api, /request\.post\(`\/model\/mcp\/services\/\$\{code\}\/tools\/\$\{toolName\}\/disable`\)/)
+  assert.match(api, /request\.delete\(`\/model\/mcp\/services\/\$\{code\}\/tools\/\$\{toolName\}`\)/)
+})

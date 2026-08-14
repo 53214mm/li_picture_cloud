@@ -16,6 +16,8 @@ test('control center manages credentials connections routing and usage', async (
   await expect(page).toHaveURL(/\/model-gateway$/)
   await expect(page.getByText('你的模型连接，由你决定')).toBeVisible()
   await expect(page.getByText('还没有保存凭据。添加后，连接才能绑定它。')).toBeVisible()
+  // 普通用户看不到平台管理的 MCP 白名单区。
+  await expect(page.getByTestId('mcp-section')).toHaveCount(0)
 
   // 1. 保存凭据：明文只提交一次，界面只回显尾号。
   await page.getByLabel('供应商').first().selectOption('DEEPSEEK')

@@ -3,7 +3,10 @@ INSERT INTO user
 VALUES
     (7, 'companion_e2e',
      '$2a$12$a5SNma8tchPGcKIOSIGgI.liyrqFQiARSqUVszUdmlO3qCR9U3Cs6',
-     '伙伴端到端用户', 'user', 0);
+     '伙伴端到端用户', 'user', 0),
+    (8, 'companion_admin_e2e',
+     '$2a$12$a5SNma8tchPGcKIOSIGgI.liyrqFQiARSqUVszUdmlO3qCR9U3Cs6',
+     '伙伴端到端管理员', 'admin', 0);
 
 INSERT INTO space
     (id, spaceName, spaceLevel, spaceType, maxSize, maxCount,

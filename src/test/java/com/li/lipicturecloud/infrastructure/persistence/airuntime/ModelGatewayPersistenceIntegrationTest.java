@@ -3,6 +3,10 @@ package com.li.lipicturecloud.infrastructure.persistence.airuntime;
 import com.li.lipicturecloud.domain.airuntime.CostSource;
 import com.li.lipicturecloud.domain.airuntime.CredentialVault;
 import com.li.lipicturecloud.domain.airuntime.CredentialVaultRepository;
+import com.li.lipicturecloud.domain.airuntime.McpConnection;
+import com.li.lipicturecloud.domain.airuntime.McpConnectionRepository;
+import com.li.lipicturecloud.domain.airuntime.McpToolWhitelist;
+import com.li.lipicturecloud.domain.airuntime.McpToolWhitelistRepository;
 import com.li.lipicturecloud.domain.airuntime.ModelCapabilities;
 import com.li.lipicturecloud.domain.airuntime.ModelCapabilityProfile;
 import com.li.lipicturecloud.domain.airuntime.ModelCapabilityProfileRepository;
@@ -50,6 +54,12 @@ class ModelGatewayPersistenceIntegrationTest {
 
     @Autowired
     private ModelCapabilityProfileRepository profileRepository;
+
+    @Autowired
+    private McpConnectionRepository mcpConnectionRepository;
+
+    @Autowired
+    private McpToolWhitelistRepository mcpWhitelistRepository;
 
     @Test
     void connectionLifecycleHonorsRevisionCasAndDeletesOnlyOnMatch() {
@@ -160,5 +170,40 @@ class ModelGatewayPersistenceIntegrationTest {
         assertThat(latest.id()).isEqualTo(second.id());
         assertThat(latest.text()).isTrue();
         assertThat(latest.maxContextTokens()).isEqualTo(64_000);
+    }
+
+    @Test
+    void mcpServicesAndToolWhitelistHonorUniqueKeysAndRevisionCas() {
+        McpConnection created = mcpConnectionRepository.insert(McpConnection.create(
+                "mxai-mcp-server", "MxAI", URI.create("https://mcp.mxai.cn")));
+        assertThat(created.id()).isPositive();
+
+        // code 唯一键：并发创建输的一方读回赢家行。
+        McpConnection duplicate = mcpConnectionRepository.insert(McpConnection.create(
+                "mxai-mcp-server", "MxAI 备用", URI.create("https://mcp.mxai.cn")));
+        assertThat(duplicate.id()).isEqualTo(created.id());
+        assertThat(duplicate.displayName()).isEqualTo("MxAI");
+
+        McpConnection enabled = created.enable();
+        assertThat(mcpConnectionRepository.save(enabled, 0L)).isTrue();
+        assertThat(mcpConnectionRepository.save(enabled, 0L)).isFalse();
+        assertThat(mcpConnectionRepository.findByCode("mxai-mcp-server").orElseThrow().enabled())
+                .isTrue();
+
+        // 工具白名单：(connectionId, toolName) 唯一 + revision CAS。
+        McpToolWhitelist entry = mcpWhitelistRepository.insert(McpToolWhitelist.create(
+                created.id(), "generate_image"));
+        assertThat(entry.id()).isPositive();
+        McpToolWhitelist duplicateEntry = mcpWhitelistRepository.insert(McpToolWhitelist.create(
+                created.id(), "generate_image"));
+        assertThat(duplicateEntry.id()).isEqualTo(entry.id());
+
+        McpToolWhitelist disabled = entry.disable();
+        assertThat(mcpWhitelistRepository.save(disabled, 0L)).isTrue();
+        assertThat(mcpWhitelistRepository.findByConnectionAndTool(created.id(), "generate_image")
+                .orElseThrow().enabled()).isFalse();
+
+        assertThat(mcpWhitelistRepository.delete(entry.id(), 1L)).isTrue();
+        assertThat(mcpWhitelistRepository.findByConnectionId(created.id())).isEmpty();
     }
 }

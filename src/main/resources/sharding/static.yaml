@@ -46,6 +46,8 @@ rules:
       - primary.model_usage_record
       - primary.task_routing_rule
       - primary.model_capability_profile
+      - primary.mcp_connection
+      - primary.mcp_tool_whitelist
     defaultDataSource: primary
 
 props:

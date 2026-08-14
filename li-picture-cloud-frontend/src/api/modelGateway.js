@@ -21,3 +21,17 @@ export const upsertModelRouting = (task, connectionId) =>
 export const deleteModelRouting = task => request.delete(`/model/routing/${task}`)
 
 export const listModelUsage = (limit = 50) => request.get('/model/usage', { params: { limit } })
+
+export const listMcpServices = () => request.get('/model/mcp/services')
+export const upsertMcpService = data => request.post('/model/mcp/services', data)
+export const enableMcpService = code => request.post(`/model/mcp/services/${code}/enable`)
+export const disableMcpService = code => request.post(`/model/mcp/services/${code}/disable`)
+export const listMcpTools = code => request.get(`/model/mcp/services/${code}/tools`)
+export const addMcpTool = (code, toolName) =>
+  request.post(`/model/mcp/services/${code}/tools`, { toolName })
+export const enableMcpTool = (code, toolName) =>
+  request.post(`/model/mcp/services/${code}/tools/${toolName}/enable`)
+export const disableMcpTool = (code, toolName) =>
+  request.post(`/model/mcp/services/${code}/tools/${toolName}/disable`)
+export const removeMcpTool = (code, toolName) =>
+  request.delete(`/model/mcp/services/${code}/tools/${toolName}`)
