@@ -74,6 +74,15 @@ public interface CompanionGrowthRecordMapper {
     long countSince(@Param("companionId") long companionId, @Param("since") Date since);
 
     @Select("""
+            SELECT COUNT(*) FROM companion_growth_record
+            WHERE companionId = #{companionId} AND eventType = 'PICTURE_FED'
+              AND MONTH(createTime) = #{month} AND DAY(createTime) = #{day}
+              AND YEAR(createTime) < YEAR(CURRENT_TIMESTAMP)
+            """)
+    long countAnniversaryFeeds(@Param("companionId") long companionId,
+                               @Param("month") int month, @Param("day") int day);
+
+    @Select("""
             SELECT COALESCE(SUM(lifeExperienceDelta), 0)
             FROM companion_growth_record
             WHERE companionId = #{companionId} AND pictureId = #{pictureId}

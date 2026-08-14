@@ -10,26 +10,29 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Optional;
 
 /**
- * 每周影像回顾机会：过去 7 天至少喂养一次时产生，冲动得分来自当前情绪与关系。
- * 纪念日与相似图片机会由各自的机会源实现。
+ * 纪念日机会：往年同月同日（上海日历）至少完整喂养过一次时产生。
+ *
+ * <p>只依赖成长记录（不查询图片表），文案确定性生成；冲动得分同样来自情绪与关系。</p>
  */
 @Component
-public class WeeklyReviewOpportunitySource implements CompanionOpportunitySource {
+public class AnniversaryOpportunitySource implements CompanionOpportunitySource {
 
+    private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final BigDecimal HUNDRED = new BigDecimal("100.00");
 
     private final GrowthRecordRepository growthRepository;
     private final CompanionMoodRepository moodRepository;
     private final CompanionRelationshipRepository relationshipRepository;
 
-    public WeeklyReviewOpportunitySource(GrowthRecordRepository growthRepository,
-                                         CompanionMoodRepository moodRepository,
-                                         CompanionRelationshipRepository relationshipRepository) {
+    public AnniversaryOpportunitySource(GrowthRecordRepository growthRepository,
+                                        CompanionMoodRepository moodRepository,
+                                        CompanionRelationshipRepository relationshipRepository) {
         this.growthRepository = growthRepository;
         this.moodRepository = moodRepository;
         this.relationshipRepository = relationshipRepository;
@@ -37,12 +40,15 @@ public class WeeklyReviewOpportunitySource implements CompanionOpportunitySource
 
     @Override
     public Optional<ProposalOpportunity> findOpportunity(long companionId, long subjectId, Instant now) {
-        long feeds = growthRepository.countSince(companionId, now.minus(Duration.ofDays(7)));
+        LocalDate today = now.atZone(SHANGHAI).toLocalDate();
+        long feeds = growthRepository.countAnniversaryFeeds(companionId,
+                today.getMonthValue(), today.getDayOfMonth());
         if (feeds < 1) {
             return Optional.empty();
         }
-        String content = String.format("这周你喂了我 %d 次。想听我讲一段我们的故事吗？", feeds);
-        return Optional.of(new ProposalOpportunity(ProposalOpportunityType.WEEKLY_REVIEW,
+        String content = String.format("往年的今天（%d 月 %d 日）我们相遇过。想和我一起看看那时的回忆吗？",
+                today.getMonthValue(), today.getDayOfMonth());
+        return Optional.of(new ProposalOpportunity(ProposalOpportunityType.ANNIVERSARY,
                 impulseScore(companionId, subjectId), content));
     }
 
@@ -52,8 +58,8 @@ public class WeeklyReviewOpportunitySource implements CompanionOpportunitySource
         BigDecimal familiarity = relationshipRepository
                 .findByCompanionAndSubject(companionId, subjectId)
                 .map(CompanionRelationship::familiarity).orElse(BigDecimal.ZERO);
-        return joy.multiply(new BigDecimal("0.60"))
-                .add(familiarity.multiply(new BigDecimal("0.40")))
+        return joy.multiply(new BigDecimal("0.40"))
+                .add(familiarity.multiply(new BigDecimal("0.60")))
                 .setScale(2, RoundingMode.HALF_UP)
                 .max(BigDecimal.ZERO).min(HUNDRED);
     }

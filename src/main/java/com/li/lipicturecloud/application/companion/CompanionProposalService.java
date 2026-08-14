@@ -31,6 +31,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 自主契约与主动提案：契约查询/更新，机会感知、守门、提案落库，用户反馈（接受/忽略/敲打）。
@@ -53,7 +54,7 @@ public class CompanionProposalService {
     private final CompanionAutonomyContractRepository contractRepository;
     private final CompanionProposalRepository proposalRepository;
     private final CompanionProposalReactionRepository reactionRepository;
-    private final WeeklyReviewOpportunitySource opportunitySource;
+    private final List<CompanionOpportunitySource> opportunitySources;
     private final CompanionBalance balance;
     private final Clock clock;
 
@@ -61,14 +62,15 @@ public class CompanionProposalService {
                                     CompanionAutonomyContractRepository contractRepository,
                                     CompanionProposalRepository proposalRepository,
                                     CompanionProposalReactionRepository reactionRepository,
-                                    WeeklyReviewOpportunitySource opportunitySource,
+                                    List<CompanionOpportunitySource> opportunitySources,
                                     CompanionBalance balance,
                                     Clock clock) {
         this.companionRepository = companionRepository;
         this.contractRepository = contractRepository;
         this.proposalRepository = proposalRepository;
         this.reactionRepository = reactionRepository;
-        this.opportunitySource = opportunitySource;
+        // 机会源按注册顺序尝试，第一个有候选的产生提案。
+        this.opportunitySources = List.copyOf(opportunitySources);
         this.balance = balance;
         this.clock = clock;
     }
@@ -180,7 +182,11 @@ public class CompanionProposalService {
                     subject.userId(), gate.reasonCode());
             return null;
         }
-        return opportunitySource.findOpportunity(companion.id(), subject.userId(), now)
+        return opportunitySources.stream()
+                .map(source -> source.findOpportunity(companion.id(), subject.userId(), now))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .findFirst()
                 .map(opportunity -> {
                     CompanionProposal saved = proposalRepository.append(CompanionProposal.pending(
                             companion.id(), subject.userId(), opportunity.type(),

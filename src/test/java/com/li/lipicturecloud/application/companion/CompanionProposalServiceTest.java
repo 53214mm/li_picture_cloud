@@ -65,8 +65,8 @@ class CompanionProposalServiceTest {
         when(contractRepository.save(any(), anyLong())).thenReturn(true);
         when(proposalRepository.save(any(), anyLong())).thenReturn(true);
         service = new CompanionProposalService(companionRepository, contractRepository,
-                proposalRepository, reactionRepository, opportunitySource, CompanionBalance.v1(),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                proposalRepository, reactionRepository, List.of(opportunitySource),
+                CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test

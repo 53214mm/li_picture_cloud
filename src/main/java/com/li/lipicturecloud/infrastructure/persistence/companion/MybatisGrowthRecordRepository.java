@@ -77,6 +77,11 @@ public class MybatisGrowthRecordRepository implements GrowthRecordRepository {
         return growthRecordMapper.countSince(companionId, Date.from(Objects.requireNonNull(since, "since")));
     }
 
+    @Override
+    public long countAnniversaryFeeds(long companionId, int month, int day) {
+        return growthRecordMapper.countAnniversaryFeeds(companionId, month, day);
+    }
+
     private GrowthRecord fromRow(CompanionGrowthRecordEntity row) {
         return new GrowthRecord(row.getId(), row.getFeedingRunId(), row.getCompanionId(), row.getPictureId(),
                 GrowthEventType.valueOf(row.getEventType()), row.getLifeExperienceDelta(),

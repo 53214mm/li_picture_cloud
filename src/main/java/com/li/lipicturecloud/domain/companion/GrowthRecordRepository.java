@@ -13,4 +13,6 @@ public interface GrowthRecordRepository {
     long sumRevisitExperience(long companionId, long pictureId);
     /** 某时刻之后的成长记录条数（每周回顾等主动机会的数据源）。 */
     long countSince(long companionId, Instant since);
+    /** 往年同月同日（数据库本地日历）的完整喂养次数（纪念日机会源）。 */
+    long countAnniversaryFeeds(long companionId, int month, int day);
 }
