@@ -246,6 +246,9 @@ test('chat panel reuses the companion bubble and streams replies', async () => {
   assert.match(chat, /user-bubble/)
   // 发送失败时恢复草稿，避免用户输入丢失。
   assert.match(chat, /draft\.value = content/)
+  // 非 MODEL 档必须明示「演示回复（不调用模型）」，避免用户误以为伙伴在用真实模型。
+  assert.match(chat, /chatPolicy !== 'MODEL'/)
+  assert.match(chat, /演示回复（不调用模型）/)
   assert.match(page, /CompanionChatPanel/)
   assert.match(api, /\/companion\/chat\/history/)
   assert.match(utils, /parseSse/)

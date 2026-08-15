@@ -39,6 +39,9 @@
       </button>
     </form>
     <p v-if="sendError" class="chat-error" role="alert">{{ sendError }}</p>
+    <p v-if="chatPolicy !== 'MODEL'" class="chat-policy-note" data-testid="chat-policy-note">
+      当前对话模式：演示回复（不调用模型）。切换到 MODEL 档后，伙伴会用真实语言模型回应。
+    </p>
   </section>
 </template>
 
@@ -47,6 +50,10 @@ import { nextTick, onMounted, ref } from 'vue'
 import { listCompanionChatHistory } from '@/api/companion'
 import { streamCompanionChat } from '@/utils/companion'
 import CompanionMessageBubble from '@/components/companion/CompanionMessageBubble.vue'
+
+defineProps({
+  chatPolicy: { type: String, default: null }
+})
 
 const messages = ref([])
 const loading = ref(false)
@@ -136,6 +143,7 @@ function scrollToBottom() {
 .chat-input input { min-width: 0; padding: .6rem .75rem; border: 2px solid var(--black); font: inherit; font-size: .9rem; }
 .chat-input .btn { min-height: 44px; }
 .chat-error { margin: 0 1.5rem 1.25rem; color: var(--red); font-size: .8rem; }
+.chat-policy-note { margin: 0 1.5rem 1.25rem; padding: .5rem .7rem; border-left: 4px solid #8a6d1a; background: var(--gray-100); color: #8a6d1a; font-size: .78rem; font-weight: 700; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 767px) {
   .chat-card > header, .chat-list, .chat-input { padding-inline: 1.25rem; }

@@ -218,7 +218,8 @@ public class CompanionLifeService implements CompanionLife {
         CompanionRelationshipView relationship = relationshipRepository
                 .findByCompanionAndSubject(companion.id(), subject.userId())
                 .map(assembler::relationship).orElse(null);
-        return new CompanionHomeView(companionView, assembler.nutritionStatus(), growth, mood, relationship);
+        return new CompanionHomeView(companionView, assembler.nutritionStatus(), growth, mood,
+                relationship, properties.getChatPolicy().name());
     }
 
     private void checkAuthorization(FeedPictureCommand command, FeedReservation reservation) {

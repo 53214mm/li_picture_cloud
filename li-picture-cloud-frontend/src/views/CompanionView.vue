@@ -116,7 +116,7 @@
             <CompanionRelationshipPanel :relationship="home.relationship" />
           </div>
 
-          <CompanionChatPanel />
+          <CompanionChatPanel :chat-policy="home?.chatPolicy" />
 
           <CompanionProposalPanel :refresh-key="panelsRefreshKey" />
 
