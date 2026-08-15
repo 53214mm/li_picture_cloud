@@ -24,4 +24,6 @@
              relativeToChangelogFile="true"/>
     <include file="changes/2026-08-15-creation-task.xml"
              relativeToChangelogFile="true"/>
+    <include file="changes/2026-08-15-recipe-workshop.xml"
+             relativeToChangelogFile="true"/>
 </databaseChangeLog>

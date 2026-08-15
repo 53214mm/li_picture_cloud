@@ -155,6 +155,36 @@ class CompanionSingleTableRoutingIntegrationTest {
         assertThat(value(connection, "SELECT mimeType FROM creation_fusion_image WHERE id = ?", 8105L))
                 .isEqualTo("image/jpeg");
         assertThat(update(connection, "DELETE FROM creation_fusion_image WHERE id = ?", 8105L)).isEqualTo(1);
+
+        assertThat(update(connection, """
+                INSERT INTO recipe (id, subjectId, name, status, revision)
+                VALUES (?, ?, ?, ?, ?)
+                """, 8110L, COMPANION_ID, "旅行回顾", "DRAFT", 0L)).isEqualTo(1);
+        assertThat(update(connection, "UPDATE recipe SET status = ? WHERE id = ?", "ENABLED", 8110L))
+                .isEqualTo(1);
+        assertThat(value(connection, "SELECT status FROM recipe WHERE id = ?", 8110L))
+                .isEqualTo("ENABLED");
+
+        assertThat(update(connection, """
+                INSERT INTO recipe_version (id, recipeId, version, whenJson, ifJson, thenJson)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, 8111L, 8110L, 1, "{}", "[]", "{}")).isEqualTo(1);
+        assertThat(value(connection, "SELECT version FROM recipe_version WHERE id = ?", 8111L))
+                .isEqualTo(1);
+
+        assertThat(update(connection, """
+                INSERT INTO recipe_execution (id, recipeId, recipeVersion, subjectId, status,
+                triggeredTime, matchedJson, quoteJson)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+                """, 8112L, 8110L, 1, COMPANION_ID, "DRY_RUN", "{}", "{}")).isEqualTo(1);
+        assertThat(update(connection, "UPDATE recipe_execution SET status = ? WHERE id = ?",
+                "REJECTED", 8112L)).isEqualTo(1);
+        assertThat(value(connection, "SELECT status FROM recipe_execution WHERE id = ?", 8112L))
+                .isEqualTo("REJECTED");
+
+        assertThat(update(connection, "DELETE FROM recipe_execution WHERE id = ?", 8112L)).isEqualTo(1);
+        assertThat(update(connection, "DELETE FROM recipe_version WHERE id = ?", 8111L)).isEqualTo(1);
+        assertThat(update(connection, "DELETE FROM recipe WHERE id = ?", 8110L)).isEqualTo(1);
     }
 
     private int update(Connection connection, String sql, Object... parameters) throws SQLException {

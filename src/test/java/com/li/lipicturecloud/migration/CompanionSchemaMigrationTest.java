@@ -37,6 +37,20 @@ class CompanionSchemaMigrationTest {
             assertMcpTables(dataSource, 1);
             assertTrialLedgerTable(dataSource, 1);
             assertCreationTables(dataSource, 1);
+            assertRecipeTables(dataSource, 1);
+
+            rollback(dataSource, recipeChangeSetCount(dataSource));
+            // 配方工坊 migration 全部回滚后，创作任务等其余表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+            assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 1);
+            assertCapabilityTables(dataSource, 1);
+            assertMcpTables(dataSource, 1);
+            assertTrialLedgerTable(dataSource, 1);
+            assertCreationTables(dataSource, 1);
+            assertRecipeTables(dataSource, 0);
 
             rollback(dataSource, creationChangeSetCount(dataSource));
             // 创作任务 migration 全部回滚后，其余模型网关与伙伴表不受影响。
@@ -122,6 +136,7 @@ class CompanionSchemaMigrationTest {
             assertMcpTables(dataSource, 0);
             assertTrialLedgerTable(dataSource, 0);
             assertCreationTables(dataSource, 0);
+            assertRecipeTables(dataSource, 0);
 
             update(dataSource);
             assertCompanionTables(dataSource, 1, 1);
@@ -133,6 +148,7 @@ class CompanionSchemaMigrationTest {
             assertMcpTables(dataSource, 1);
             assertTrialLedgerTable(dataSource, 1);
             assertCreationTables(dataSource, 1);
+            assertRecipeTables(dataSource, 1);
         }
     }
 
@@ -440,6 +456,13 @@ class CompanionSchemaMigrationTest {
                 """, Integer.class);
     }
 
+    private static int recipeChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-15-recipe-workshop.xml'
+                """, Integer.class);
+    }
+
     private static void assertMoodRelationshipMemoryTables(DataSource dataSource, int expectedTableCount) {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         for (String table : List.of("companion_mood", "companion_relationship", "companion_memory")) {
@@ -519,6 +542,17 @@ class CompanionSchemaMigrationTest {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         for (String table : List.of("creation_task", "creation_lineage", "creation_candidate",
                 "creation_fusion_image")) {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
+                    """, Integer.class, table);
+            assertThat(count).as(table).isEqualTo(expectedTableCount);
+        }
+    }
+
+    private static void assertRecipeTables(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        for (String table : List.of("recipe", "recipe_version", "recipe_execution")) {
             Integer count = jdbcTemplate.queryForObject("""
                     SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
                     WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?

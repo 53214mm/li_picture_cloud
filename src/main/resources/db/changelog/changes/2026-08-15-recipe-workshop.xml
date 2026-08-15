@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <preConditions onFail="HALT" onError="HALT">
+        <and>
+            <or>
+                <not><tableExists tableName="recipe"/></not>
+                <and>
+                    <columnExists tableName="recipe" columnName="id"/>
+                    <columnExists tableName="recipe" columnName="subjectId"/>
+                    <columnExists tableName="recipe" columnName="name"/>
+                    <columnExists tableName="recipe" columnName="status"/>
+                    <columnExists tableName="recipe" columnName="revision"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="recipe_version"/></not>
+                <and>
+                    <columnExists tableName="recipe_version" columnName="id"/>
+                    <columnExists tableName="recipe_version" columnName="recipeId"/>
+                    <columnExists tableName="recipe_version" columnName="version"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="recipe_execution"/></not>
+                <and>
+                    <columnExists tableName="recipe_execution" columnName="id"/>
+                    <columnExists tableName="recipe_execution" columnName="recipeId"/>
+                    <columnExists tableName="recipe_execution" columnName="status"/>
+                </and>
+            </or>
+        </and>
+    </preConditions>
+
+    <changeSet id="20260815-21" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="recipe"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE recipe (
+    id BIGINT PRIMARY KEY,
+    subjectId BIGINT NOT NULL,
+    name VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    revision BIGINT NOT NULL DEFAULT 0,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+        ]]></sql>
+        <rollback><dropTable tableName="recipe"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260815-22" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="recipe_version"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE recipe_version (
+    id BIGINT PRIMARY KEY,
+    recipeId BIGINT NOT NULL,
+    version INT NOT NULL,
+    whenJson VARCHAR(4000) NOT NULL,
+    ifJson VARCHAR(4000) NOT NULL,
+    thenJson VARCHAR(4000) NOT NULL,
+    createdTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_recipe_version UNIQUE (recipeId, version)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="recipe_version"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260815-23" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="recipe_execution"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE recipe_execution (
+    id BIGINT PRIMARY KEY,
+    recipeId BIGINT NOT NULL,
+    recipeVersion INT NOT NULL,
+    subjectId BIGINT NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    triggeredTime TIMESTAMP NOT NULL,
+    matchedJson VARCHAR(4000) NOT NULL,
+    quoteJson VARCHAR(2000) NOT NULL,
+    creationTaskId BIGINT NULL,
+    safeErrorCode VARCHAR(64) NULL,
+    createdTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+        ]]></sql>
+        <rollback><dropTable tableName="recipe_execution"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260815-24" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_recipe_subject" tableName="recipe"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_recipe_subject ON recipe (subjectId, updateTime, id);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_recipe_subject" tableName="recipe"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260815-25" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_recipe_execution_subject"
+                              tableName="recipe_execution"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_recipe_execution_subject ON recipe_execution (subjectId, createdTime, id);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_recipe_execution_subject" tableName="recipe_execution"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260815-26" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_recipe_execution_recipe"
+                              tableName="recipe_execution"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_recipe_execution_recipe ON recipe_execution (recipeId, createdTime, id);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_recipe_execution_recipe" tableName="recipe_execution"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

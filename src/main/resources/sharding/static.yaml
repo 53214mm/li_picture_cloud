@@ -53,6 +53,9 @@ rules:
       - primary.creation_lineage
       - primary.creation_candidate
       - primary.creation_fusion_image
+      - primary.recipe
+      - primary.recipe_version
+      - primary.recipe_execution
     defaultDataSource: primary
 
 props:
