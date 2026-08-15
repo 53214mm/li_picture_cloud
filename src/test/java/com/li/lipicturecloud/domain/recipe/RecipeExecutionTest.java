@@ -30,29 +30,36 @@ class RecipeExecutionTest {
     void completesFailsAndRejectsAreTerminalTransitions() {
         RecipeExecution execution = dryRun().withId(5L);
 
-        RecipeExecution completed = execution.complete(102L, NOW);
+        RecipeExecution completed = execution.complete(102L, "{\"when\":\"WEEKLY_REVIEW\"}",
+                "{\"platformUnits\":1}", NOW);
         assertThat(completed.status()).isEqualTo(RecipeExecutionStatus.EXECUTED);
         assertThat(completed.creationTaskId()).isEqualTo(102L);
         assertThat(completed.isTerminal()).isTrue();
-        assertThatThrownBy(() -> completed.fail("UPSTREAM", NOW))
+        assertThatThrownBy(() -> completed.fail("UPSTREAM", "{}", "{}", NOW))
                 .isInstanceOf(IllegalStateException.class);
 
-        RecipeExecution failed = dryRun().withId(6L).fail("UPSTREAM_TIMEOUT", NOW);
+        RecipeExecution failed = dryRun().withId(6L)
+                .fail("UPSTREAM_TIMEOUT", "{}", "{}", NOW);
         assertThat(failed.status()).isEqualTo(RecipeExecutionStatus.FAILED);
         assertThat(failed.safeErrorCode()).isEqualTo("UPSTREAM_TIMEOUT");
 
-        RecipeExecution rejected = dryRun().withId(7L).reject("CONDITION_UNMATCHED", NOW);
+        RecipeExecution rejected = dryRun().withId(7L)
+                .reject("CONDITION_UNMATCHED", "{}", "{}", NOW);
         assertThat(rejected.status()).isEqualTo(RecipeExecutionStatus.REJECTED);
         assertThat(rejected.safeErrorCode()).isEqualTo("CONDITION_UNMATCHED");
     }
 
     @Test
     void rejectsInvalidTransitionsAndPayloads() {
-        assertThatThrownBy(() -> dryRun().complete(0L, NOW))
+        assertThatThrownBy(() -> dryRun().complete(0L, "{}", "{}", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> dryRun().fail("bad code!", NOW))
+        assertThatThrownBy(() -> dryRun().fail("bad code!", "{}", "{}", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> dryRun().fail(null, NOW))
+        assertThatThrownBy(() -> dryRun().fail(null, "{}", "{}", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> dryRun().reject("CODE", null, "{}", NOW))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> dryRun().reject("CODE", "带\u0007控制", "{}", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> RecipeExecution.dryRun(9L, 1, 7L, TRIGGERED,
                 "带\u0007控制", "{}", NOW))

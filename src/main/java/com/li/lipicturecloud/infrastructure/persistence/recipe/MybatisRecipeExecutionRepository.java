@@ -82,6 +82,8 @@ public class MybatisRecipeExecutionRepository implements RecipeExecutionReposito
         update.eq("id", after.id())
                 .eq("status", expectedStatus.name())
                 .set("status", after.status().name())
+                .set("matchedJson", after.matchedJson())
+                .set("quoteJson", after.quoteJson())
                 .set("creationTaskId", after.creationTaskId())
                 .set("safeErrorCode", after.safeErrorCode());
         return executionMapper.update(null, update) == 1;

@@ -71,6 +71,10 @@ class RecipeServiceTest {
         assertThatThrownBy(() -> service.create(SUBJECT, "  "))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("配方名称");
+        // 名称必须满足领域安全字符集，非法字符在服务层即被友好拒绝（而非领域裸抛 500）。
+        assertThatThrownBy(() -> service.create(SUBJECT, "a@b"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("配方名称");
         assertThatThrownBy(() -> service.create(AuthorizationSubject.platformAdmin(1L), "x"))
                 .isInstanceOf(BusinessException.class);
     }
@@ -123,6 +127,30 @@ class RecipeServiceTest {
         verify(versionRepository).append(appended.capture());
         assertThat(appended.getValue().version()).isEqualTo(3);
         assertThat(appended.getValue().whenJson()).contains("SIMILAR_STORY");
+    }
+
+    @Test
+    void publishDefinitionRetriesOnceWhenVersionNumberRaces() throws Exception {
+        when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.DRAFT, 0L)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(
+                        RecipeVersion.restore(2L, 9L, 2, WHEN_JSON, IF_JSON, THEN_JSON, NOW)),
+                Optional.of(RecipeVersion.restore(3L, 9L, 3, WHEN_JSON, IF_JSON, THEN_JSON, NOW)));
+        // 第一次 append 撞 (recipeId, version) 唯一键；重试基于最新版本 3 → 版本 4 成功。
+        when(versionRepository.append(any(RecipeVersion.class)))
+                .thenThrow(new org.springframework.dao.DuplicateKeyException("dup"))
+                .thenAnswer(invocation -> invocation.<RecipeVersion>getArgument(0).withId(4L));
+        when(versionRepository.findByRecipeId(9L)).thenReturn(List.of());
+
+        service.publishDefinition(SUBJECT, 9L, new ObjectMapper().readTree("""
+                {"when": {"type": "WEEKLY_REVIEW"}, "conditions": [],
+                 "then": {"capability": "EMOJI_DRAFT"}}
+                """));
+
+        org.mockito.ArgumentCaptor<RecipeVersion> appended =
+                org.mockito.ArgumentCaptor.forClass(RecipeVersion.class);
+        verify(versionRepository, org.mockito.Mockito.times(2)).append(appended.capture());
+        assertThat(appended.getAllValues().get(0).version()).isEqualTo(3);
+        assertThat(appended.getAllValues().get(1).version()).isEqualTo(4);
     }
 
     @Test

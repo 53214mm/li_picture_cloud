@@ -92,27 +92,36 @@ public record RecipeExecution(
                 triggeredTime, matchedJson, quoteJson, creationTaskId, safeErrorCode, createdTime);
     }
 
-    /** 试运行结束并产生真实创作任务（DRY_RUN → EXECUTED，终态）。 */
-    public RecipeExecution complete(long taskId, Instant now) {
+    /** 试运行结束并产生真实创作任务（DRY_RUN → EXECUTED，终态）；快照为执行时求值结果。 */
+    public RecipeExecution complete(long taskId, String matchedSnapshot, String quoteSnapshot,
+                                    Instant now) {
         requireDryRun("complete");
         return new RecipeExecution(id, recipeId, recipeVersion, subjectId,
-                RecipeExecutionStatus.EXECUTED, triggeredTime, matchedJson, quoteJson,
+                RecipeExecutionStatus.EXECUTED, triggeredTime,
+                checkText(matchedSnapshot, MAX_JSON_CODE_POINTS, "matchedJson"),
+                checkText(quoteSnapshot, MAX_QUOTE_CODE_POINTS, "quoteJson"),
                 requirePositiveTaskId(taskId), null, Objects.requireNonNull(now, "now"));
     }
 
     /** 执行失败（DRY_RUN → FAILED，终态），只携带安全错误码。 */
-    public RecipeExecution fail(String errorCode, Instant now) {
+    public RecipeExecution fail(String errorCode, String matchedSnapshot, String quoteSnapshot,
+                                Instant now) {
         requireDryRun("fail");
         return new RecipeExecution(id, recipeId, recipeVersion, subjectId,
-                RecipeExecutionStatus.FAILED, triggeredTime, matchedJson, quoteJson,
+                RecipeExecutionStatus.FAILED, triggeredTime,
+                checkText(matchedSnapshot, MAX_JSON_CODE_POINTS, "matchedJson"),
+                checkText(quoteSnapshot, MAX_QUOTE_CODE_POINTS, "quoteJson"),
                 null, checkErrorCode(errorCode), Objects.requireNonNull(now, "now"));
     }
 
     /** 条件未命中/守门拒绝（DRY_RUN → REJECTED，终态）。 */
-    public RecipeExecution reject(String errorCode, Instant now) {
+    public RecipeExecution reject(String errorCode, String matchedSnapshot, String quoteSnapshot,
+                                  Instant now) {
         requireDryRun("reject");
         return new RecipeExecution(id, recipeId, recipeVersion, subjectId,
-                RecipeExecutionStatus.REJECTED, triggeredTime, matchedJson, quoteJson,
+                RecipeExecutionStatus.REJECTED, triggeredTime,
+                checkText(matchedSnapshot, MAX_JSON_CODE_POINTS, "matchedJson"),
+                checkText(quoteSnapshot, MAX_QUOTE_CODE_POINTS, "quoteJson"),
                 null, checkErrorCode(errorCode), Objects.requireNonNull(now, "now"));
     }
 

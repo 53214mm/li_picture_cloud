@@ -58,6 +58,7 @@ public class RecipeDefinitionCodec {
         if (body == null || !body.isObject()) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "配方定义格式不正确");
         }
+        requireOnlyFields(body, "when", "conditions", "then");
         return fromNodes(body.path("when"), body.path("conditions"), body.path("then"));
     }
 

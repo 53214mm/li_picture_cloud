@@ -96,7 +96,8 @@ public class RecipeExecutionService {
         RecipeVersion version = requireLatestVersion(recipe.id());
         RecipeDefinition definition = codec.decode(version.whenJson(), version.ifJson(),
                 version.thenJson());
-        List<Long> ids = requireAuthorizedPictures(subject, definition.then().capability(), pictureIds);
+        List<Long> ids = requireValidPictureIds(definition.then().capability(), pictureIds);
+        reauthorizePictures(subject, ids);
         Instant now = clock.instant();
         return executionRepository.insert(RecipeExecution.dryRun(recipe.id(), version.version(),
                 subject.userId(), now,
@@ -122,17 +123,26 @@ public class RecipeExecutionService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_ERROR, "配方版本已失效"));
         RecipeDefinition definition = codec.decode(version.whenJson(), version.ifJson(),
                 version.thenJson());
-        List<Long> ids = requireAuthorizedPictures(subject, definition.then().capability(), pictureIds);
+        List<Long> ids = requireValidPictureIds(definition.then().capability(), pictureIds);
+        // 执行时按当前图片集合重新求值并快照，回放记录的是执行时结果而非试运行快照。
         Evaluation evaluation = evaluate(definition, ids, subject.userId());
+        String matchedJson = matchedJson(definition, evaluation);
+        String quoteJson = quoteJson(definition.then().capability());
+        try {
+            reauthorizePictures(subject, ids);
+        } catch (BusinessException unavailable) {
+            // 图片撤权/不可用：执行记录转入 REJECTED，不留悬空 DRY_RUN。
+            return reject(execution, "PICTURE_UNAVAILABLE", matchedJson, quoteJson);
+        }
         if (!evaluation.matched()) {
-            return reject(execution, CONDITION_UNMATCHED);
+            return reject(execution, CONDITION_UNMATCHED, matchedJson, quoteJson);
         }
         try {
             long taskId = invokeThen(definition.then().capability(), subject, ids, execution.id());
-            return complete(execution, taskId);
+            return complete(execution, taskId, matchedJson, quoteJson);
         } catch (RuntimeException failure) {
             try {
-                fail(execution, safeErrorCode(failure));
+                fail(execution, safeErrorCode(failure), matchedJson, quoteJson);
             } catch (RuntimeException recordFailure) {
                 // 记录失败不掩盖原始错误。
             }
@@ -235,9 +245,7 @@ public class RecipeExecutionService {
         return spaceService.getById(spaceId);
     }
 
-    private List<Long> requireAuthorizedPictures(AuthorizationSubject subject,
-                                                 CreationKind capability,
-                                                 List<Long> pictureIds) {
+    private List<Long> requireValidPictureIds(CreationKind capability, List<Long> pictureIds) {
         if (pictureIds == null || pictureIds.isEmpty()) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请选择执行配方使用的图片");
         }
@@ -252,23 +260,31 @@ public class RecipeExecutionService {
                 throw new BusinessException(ErrorCode.PARAMS_ERROR, "图片 ID 不合法");
             }
         }
-        List<Long> ids = List.copyOf(pictureIds);
+        return List.copyOf(pictureIds);
+    }
+
+    private void reauthorizePictures(AuthorizationSubject subject, List<Long> ids) {
         for (Long pictureId : ids) {
             authorization.checkForUser(PICTURE_VIEW, pictureId, subject.userId());
         }
-        return ids;
     }
 
-    private RecipeExecution reject(RecipeExecution execution, String code) {
-        return transition(execution, execution.reject(code, clock.instant()));
+    private RecipeExecution reject(RecipeExecution execution, String code, String matchedJson,
+                                   String quoteJson) {
+        return transition(execution, execution.reject(code, matchedJson, quoteJson,
+                clock.instant()));
     }
 
-    private RecipeExecution complete(RecipeExecution execution, long taskId) {
-        return transition(execution, execution.complete(taskId, clock.instant()));
+    private RecipeExecution complete(RecipeExecution execution, long taskId, String matchedJson,
+                                     String quoteJson) {
+        return transition(execution, execution.complete(taskId, matchedJson, quoteJson,
+                clock.instant()));
     }
 
-    private RecipeExecution fail(RecipeExecution execution, String code) {
-        return transition(execution, execution.fail(code, clock.instant()));
+    private RecipeExecution fail(RecipeExecution execution, String code, String matchedJson,
+                                 String quoteJson) {
+        return transition(execution, execution.fail(code, matchedJson, quoteJson,
+                clock.instant()));
     }
 
     private RecipeExecution transition(RecipeExecution current, RecipeExecution after) {
@@ -320,9 +336,14 @@ public class RecipeExecutionService {
 
     private String quoteJson(CreationKind capability) {
         try {
-            return objectMapper.writeValueAsString(Map.of(
-                    "capability", capability.name(),
-                    "platformUnits", quotedUnits(capability)));
+            java.util.Map<String, Object> quote = new java.util.HashMap<>();
+            quote.put("capability", capability.name());
+            quote.put("platformUnits", quotedUnits(capability));
+            if (capability == CreationKind.IMAGE_FUSION) {
+                // 平台图片创作未开放：融合只走用户 BYOK 连接，不占平台试用额度。
+                quote.put("byokOnly", true);
+            }
+            return objectMapper.writeValueAsString(quote);
         } catch (Exception failure) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "报价序列化失败");
         }

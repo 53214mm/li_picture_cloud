@@ -136,8 +136,20 @@ public class RecipeService {
                 .map(latest -> latest.version() + 1)
                 .orElse(1);
         RecipeDefinitionCodec.RecipeDefinitionJson json = codec.encode(definition);
-        versionRepository.append(RecipeVersion.create(recipe.id(), nextVersion,
-                json.whenJson(), json.ifJson(), json.thenJson(), clock.instant()));
+        try {
+            versionRepository.append(RecipeVersion.create(recipe.id(), nextVersion,
+                    json.whenJson(), json.ifJson(), json.thenJson(), clock.instant()));
+        } catch (org.springframework.dao.DuplicateKeyException lostRace) {
+            // (recipeId, version) 唯一键是最终仲裁：并发发布时输的一方基于最新版本重试一次。
+            int retriedVersion = versionRepository.findLatest(recipe.id())
+                    .map(latest -> latest.version() + 1)
+                    .orElse(1);
+            if (retriedVersion == nextVersion) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "版本发布冲突，请重试");
+            }
+            versionRepository.append(RecipeVersion.create(recipe.id(), retriedVersion,
+                    json.whenJson(), json.ifJson(), json.thenJson(), clock.instant()));
+        }
     }
 
     private RecipeDetailView buildDetail(Recipe recipe) {
@@ -176,10 +188,14 @@ public class RecipeService {
                 recipe.createdTime(), recipe.updatedTime());
     }
 
+    private static final java.util.regex.Pattern NAME_PATTERN =
+            java.util.regex.Pattern.compile("[\\p{L}\\p{N} _\\-]{1,64}");
+
     private static String requireName(String name) {
         String normalized = Objects.requireNonNull(name, "name").strip();
-        if (normalized.isEmpty() || normalized.codePointCount(0, normalized.length()) > 64) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "配方名称需为 1-64 个字符");
+        if (!NAME_PATTERN.matcher(normalized).matches()) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR,
+                    "配方名称需为 1-64 个安全字符（文字/数字/空格/_/-）");
         }
         return normalized;
     }

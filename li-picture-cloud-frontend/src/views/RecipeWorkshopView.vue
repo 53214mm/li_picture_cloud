@@ -54,7 +54,7 @@
         </li>
       </ul>
       <p v-else class="empty-state" data-testid="recipe-empty">
-        还没有配方。从上面的官方模板开始，或等待组合编辑器接入。
+        还没有配方。从上面的官方模板开始，或直接创建后组合自己的触发与动作。
       </p>
     </section>
 
@@ -74,6 +74,56 @@
         <p class="version-hint">版本 v{{ selected.latest.version }}（共 {{ selected.versions.length }} 个版本）</p>
       </div>
       <p v-else class="empty-state">这个配方还没有发布定义版本。</p>
+
+      <div class="recipe-editor" data-testid="recipe-editor">
+        <h3>组合编辑（发布新版本）</h3>
+        <form class="editor-form" @submit.prevent="publish">
+          <label class="editor-field">触发时机
+            <select v-model="editor.when" aria-label="触发时机">
+              <option v-for="(label, type) in RECIPE_WHEN_LABEL" :key="type" :value="type">
+                {{ label }}
+              </option>
+            </select>
+          </label>
+          <fieldset class="editor-field">
+            <legend>条件（最多 5 条，全部满足才执行；条件只会收紧范围与费用）</legend>
+            <div class="editor-conditions">
+              <span v-for="condition in editor.conditions" :key="condition.key" class="editor-chip">
+                {{ editorConditionLabel(condition) }}
+                <button type="button" class="chip-remove"
+                        :aria-label="`移除条件 ${editorConditionLabel(condition)}`"
+                        @click="removeCondition(condition.key)">×</button>
+              </span>
+              <p v-if="!editor.conditions.length" class="editor-empty">无条件（每次触发都会执行动作）。</p>
+            </div>
+            <div class="editor-adds">
+              <button type="button" class="btn btn-sm"
+                      :disabled="busy || editor.conditions.length >= 5 || editor.spacePrivate"
+                      @click="addCondition('SOURCE_SPACE_PRIVATE')">+ 仅私有空间图片</button>
+              <button type="button" class="btn btn-sm"
+                      :disabled="busy || editor.conditions.length >= 5 || editor.categoryAdded"
+                      @click="addCondition('SOURCE_CATEGORY')">+ 仅指定分类</button>
+              <button type="button" class="btn btn-sm"
+                      :disabled="busy || editor.conditions.length >= 5 || editor.costAdded"
+                      @click="addCondition('MAX_TRIAL_COST')">+ 试用额度上限</button>
+            </div>
+            <label v-if="editor.categoryAdded" class="editor-field">图片分类（安全纯文本）
+              <input v-model="editor.category" type="text" maxlength="16" placeholder="如 旅行">
+            </label>
+            <label v-if="editor.costAdded" class="editor-field">试用额度上限（单位）
+              <input v-model="editor.cost" type="number" min="1" max="1000000">
+            </label>
+          </fieldset>
+          <label class="editor-field">动作（白名单能力）
+            <select v-model="editor.then" aria-label="动作">
+              <option v-for="(label, capability) in RECIPE_CAPABILITY_LABEL" :key="capability"
+                      :value="capability">{{ label }}</option>
+            </select>
+          </label>
+          <button class="btn" type="submit" :disabled="busy || !editorValid">发布新版本</button>
+          <p class="dry-run-hint">新版本发布后，试运行与执行都会按最新版本重新评估。</p>
+        </form>
+      </div>
 
       <div class="dry-run" v-if="pictures.length">
         <h3>试运行（不会产生真实创作）</h3>
@@ -125,7 +175,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import {
   createRecipeFromTemplate,
   deleteRecipe,
@@ -136,9 +186,12 @@ import {
   getRecipeDetail,
   listRecipeExecutions,
   listRecipes,
-  listRecipeTemplates
+  listRecipeTemplates,
+  publishRecipeVersion
 } from '@/api/recipe'
 import {
+  RECIPE_CAPABILITY_LABEL,
+  RECIPE_WHEN_LABEL,
   recipeCapabilityLabel,
   recipeConditionLabel,
   recipeExecutionStatusLabel,
@@ -159,6 +212,27 @@ const pictures = ref([])
 const selectedIds = ref([])
 const busy = ref(false)
 const error = ref('')
+
+const editor = reactive({
+  when: 'WEEKLY_REVIEW',
+  then: 'STORY_DRAFT',
+  conditions: [],
+  spacePrivate: false,
+  categoryAdded: false,
+  category: '',
+  costAdded: false,
+  cost: ''
+})
+
+const editorValid = computed(() => {
+  if (editor.conditions.length > 5) return false
+  if (editor.categoryAdded && !editor.category.trim()) return false
+  if (editor.costAdded) {
+    const units = Number(editor.cost)
+    if (!Number.isInteger(units) || units < 1 || units > 1000000) return false
+  }
+  return true
+})
 
 onMounted(async () => {
   await Promise.all([loadTemplates(), loadRecipes(), loadPictures()])
@@ -218,10 +292,81 @@ async function select(recipe) {
   busy.value = true
   try {
     selected.value = await getRecipeDetail(recipe.id)
+    initEditor(selected.value)
     executions.value = (await listRecipeExecutions(recipe.id)) ?? []
     error.value = ''
   } catch (failure) {
     error.value = extractMessage(failure, '配方详情加载失败')
+  } finally {
+    busy.value = false
+  }
+}
+
+function initEditor(detail) {
+  const latest = detail?.latest
+  const parsedConditions = parseJson(latest?.ifJson) ?? []
+  editor.when = parseJson(latest?.whenJson)?.type || 'WEEKLY_REVIEW'
+  editor.then = parseJson(latest?.thenJson)?.capability || 'STORY_DRAFT'
+  editor.conditions = parsedConditions.map(condition => ({
+    key: condition.type,
+    type: condition.type
+  }))
+  editor.spacePrivate = parsedConditions.some(condition => condition.type === 'SOURCE_SPACE_PRIVATE')
+  editor.categoryAdded = parsedConditions.some(condition => condition.type === 'SOURCE_CATEGORY')
+  editor.category = parsedConditions.find(condition => condition.type === 'SOURCE_CATEGORY')?.category ?? ''
+  editor.costAdded = parsedConditions.some(condition => condition.type === 'MAX_TRIAL_COST')
+  editor.cost = parsedConditions.find(condition => condition.type === 'MAX_TRIAL_COST')?.units ?? ''
+}
+
+function addCondition(type) {
+  if (editor.conditions.length >= 5) return
+  if (type === 'SOURCE_SPACE_PRIVATE') {
+    editor.spacePrivate = true
+  }
+  if (type === 'SOURCE_CATEGORY') {
+    editor.categoryAdded = true
+  }
+  if (type === 'MAX_TRIAL_COST') {
+    editor.costAdded = true
+  }
+  editor.conditions.push({ key: type, type })
+}
+
+function removeCondition(key) {
+  editor.conditions = editor.conditions.filter(condition => condition.key !== key)
+  if (key === 'SOURCE_SPACE_PRIVATE') editor.spacePrivate = false
+  if (key === 'SOURCE_CATEGORY') editor.categoryAdded = false
+  if (key === 'MAX_TRIAL_COST') editor.costAdded = false
+}
+
+function editorConditionLabel(condition) {
+  if (condition.type === 'SOURCE_CATEGORY') return `仅「${editor.category || ''}」分类`
+  if (condition.type === 'MAX_TRIAL_COST') {
+    return `${recipeConditionLabel(condition.type)} ${editor.cost || ''} 单位`
+  }
+  return recipeConditionLabel(condition.type)
+}
+
+async function publish() {
+  if (!selected.value || !editorValid.value) return
+  busy.value = true
+  try {
+    const conditions = []
+    if (editor.spacePrivate) conditions.push({ type: 'SOURCE_SPACE_PRIVATE' })
+    if (editor.categoryAdded) {
+      conditions.push({ type: 'SOURCE_CATEGORY', category: editor.category.trim() })
+    }
+    if (editor.costAdded) conditions.push({ type: 'MAX_TRIAL_COST', units: Number(editor.cost) })
+    await publishRecipeVersion(selected.value.recipe.id, {
+      when: { type: editor.when },
+      conditions,
+      then: { capability: editor.then }
+    })
+    await select(selected.value.recipe)
+    await loadRecipes()
+    error.value = ''
+  } catch (failure) {
+    error.value = extractMessage(failure, '版本发布失败')
   } finally {
     busy.value = false
   }
@@ -310,6 +455,7 @@ function conditionText(condition) {
 function quoteText(quoteJson) {
   const quote = parseJson(quoteJson)
   if (!quote) return ''
+  if (quote.byokOnly) return `${recipeCapabilityLabel(quote.capability)} · 用户自带密钥`
   return `${recipeCapabilityLabel(quote.capability)} · 平台额度 ${quote.platformUnits} 单位`
 }
 

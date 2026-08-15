@@ -82,6 +82,12 @@ class RecipeDefinitionCodecTest {
                 {"when": {"type": "WEEKLY_REVIEW"},
                  "conditions": [], "then": {"capability": "STORY_DRAFT", "target": "x"}}
                 """))).isInstanceOf(BusinessException.class);
+
+        // 顶层未知字段同样大声失败。
+        assertThatThrownBy(() -> codec.decodeNode(new ObjectMapper().readTree("""
+                {"when": {"type": "WEEKLY_REVIEW"}, "conditions": [],
+                 "then": {"capability": "STORY_DRAFT"}, "evil": 1}
+                """))).isInstanceOf(BusinessException.class);
     }
 
     @Test

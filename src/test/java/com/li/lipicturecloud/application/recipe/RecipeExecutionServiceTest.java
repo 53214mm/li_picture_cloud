@@ -211,7 +211,46 @@ class RecipeExecutionServiceTest {
 
         assertThat(result.status()).isEqualTo(RecipeExecutionStatus.REJECTED);
         assertThat(result.safeErrorCode()).isEqualTo(RecipeExecutionService.CONDITION_UNMATCHED);
+        // 回放快照记录的是执行时求值结果（含未命中的条件），而非试运行快照。
+        assertThat(result.matchedJson()).contains("SOURCE_SPACE_PRIVATE").contains("false");
         verify(storyDraftService, never()).create(any(), any(), any());
+    }
+
+    @Test
+    void executeRejectsWhenPictureAuthorizationIsRevoked() {
+        when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
+        when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
+        when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
+        org.mockito.Mockito.doThrow(new BusinessException(
+                        com.li.lipicturecloud.exception.ErrorCode.FORBIDDEN_ERROR, "无权查看该图片"))
+                .when(authorization).checkForUser("picture:view", 102L, 7L);
+
+        RecipeExecution result = service.execute(SUBJECT, 9L, 5L, List.of(102L));
+
+        assertThat(result.status()).isEqualTo(RecipeExecutionStatus.REJECTED);
+        assertThat(result.safeErrorCode()).isEqualTo("PICTURE_UNAVAILABLE");
+        verify(storyDraftService, never()).create(any(), any(),
+                org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void executeRecordsExecutionTimeSnapshotInTheReplay() {
+        when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
+        when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
+        when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
+        CreationTask task = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
+                List.of(102L), com.li.lipicturecloud.domain.airuntime.CreationStatus.PENDING,
+                null, null, null, null, KEY, 0L, NOW, NOW);
+        String expectedKey = java.util.UUID.nameUUIDFromBytes(
+                        "recipe-execution-5".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .toString();
+        when(storyDraftService.create(SUBJECT, List.of(102L), expectedKey)).thenReturn(task);
+
+        RecipeExecution result = service.execute(SUBJECT, 9L, 5L, List.of(102L));
+
+        assertThat(result.status()).isEqualTo(RecipeExecutionStatus.EXECUTED);
+        assertThat(result.matchedJson()).contains("WEEKLY_REVIEW");
+        assertThat(result.quoteJson()).contains("STORY_DRAFT");
     }
 
     @Test

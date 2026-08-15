@@ -55,6 +55,12 @@ test('creates recipes from templates, dry-runs, executes and replays', async ({ 
   await expect(travelExecutions.getByText('生成故事草稿 · 平台额度 5 单位')).toBeVisible()
   await expect(travelExecutions.getByText('仅指定分类✓')).toBeVisible()
 
+  // 组合编辑：把旅行回顾的动作改成表情候选并发布 v2，版本可追溯。
+  await page.getByTestId('recipe-editor').getByLabel('动作').selectOption('EMOJI_DRAFT')
+  await page.getByRole('button', { name: '发布新版本' }).click()
+  await expect(page.getByTestId('recipe-definition')).toContainText('生成表情候选')
+  await expect(page.locator('.version-hint')).toContainText('版本 v2')
+
   // 每周表情：试运行 → 启用 → 确认执行 → 创作任务回放；随后停用。
   await openRecipe(page, '每周表情')
   await expect(page.getByTestId('recipe-definition')).toContainText('每周回顾时')

@@ -40,13 +40,21 @@ test('recipe api mirrors the workshop endpoints', async () => {
 test('recipe workshop view keeps whitelist semantics and safe display', async () => {
   const view = await readFile(fileURLToPath(new globalThis.URL('../src/views/RecipeWorkshopView.vue', import.meta.url)), 'utf8')
 
-  // 模板起点 + 我的配方 + 试运行 + 执行回放。
+  // 模板起点 + 我的配方 + 组合编辑 + 试运行 + 执行回放。
   assert.match(view, /官方模板/)
   assert.match(view, /我的配方/)
+  assert.match(view, /组合编辑（发布新版本）/)
+  assert.match(view, /发布新版本/)
   assert.match(view, /试运行（不会产生真实创作）/)
   assert.match(view, /执行回放/)
   assert.match(view, /data-testid="recipe-list"/)
+  assert.match(view, /data-testid="recipe-editor"/)
   assert.match(view, /data-testid="recipe-executions"/)
+  // 条件集合封闭：编辑器只提供三种收紧条件与白名单动作，没有自由文本提示词入口。
+  assert.match(view, /SOURCE_SPACE_PRIVATE/)
+  assert.match(view, /SOURCE_CATEGORY/)
+  assert.match(view, /MAX_TRIAL_COST/)
+  assert.match(view, /RECIPE_CAPABILITY_LABEL/)
   // 试运行与执行都只携带图片 ID 列表，不携带任何提示词或密钥字段。
   assert.match(view, /pictureIds: selectedIds\.value/)
   assert.doesNotMatch(view, /prompt|apiKey|token/)
