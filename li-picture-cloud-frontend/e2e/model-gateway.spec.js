@@ -47,12 +47,13 @@ test('control center manages credentials connections routing and usage', async (
   await expect(page.getByTestId('capability-chips')).toContainText('结构化输出')
   await expect(page.getByTestId('capability-chips')).toContainText('上下文 64000')
   await expect(page.getByTestId('capability-chips')).not.toContainText('视觉理解')
-  // 探测写一条使用记录，只含安全字段。
+  // 探测写一条使用记录，只含安全字段。使用记录按用户追加（融合故事线也会探测），
+  // 断言锁定最新一行（自己的探测），不做全局唯一假设。
   const usage = page.getByTestId('usage-table')
   await expect(usage).toBeVisible()
-  await expect(usage.getByText('CONNECTIVITY_CHECK')).toBeVisible()
-  await expect(usage.getByText('成功')).toBeVisible()
-  await expect(usage.getByText('用户自带密钥')).toBeVisible()
+  await expect(usage.getByText('CONNECTIVITY_CHECK').first()).toBeVisible()
+  await expect(usage.getByText('成功').first()).toBeVisible()
+  await expect(usage.getByText('用户自带密钥').first()).toBeVisible()
 
   // 4. 语言任务路由绑定到用户连接。
   await page.locator('.routing-row').first().locator('select')

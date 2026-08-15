@@ -126,6 +126,8 @@
 
           <CompanionEmojiPanel :pictures="pictures" :refresh-key="panelsRefreshKey" />
 
+          <CompanionFusionPanel :pictures="pictures" :refresh-key="panelsRefreshKey" />
+
           <CompanionGrowthTimeline :records="home.recentGrowth || []" />
         </template>
       </template>
@@ -148,6 +150,7 @@ import CompanionRelationshipPanel from '@/components/companion/CompanionRelation
 import CompanionMemoryPanel from '@/components/companion/CompanionMemoryPanel.vue'
 import CompanionStoryPanel from '@/components/companion/CompanionStoryPanel.vue'
 import CompanionEmojiPanel from '@/components/companion/CompanionEmojiPanel.vue'
+import CompanionFusionPanel from '@/components/companion/CompanionFusionPanel.vue'
 import CompanionChatPanel from '@/components/companion/CompanionChatPanel.vue'
 import CompanionProposalPanel from '@/components/companion/CompanionProposalPanel.vue'
 import {

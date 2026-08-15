@@ -15,3 +15,10 @@ export const selectEmojiCandidate = (id, index) =>
 export const saveEmoji = id => request.post(`/creation/emoji/${id}/save`)
 export const listEmojiTasks = (limit = 20) =>
   request.get('/creation/emoji', { params: { limit } })
+
+export const createFusion = data => request.post('/creation/fusion', data)
+export const generateFusion = id => request.post(`/creation/fusion/${id}/generate`)
+export const saveFusion = (id, data) => request.post(`/creation/fusion/${id}/save`, data)
+export const listFusionTasks = (limit = 20) =>
+  request.get('/creation/fusion', { params: { limit } })
+export const fusionPreviewUrl = id => `/api/creation/fusion/${id}/preview`

@@ -66,6 +66,15 @@
 
 复用创作任务管线（授权复核/语言路由/试用账本/血缘），新增 `creation_candidate` 追加表（(taskId, seq) 唯一）与 `CreationTask.selectDraft` 转移；`EmojiDraftService` 从授权图片生成文字版表情候选（安全纯文本过滤：无控制字符/链接、≤200 字、上限 8 条，不依赖图像模型），用户选中其一保存为文本作品；`CreationServiceSupport` 抽取故事/表情共享支撑（执行前 PICTURE_VIEW 复核、分类落地线索、CAS 转移、30 分钟确认超时惰性过期）；伙伴页新增「表情草稿」面板（单选来源图片 + 候选单选组 + 选中保存）；列表按玩法种类过滤。
 
+## 第六个切片：多图融合（提交 6ca9bb0 / 6aedf72）
+
+规格 §2.3 的第三个玩法，接入 Q3 图像创作路由后启用：
+
+1. **暂存与血缘**（6ca9bb0）：`creation_lineage` 增加 `resultPictureId`（文本玩法为 null，融合保存后写入结果图片 ID）；新增 `creation_fusion_image` 表（taskId 唯一，jpeg/png/webp，≤16 MiB，读取防御性复制）——融合结果字节存专用表，`AWAITING_CONFIRM` 的文本字段绝不含 base64；`CreationTask` 增加 `completeFusion/confirmFusion/completeFusionSave` 转移（OUTLINING→AWAITING_CONFIRM→SAVING→SAVED，保存后结果图片 ID 写入 `resultText` 文档化映射）。
+2. **应用服务**（6aedf72）：`FusionImageService`：创建要求 ≥2 张授权图片；生成走 `ImageRouter`（平台图片创作账本未上线 → 平台路由大声失败；BYOK 连接必须通过 imageGeneration 能力画像门禁），提示词只由图片数量与安全分类落地线索构建（绝不携带图片字节/名称/用户原文），只接受内联 b64_json（仅返回供应商临时 URL 的连接大声失败，不代为抓取避免 SSRF）；`ImageFormatSniffer` 按魔数判定 jpeg/png/webp；保存要求显式目标空间，执行前复核来源图片 PICTURE_VIEW，经 `FusionArtworkSaver` 端口复用现有图片上传/保存管线（空间写权限/额度/审核与可见性，原图永不覆盖）；预览端点 `GET /creation/fusion/{id}/preview` 按图片 MIME 返回暂存字节（no-store + nosniff + 所有权校验）。
+3. **E2E 全离线**：`image-stub`（固定 1x1 PNG b64）与 `app.creation.artwork-stub`（回库返回固定作品 ID，不走 COS）两个 stub 属性；E2E 用 API 建 OpenAI/gpt-image-2 连接 + 探测（写能力画像）+ IMAGE_CREATION 路由，雪花 ID 全程字符串传递，结束清理路由/连接/凭据（使用记录按用户追加保留）。
+4. **前端**：伙伴页新增「多图融合」面板（≥2 张多选、生成、预览带 revision 防缓存、显式选目标空间 + 可选作品名、保存后展示新图片 ID）。
+
 ## 独立审查与修复（第五轮审查）
 
 审查结论：P0 无；P1×1；P2×7，已全部修复并回归测试：
