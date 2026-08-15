@@ -123,4 +123,37 @@ CREATE TABLE creation_candidate (
         ]]></sql>
         <rollback><dropTable tableName="creation_candidate"/></rollback>
     </changeSet>
+
+    <changeSet id="20260815-10" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not>
+                <columnExists tableName="creation_lineage" columnName="resultPictureId"/>
+            </not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE creation_lineage ADD COLUMN resultPictureId BIGINT NULL;
+        ]]></sql>
+        <rollback>
+            <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE creation_lineage DROP COLUMN resultPictureId;
+            ]]></sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260815-11" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="creation_fusion_image"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE creation_fusion_image (
+    id BIGINT PRIMARY KEY,
+    taskId BIGINT NOT NULL,
+    mimeType VARCHAR(32) NOT NULL,
+    bytes LONGBLOB NOT NULL,
+    createdTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_creation_fusion_image_task UNIQUE (taskId)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="creation_fusion_image"/></rollback>
+    </changeSet>
 </databaseChangeLog>

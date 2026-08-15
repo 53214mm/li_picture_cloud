@@ -8,17 +8,13 @@ import lombok.Data;
 import java.util.Date;
 
 @Data
-@TableName("creation_lineage")
-public class CreationLineageEntity {
+@TableName("creation_fusion_image")
+public class CreationFusionImageEntity {
 
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long taskId;
-    private Long sourcePictureId;
-    private Long resultPictureId;
-    private String capabilityId;
-    private String modelCode;
-    private String promptTemplateVersion;
-    private String costSource;
+    private String mimeType;
+    private byte[] bytes;
     private Date createdTime;
 }

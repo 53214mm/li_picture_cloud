@@ -137,6 +137,57 @@ class CreationTaskTest {
     }
 
     @Test
+    void fusionHappyPathKeepsTextFieldsEmptyUntilSave() {
+        CreationTask task = CreationTask.create(7L, CreationKind.IMAGE_FUSION, List.of(102L, 103L),
+                KEY, NOW).withId(9L);
+        assertThat(task.sourcePictureIds()).hasSize(2);
+
+        CreationTask outlining = task.startOutlining(NOW);
+        CreationTask awaiting = outlining.completeFusion(5L, NOW);
+        assertThat(awaiting.status()).isEqualTo(CreationStatus.AWAITING_CONFIRM);
+        assertThat(awaiting.outlineText()).isNull();
+        assertThat(awaiting.draftText()).isNull();
+        assertThat(awaiting.modelConnectionId()).isEqualTo(5L);
+
+        CreationTask saving = awaiting.confirmFusion(NOW);
+        assertThat(saving.status()).isEqualTo(CreationStatus.SAVING);
+
+        CreationTask saved = saving.completeFusionSave(300L, NOW);
+        assertThat(saved.status()).isEqualTo(CreationStatus.SAVED);
+        assertThat(saved.resultText()).isEqualTo("300");
+        assertThat(saved.isTerminal()).isTrue();
+        assertThat(saved.revision()).isEqualTo(4L);
+    }
+
+    @Test
+    void fusionTransitionsAreRejectedInWrongStates() {
+        CreationTask pending = CreationTask.create(7L, CreationKind.IMAGE_FUSION, List.of(102L),
+                KEY, NOW).withId(9L);
+        assertThatThrownBy(() -> pending.completeFusion(5L, NOW))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> pending.confirmFusion(NOW))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> pending.completeFusionSave(300L, NOW))
+                .isInstanceOf(IllegalStateException.class);
+
+        CreationTask awaiting = pending.startOutlining(NOW).completeFusion(5L, NOW);
+        assertThatThrownBy(() -> awaiting.completeFusionSave(300L, NOW))
+                .isInstanceOf(IllegalStateException.class);
+        // 故事式等待确认任务不能走融合确认。
+        CreationTask storyAwaiting = new CreationTask(10L, 7L, CreationKind.STORY_DRAFT,
+                List.of(102L), CreationStatus.AWAITING_CONFIRM, "大纲", null, null, null, KEY,
+                3L, NOW, NOW);
+        assertThatThrownBy(() -> storyAwaiting.confirmFusion(NOW))
+                .isInstanceOf(IllegalStateException.class);
+
+        CreationTask saving = awaiting.confirmFusion(NOW);
+        assertThatThrownBy(() -> saving.completeFusionSave(0L, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> saving.completeFusionSave(-1L, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void withIdAndTimestampGuards() {
         CreationTask created = CreationTask.create(7L, CreationKind.STORY_DRAFT, List.of(102L),
                 KEY, NOW);

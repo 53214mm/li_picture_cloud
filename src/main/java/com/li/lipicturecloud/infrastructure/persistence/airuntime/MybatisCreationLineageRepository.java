@@ -29,6 +29,7 @@ public class MybatisCreationLineageRepository implements CreationLineageReposito
         CreationLineageEntity row = new CreationLineageEntity();
         row.setTaskId(lineage.taskId());
         row.setSourcePictureId(lineage.sourcePictureId());
+        row.setResultPictureId(lineage.resultPictureId());
         row.setCapabilityId(lineage.capabilityId());
         row.setModelCode(lineage.modelCode());
         row.setPromptTemplateVersion(lineage.promptTemplateVersion());
@@ -51,8 +52,8 @@ public class MybatisCreationLineageRepository implements CreationLineageReposito
 
     private CreationLineage fromRow(CreationLineageEntity row) {
         return new CreationLineage(row.getId(), row.getTaskId(), row.getSourcePictureId(),
-                row.getCapabilityId(), row.getModelCode(), row.getPromptTemplateVersion(),
-                row.getCostSource(), Objects.requireNonNull(row.getCreatedTime(), "createdTime")
-                .toInstant());
+                row.getResultPictureId(), row.getCapabilityId(), row.getModelCode(),
+                row.getPromptTemplateVersion(), row.getCostSource(),
+                Objects.requireNonNull(row.getCreatedTime(), "createdTime").toInstant());
     }
 }

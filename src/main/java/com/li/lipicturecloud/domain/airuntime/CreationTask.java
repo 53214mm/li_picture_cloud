@@ -129,6 +129,30 @@ public record CreationTask(
                 MAX_DRAFT_CODE_POINTS, "draft"), null, now);
     }
 
+    /** 融合生成完成：图片字节存于专用暂存表，任务进入等待确认（无文本草稿）。 */
+    public CreationTask completeFusion(Long modelConnectionId, Instant now) {
+        requireStatus(CreationStatus.OUTLINING, "completeFusion");
+        return advance(CreationStatus.AWAITING_CONFIRM, null, null, null, now, modelConnectionId);
+    }
+
+    /** 用户确认融合结果，进入保存（目标空间与可见性在保存时确认）。 */
+    public CreationTask confirmFusion(Instant now) {
+        requireStatus(CreationStatus.AWAITING_CONFIRM, "confirmFusion");
+        if (outlineText != null || draftText != null) {
+            throw new IllegalStateException("confirmFusion requires a fusion task awaiting confirmation");
+        }
+        return advance(CreationStatus.SAVING, null, null, null, now);
+    }
+
+    /** 融合作品回库完成：结果图片 ID 写入 resultText（血缘另行写入 resultPictureId）。 */
+    public CreationTask completeFusionSave(long resultPictureId, Instant now) {
+        requireStatus(CreationStatus.SAVING, "completeFusionSave");
+        if (resultPictureId <= 0) {
+            throw new IllegalArgumentException("resultPictureId must be positive");
+        }
+        return advance(CreationStatus.SAVED, null, null, Long.toString(resultPictureId), now);
+    }
+
     public CreationTask completeSave(String result, Instant now) {
         requireStatus(CreationStatus.SAVING, "completeSave");
         return advance(CreationStatus.SAVED, outlineText, draftText, requireSafeText(result,

@@ -52,6 +52,7 @@ rules:
       - primary.creation_task
       - primary.creation_lineage
       - primary.creation_candidate
+      - primary.creation_fusion_image
     defaultDataSource: primary
 
 props:

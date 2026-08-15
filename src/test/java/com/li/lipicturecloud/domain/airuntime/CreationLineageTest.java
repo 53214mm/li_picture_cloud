@@ -13,41 +13,48 @@ class CreationLineageTest {
 
     @Test
     void buildsValidLineageRows() {
-        CreationLineage lineage = new CreationLineage(null, 9L, 102L, "STORY_DRAFT_OUTLINE",
-                "demo-v1", "story-v1", "PLATFORM", NOW);
+        CreationLineage textLineage = new CreationLineage(null, 9L, 102L, null,
+                "STORY_DRAFT_OUTLINE", "demo-v1", "story-v1", "PLATFORM", NOW);
 
-        assertThat(lineage.taskId()).isEqualTo(9L);
-        assertThat(lineage.sourcePictureId()).isEqualTo(102L);
-        assertThat(lineage.costSource()).isEqualTo("PLATFORM");
+        assertThat(textLineage.taskId()).isEqualTo(9L);
+        assertThat(textLineage.sourcePictureId()).isEqualTo(102L);
+        assertThat(textLineage.resultPictureId()).isNull();
+        assertThat(textLineage.costSource()).isEqualTo("PLATFORM");
+
+        CreationLineage fusionLineage = new CreationLineage(null, 9L, 102L, 300L,
+                "IMAGE_FUSION_SAVE", "gpt-image-2", "fusion-v1", "BYOK", NOW);
+        assertThat(fusionLineage.resultPictureId()).isEqualTo(300L);
     }
 
     @Test
     void rejectsInvalidFields() {
-        assertThatThrownBy(() -> new CreationLineage(null, 0L, 102L, "CAP", "m", "v", "S", NOW))
+        assertThatThrownBy(() -> new CreationLineage(null, 0L, 102L, null, "CAP", "m", "v", "S", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CreationLineage(null, 9L, 0L, "CAP", "m", "v", "S", NOW))
+        assertThatThrownBy(() -> new CreationLineage(null, 9L, 0L, null, "CAP", "m", "v", "S", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, "bad id", "m", "v", "S", NOW))
+        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, 0L, "CAP", "m", "v", "S", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, "CAP", "bad model", "v", "S", NOW))
+        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, null, "bad id", "m", "v", "S", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, "CAP", "m", "bad version!", "S", NOW))
+        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, null, "CAP", "bad model", "v", "S", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, "CAP", "m", "v", "FREE!", NOW))
+        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, null, "CAP", "m", "bad version!", "S", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CreationLineage(0L, 9L, 102L, "CAP", "m", "v", "S", NOW))
+        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, null, "CAP", "m", "v", "FREE!", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CreationLineage(-1L, 9L, 102L, "CAP", "m", "v", "S", NOW))
+        assertThatThrownBy(() -> new CreationLineage(0L, 9L, 102L, null, "CAP", "m", "v", "S", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, null, "m", "v", "S", NOW))
+        assertThatThrownBy(() -> new CreationLineage(-1L, 9L, 102L, null, "CAP", "m", "v", "S", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, "CAP", "m", "v", "S", null))
+        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, null, null, "m", "v", "S", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CreationLineage(null, 9L, 102L, null, "CAP", "m", "v", "S", null))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void withIdAssignsPersistedIdExactlyOnce() {
-        CreationLineage lineage = new CreationLineage(null, 9L, 102L, "STORY_DRAFT_OUTLINE",
+        CreationLineage lineage = new CreationLineage(null, 9L, 102L, null, "STORY_DRAFT_OUTLINE",
                 "demo-v1", "story-v1", "PLATFORM", NOW);
         CreationLineage persisted = lineage.withId(3L);
         assertThat(persisted.id()).isEqualTo(3L);

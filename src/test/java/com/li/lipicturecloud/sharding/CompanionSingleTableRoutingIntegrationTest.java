@@ -145,6 +145,16 @@ class CompanionSingleTableRoutingIntegrationTest {
         assertThat(update(connection, "DELETE FROM companion_feed_run WHERE id = ?", 8102L)).isEqualTo(1);
         assertThat(update(connection, "DELETE FROM companion_skill WHERE id = ?", 8101L)).isEqualTo(1);
         assertThat(update(connection, "DELETE FROM companion WHERE id = ?", COMPANION_ID)).isEqualTo(1);
+
+        assertThat(update(connection, """
+                INSERT INTO creation_fusion_image (id, taskId, mimeType, bytes)
+                VALUES (?, ?, ?, ?)
+                """, 8105L, 9101L, "image/png", new byte[]{1, 2, 3})).isEqualTo(1);
+        assertThat(update(connection, "UPDATE creation_fusion_image SET mimeType = ? WHERE id = ?",
+                "image/jpeg", 8105L)).isEqualTo(1);
+        assertThat(value(connection, "SELECT mimeType FROM creation_fusion_image WHERE id = ?", 8105L))
+                .isEqualTo("image/jpeg");
+        assertThat(update(connection, "DELETE FROM creation_fusion_image WHERE id = ?", 8105L)).isEqualTo(1);
     }
 
     private int update(Connection connection, String sql, Object... parameters) throws SQLException {

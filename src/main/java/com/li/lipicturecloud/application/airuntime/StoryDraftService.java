@@ -224,7 +224,7 @@ public class StoryDraftService {
     private void recordLineage(CreationTask task, String capabilityId, String modelCode,
                                String costSource) {
         for (Long pictureId : task.sourcePictureIds()) {
-            lineageRepository.append(new CreationLineage(null, task.id(), pictureId,
+            lineageRepository.append(new CreationLineage(null, task.id(), pictureId, null,
                     capabilityId, modelCode, PROMPT_TEMPLATE_VERSION, costSource,
                     clock.instant()));
         }
