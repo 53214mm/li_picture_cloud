@@ -199,6 +199,57 @@ class StoryDraftServiceTest {
     }
 
     @Test
+    void draftAcceptsMultiLineModelText() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.AWAITING_CONFIRM, 2L, "大纲", null)));
+        when(chatModel.call(any(org.springframework.ai.chat.prompt.Prompt.class))).thenAnswer(
+                invocation -> {
+                    org.springframework.ai.chat.model.ChatResponse response =
+                            mock(org.springframework.ai.chat.model.ChatResponse.class);
+                    org.springframework.ai.chat.model.Generation generation =
+                            mock(org.springframework.ai.chat.model.Generation.class);
+                    when(response.getResult()).thenReturn(generation);
+                    when(generation.getOutput()).thenReturn(
+                            new org.springframework.ai.chat.messages.AssistantMessage(
+                                    "第一段。\n第二段。"));
+                    return response;
+                });
+
+        CreationTask result = service.draft(SUBJECT, 9L);
+
+        assertThat(result.status()).isEqualTo(CreationStatus.AWAITING_CONFIRM);
+        assertThat(result.draftText()).isEqualTo("第一段。\n第二段。");
+        verify(trialLedger).settle(7L, StoryDraftService.DRAFT_TRIAL_COST);
+    }
+
+    @Test
+    void draftMapsUnsafeModelTextToFriendlyErrorAndFailsTask() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.AWAITING_CONFIRM, 2L, "大纲", null)));
+        when(chatModel.call(any(org.springframework.ai.chat.prompt.Prompt.class))).thenAnswer(
+                invocation -> {
+                    org.springframework.ai.chat.model.ChatResponse response =
+                            mock(org.springframework.ai.chat.model.ChatResponse.class);
+                    org.springframework.ai.chat.model.Generation generation =
+                            mock(org.springframework.ai.chat.model.Generation.class);
+                    when(response.getResult()).thenReturn(generation);
+                    when(generation.getOutput()).thenReturn(
+                            new org.springframework.ai.chat.messages.AssistantMessage(
+                                    "带\u0007控制字符的草稿"));
+                    return response;
+                });
+
+        assertThatThrownBy(() -> service.draft(SUBJECT, 9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("安全文本要求");
+        // 试用额度释放且任务转入 FAILED 终态，不裸抛 500。
+        verify(trialLedger).release(7L, StoryDraftService.DRAFT_TRIAL_COST);
+        verify(trialLedger, never()).settle(anyLong(), anyLong());
+        verify(taskRepository).save(org.mockito.ArgumentMatchers.argThat(t ->
+                t.status() == CreationStatus.FAILED), anyLong());
+    }
+
+    @Test
     void insufficientTrialBalanceAlsoFailsTheTaskInsteadOfLeavingItStuck() {
         when(taskRepository.findById(9L)).thenReturn(Optional.of(
                 task(CreationStatus.PENDING, 0L, null, null)));

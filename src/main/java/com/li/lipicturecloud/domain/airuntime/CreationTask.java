@@ -215,13 +215,17 @@ public record CreationTask(
         if (stripped.isEmpty()) {
             throw new IllegalArgumentException(field + " must not be blank");
         }
-        int length = stripped.codePointCount(0, stripped.length());
+        // 排版空白是安全纯文本的组成部分（前端 pre-wrap 展示）：统一换行风格后放行，
+        // 其余控制字符（含双向/分隔等技巧字符）一律拒绝。
+        String normalized = stripped.replace("\r\n", "\n").replace('\r', '\n');
+        int length = normalized.codePointCount(0, normalized.length());
         if (length > maxCodePoints) {
             throw new IllegalArgumentException(field + " exceeds " + maxCodePoints + " characters");
         }
-        if (stripped.codePoints().anyMatch(Character::isISOControl)) {
+        if (normalized.codePoints().anyMatch(codePoint ->
+                codePoint != '\n' && codePoint != '\t' && Character.isISOControl(codePoint))) {
             throw new IllegalArgumentException(field + " must be safe plain text");
         }
-        return stripped;
+        return normalized;
     }
 }

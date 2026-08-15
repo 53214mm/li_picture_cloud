@@ -103,9 +103,14 @@ public class StoryDraftService {
             String text = invoke(route, OUTLINE_PROMPT_TEMPLATE.formatted(
                     task.sourcePictureIds().size(), support.grounding(task.sourcePictureIds())));
             // 关键：转移成功后把 task 推进到当前状态，后续失败必须基于最新状态写 FAILED。
-            task = support.transition(task,
-                    task.completeOutline(text, route.isByok() ? route.connection().id() : null,
-                            clock.instant()));
+            try {
+                task = support.transition(task,
+                        task.completeOutline(text, route.isByok() ? route.connection().id() : null,
+                                clock.instant()));
+            } catch (IllegalArgumentException unsafeText) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR,
+                        "故事大纲生成内容不符合安全文本要求，请重试");
+            }
             recordLineage(task, CAPABILITY_OUTLINE, support.modelCode(route),
                     support.costSource(route));
             if (platform) {
@@ -152,7 +157,12 @@ public class StoryDraftService {
             }
             String text = invoke(route, DRAFT_PROMPT_TEMPLATE.formatted(task.outlineText()));
             // 关键：转移成功后把 task 推进到当前状态，后续失败必须基于最新状态写 FAILED。
-            task = support.transition(task, task.completeDraft(text, clock.instant()));
+            try {
+                task = support.transition(task, task.completeDraft(text, clock.instant()));
+            } catch (IllegalArgumentException unsafeText) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR,
+                        "故事草稿生成内容不符合安全文本要求，请重试");
+            }
             recordLineage(task, CAPABILITY_DRAFT, support.modelCode(route),
                     support.costSource(route));
             if (platform) {

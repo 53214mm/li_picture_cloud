@@ -188,6 +188,25 @@ class CreationTaskTest {
     }
 
     @Test
+    void allowsFormattingWhitespaceButRejectsOtherControlCharacters() {
+        CreationTask outlining = CreationTask.create(7L, CreationKind.STORY_DRAFT, List.of(102L),
+                KEY, NOW).withId(9L).startOutlining(NOW);
+
+        // 模型故事文本天然含换行/制表符：属于安全纯文本排版空白，必须放行。
+        CreationTask withNewlines = outlining.completeOutline("第一段。\n第二段。\t继续", null, NOW);
+        assertThat(withNewlines.outlineText()).isEqualTo("第一段。\n第二段。\t继续");
+
+        CreationTask drafting = withNewlines.confirmOutline(NOW);
+        CreationTask draftWithCrlf = drafting.completeDraft("正文一。\r\n正文二。", NOW);
+        assertThat(draftWithCrlf.draftText()).isEqualTo("正文一。\n正文二。");
+
+        // 其余控制字符（如 BEL）仍然拒绝。
+        assertThatThrownBy(() -> drafting.completeDraft("带\u0007控制字符", NOW))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("safe plain text");
+    }
+
+    @Test
     void fusionTransitionsRejectNonFusionKinds() {
         CreationTask storyOutlining = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
                 List.of(102L), CreationStatus.OUTLINING, null, null, null, null, KEY,
