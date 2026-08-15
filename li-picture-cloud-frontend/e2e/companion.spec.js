@@ -82,6 +82,8 @@ test('awakens a companion and recovers one private-picture feed without double g
   expect(homeBody.data.recentGrowth).toHaveLength(1)
 
   await page.reload()
+  // 先等主页稳定锚点再断言成长数据，避免 reload 渲染竞态。
+  await expect(page.getByText('实际来源会逐条写入成长档案')).toBeVisible()
   await expect(page.getByText('42 / 100 生命经验')).toBeVisible()
   await expect(page.getByText('+42 生命经验')).toBeVisible()
   await expect(page.getByTestId('skill-IMAGE_OBSERVATION')).toContainText('18 / 100')
@@ -149,6 +151,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.locator('.timeline-list').getByRole('link', { name: '图片 #102', exact: true })).toHaveCount(2)
 
   await page.reload()
+  await expect(page.getByText('实际来源会逐条写入成长档案')).toBeVisible()
   await expect(labels.nth(0)).toHaveText('Qwen 视觉营养 · 已分析图片内容')
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
 })

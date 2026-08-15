@@ -18,6 +18,14 @@ spring:
     # The full test profile already exercises rollback-on-update. The browser runtime
     # needs one stable migrated database rather than Liquibase's temporary rollback cycle.
     test-rollback-on-update: false
+  data:
+    redis:
+      # 独立无密码 Redis（lipicturecloud-redis-e2e，端口 6380）：
+      # 宿主 6379 可能被带 requirepass 的原生 Redis 占用，E2E 不得依赖它。
+      host: 127.0.0.1
+      port: 6380
+      password: ""
+      database: 15
 
 app:
   companion:

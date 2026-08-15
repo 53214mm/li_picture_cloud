@@ -93,6 +93,8 @@ test('fuses two authorized pictures and saves the artwork to a chosen space', as
 
     // 刷新后保持已保存状态，预览仍可回看。
     await page.reload()
+    // 先等融合面板锚点，再断言已保存状态，避免 reload 渲染竞态。
+    await expect(page.getByText('把多张图片融合成一张新作品')).toBeVisible()
     await expect(page.getByTestId('fusion-list').getByText('已保存', { exact: true })).toBeVisible()
 
     const listResponse = await page.request.get('/api/creation/fusion')

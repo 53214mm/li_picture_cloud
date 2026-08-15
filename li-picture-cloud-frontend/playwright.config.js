@@ -5,6 +5,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  // 机器负载高时后端冷启动 + reload 会拖慢页面；放宽单测预算避免时序性假失败。
+  timeout: 60_000,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:15173',
