@@ -85,7 +85,7 @@ public class StoryDraftService {
     }
 
     public CreationTask outline(AuthorizationSubject subject, long taskId) {
-        CreationTask task = support.requireOwned(subject, taskId);
+        CreationTask task = support.requireOwnedOfKind(subject, taskId, CreationKind.STORY_DRAFT);
         try {
             task = support.transition(task, task.startOutlining(clock.instant()));
         } catch (IllegalStateException wrongState) {
@@ -126,7 +126,7 @@ public class StoryDraftService {
     }
 
     public CreationTask confirmOutline(AuthorizationSubject subject, long taskId) {
-        CreationTask task = support.requireOwned(subject, taskId);
+        CreationTask task = support.requireOwnedOfKind(subject, taskId, CreationKind.STORY_DRAFT);
         try {
             return support.transition(task, task.confirmOutline(clock.instant()));
         } catch (IllegalStateException wrongState) {
@@ -135,7 +135,7 @@ public class StoryDraftService {
     }
 
     public CreationTask draft(AuthorizationSubject subject, long taskId) {
-        CreationTask task = support.requireOwned(subject, taskId);
+        CreationTask task = support.requireOwnedOfKind(subject, taskId, CreationKind.STORY_DRAFT);
         try {
             task = support.transition(task, task.confirmOutline(clock.instant()));
         } catch (IllegalStateException wrongState) {
@@ -173,7 +173,7 @@ public class StoryDraftService {
     }
 
     public CreationTask save(AuthorizationSubject subject, long taskId) {
-        CreationTask task = support.requireOwned(subject, taskId);
+        CreationTask task = support.requireOwnedOfKind(subject, taskId, CreationKind.STORY_DRAFT);
         try {
             CreationTask saving = support.transition(task, task.confirmDraft(clock.instant()));
             return support.transition(saving, saving.completeSave(saving.draftText(), clock.instant()));

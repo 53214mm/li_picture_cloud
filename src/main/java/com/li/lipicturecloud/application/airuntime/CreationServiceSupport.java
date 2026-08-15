@@ -1,6 +1,7 @@
 package com.li.lipicturecloud.application.airuntime;
 
 import com.li.lipicturecloud.domain.airuntime.CostSource;
+import com.li.lipicturecloud.domain.airuntime.CreationKind;
 import com.li.lipicturecloud.domain.airuntime.CreationStatus;
 import com.li.lipicturecloud.domain.airuntime.CreationTask;
 import com.li.lipicturecloud.domain.airuntime.CreationTaskRepository;
@@ -51,6 +52,16 @@ public class CreationServiceSupport {
             throw new BusinessException(ErrorCode.FORBIDDEN_ERROR, "无权操作该创作任务");
         }
         return expireIfStale(task);
+    }
+
+    /** 归属校验 + 玩法种类守门：跨玩法操作一律按不存在处理，防止状态机被串用。 */
+    public CreationTask requireOwnedOfKind(AuthorizationSubject subject, long taskId,
+                                           CreationKind kind) {
+        CreationTask task = requireOwned(subject, taskId);
+        if (task.kind() != kind) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "创作任务不存在");
+        }
+        return task;
     }
 
     public CreationTask transition(CreationTask current, CreationTask after) {

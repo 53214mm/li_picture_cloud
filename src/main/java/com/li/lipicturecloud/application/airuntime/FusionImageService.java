@@ -194,11 +194,7 @@ public class FusionImageService {
     }
 
     private CreationTask requireFusionTask(AuthorizationSubject subject, long taskId) {
-        CreationTask task = support.requireOwned(subject, taskId);
-        if (task.kind() != CreationKind.IMAGE_FUSION) {
-            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "创作任务不存在");
-        }
-        return task;
+        return support.requireOwnedOfKind(subject, taskId, CreationKind.IMAGE_FUSION);
     }
 
     /** 融合暂存只接受内联 base64 图片；仅返回供应商临时 URL 的连接大声失败，不代为抓取（SSRF 风险）。 */

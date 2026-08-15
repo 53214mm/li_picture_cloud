@@ -84,7 +84,7 @@ public class EmojiDraftService {
     }
 
     public CreationTask generate(AuthorizationSubject subject, long taskId) {
-        CreationTask task = support.requireOwned(subject, taskId);
+        CreationTask task = support.requireOwnedOfKind(subject, taskId, CreationKind.EMOJI_DRAFT);
         try {
             task = support.transition(task, task.startOutlining(clock.instant()));
         } catch (IllegalStateException wrongState) {
@@ -126,7 +126,7 @@ public class EmojiDraftService {
     }
 
     public CreationTask select(AuthorizationSubject subject, long taskId, int index) {
-        CreationTask task = support.requireOwned(subject, taskId);
+        CreationTask task = support.requireOwnedOfKind(subject, taskId, CreationKind.EMOJI_DRAFT);
         List<CreationCandidate> candidates = candidateRepository.findByTaskId(taskId);
         if (candidates.isEmpty()) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "该任务还没有候选");
@@ -143,7 +143,7 @@ public class EmojiDraftService {
     }
 
     public CreationTask save(AuthorizationSubject subject, long taskId) {
-        CreationTask task = support.requireOwned(subject, taskId);
+        CreationTask task = support.requireOwnedOfKind(subject, taskId, CreationKind.EMOJI_DRAFT);
         try {
             return support.transition(task, task.completeSave(task.draftText(), clock.instant()));
         } catch (IllegalStateException wrongState) {
@@ -160,7 +160,7 @@ public class EmojiDraftService {
     }
 
     public List<CreationCandidate> candidates(AuthorizationSubject subject, long taskId) {
-        support.requireOwned(subject, taskId);
+        support.requireOwnedOfKind(subject, taskId, CreationKind.EMOJI_DRAFT);
         return candidateRepository.findByTaskId(taskId);
     }
 

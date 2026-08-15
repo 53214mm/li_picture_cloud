@@ -103,6 +103,26 @@ class EmojiDraftServiceTest {
     }
 
     @Test
+    void emojiOperationsRejectCrossKindTasks() {
+        CreationTask storyTask = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
+                List.of(102L), CreationStatus.PENDING, null, null, null, null, KEY, 0L, NOW, NOW);
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(storyTask));
+
+        assertThatThrownBy(() -> service.generate(SUBJECT, 9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不存在");
+        assertThatThrownBy(() -> service.select(SUBJECT, 9L, 0))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不存在");
+        assertThatThrownBy(() -> service.save(SUBJECT, 9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不存在");
+        assertThatThrownBy(() -> service.candidates(SUBJECT, 9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不存在");
+    }
+
+    @Test
     void generateParsesCandidatesAndSettlesTrial() {
         when(taskRepository.findById(9L)).thenReturn(Optional.of(
                 task(CreationStatus.PENDING, 0L)));
