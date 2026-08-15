@@ -92,6 +92,18 @@
 
 审查确认的安全面：BYOK 大声失败无回退、执行前 PICTURE_VIEW 复核、目标空间 PICTURE_UPLOAD 校验 + 原图永不覆盖、字节防御复制与 16 MiB 上限、提示词仅安全分类落地线索、日志只含安全字段、stub 默认关闭、迁移与分片注册正确、雪花 ID 字符串传递。
 
+## 第七个切片：Q5 玩法配方工坊（提交 0d6beea / 396727e / 4516247 / 49e1d58 / fe5a27c）
+
+依据第二年 Q5 规格（`docs/superpowers/specs/2026-08-15-companion-recipe-workshop-design.md`）：
+
+1. **领域与迁移**（0d6beea）：`domain/recipe` 新增 `Recipe`（DRAFT/ENABLED/DISABLED，revision CAS）、`RecipeDefinition`（WHEN + ≤5 个封闭 IF 条件 + 白名单 THEN）、`RecipeVersion`（append-only，(recipeId, version) 唯一）、`RecipeExecution`（DRY_RUN→EXECUTED/FAILED/REJECTED 终态，安全错误码）；三表 + 三索引迁移（changeSet 21-26）+ 两份 sharding 注册 + 迁移回滚/路由 CRUD 测试。
+2. **严格编解码 + 模板 + CRUD**（396727e）：`RecipeDefinitionCodec` 用独立严格 ObjectMapper（FAIL_ON_UNKNOWN_PROPERTIES）+ 显式白名单键校验（未知字段/类型/能力一律 PARAMS_ERROR，不回显攻击者输入）；四个官方模板（旅行回顾/生日故事/每周表情/旧照重制）；`RecipeService` 创建/模板起点/版本发布/启用/停用/级联删除（@Transactional）/详情回放。
+3. **执行引擎**（4516247）：`RecipeExecutionService.dryRun`（ENABLED/DRAFT 可用，DISABLED 拒绝；IF 求值 fail-closed：空间缺失/分类不符一律不命中；报价按能力 = 故事 5/表情 1/融合 0-BYOK）；`execute`（要求 ENABLED + DRY_RUN 记录归属匹配 + 按记录版本重解码 + 执行前 PICTURE_VIEW 复核 + 条件不符 REJECTED + 调故事/表情/融合服务的 create 公开方法 + EXECUTED/FAILED 只携带安全错误码）。
+4. **前端与 E2E**（49e1d58/fe5a27c）：`/recipes` 配方工坊页（模板起点、我的配方、定义展示、图片多选试运行、执行回放）；E2E 全离线跑通「模板创建 → 试运行命中/报价 → 启用 → 确认执行（创建表情任务，不污染故事列表断言）→ 停用 → 级联删除」。
+
+已知边界：WHEN 触发目前由用户手动试运行/确认驱动，机会源调度接入留作后续切片；报价是上限承诺，实际结算由创作服务试用账本硬上限守护。
+
+
 ## 独立审查与修复（第五轮审查）
 
 审查结论：P0 无；P1×1；P2×7，已全部修复并回归测试：
