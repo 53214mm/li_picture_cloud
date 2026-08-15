@@ -119,10 +119,22 @@ public class ModelGatewayConfiguration {
     }
 
     @Bean
+    @ConditionalOnProperty(prefix = "app.model.credential", name = "image-stub",
+            havingValue = "false", matchIfMissing = true)
     public com.li.lipicturecloud.application.airuntime.ImageModelInvoker modelImageInvoker(
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             ModelCredentialProperties properties) {
         return OpenAiCompatibleImageClient.production(objectMapper, properties.getImageTimeout());
+    }
+
+    /** E2E 专用：图片创作不发真实外网请求，返回固定 1x1 PNG 的内联 base64。 */
+    @Bean
+    @ConditionalOnProperty(prefix = "app.model.credential", name = "image-stub",
+            havingValue = "true")
+    public com.li.lipicturecloud.application.airuntime.ImageModelInvoker stubbedModelImageInvoker() {
+        return (route, prompt, size) ->
+                new com.li.lipicturecloud.application.airuntime.ImageGenerationResult(null,
+                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==");
     }
 
     private static boolean isDevelopmentEnvironment(Environment environment) {

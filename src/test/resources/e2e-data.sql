@@ -23,4 +23,8 @@ VALUES
     (102, '/images/mosaic/travel.jpg', '/images/mosaic/travel.jpg',
      '/images/mosaic/travel.jpg', '旅行样片', '仅供端到端测试', '旅行',
      '["旅行"]', 2048, 800, 600, 1.3333, 'jpg', 7, 10,
+     0, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (103, '/images/mosaic/garden.jpg', '/images/mosaic/garden.jpg',
+     '/images/mosaic/garden.jpg', '花园样片', '仅供端到端测试', '花园',
+     '["花园"]', 2048, 800, 600, 1.3333, 'jpg', 7, 10,
      0, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

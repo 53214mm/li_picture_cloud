@@ -46,4 +46,7 @@ public class ModelCredentialProperties {
 
     /** E2E 用：true 时语言调用返回固定文本 stub，不发真实外网请求。 */
     private boolean languageStub = false;
+
+    /** E2E 用：true 时图片创作返回固定 1x1 PNG stub，不发真实外网请求。 */
+    private boolean imageStub = false;
 }

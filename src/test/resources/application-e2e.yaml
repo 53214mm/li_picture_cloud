@@ -25,12 +25,17 @@ app:
     feeding-enabled: true
     processing-timeout: 5m
     nutrition-policy: DEMO_ONLY
+  creation:
+    # E2E 的融合作品回库不得走真实对象存储上传。
+    artwork-stub: true
   model:
     credential:
       # E2E 的"测试连接"不得发真实外网请求。
       connectivity-stub: true
       # E2E 的图片故事生成不得发真实外网请求。
       language-stub: true
+      # E2E 的多图融合生成不得发真实外网请求。
+      image-stub: true
 
 server:
   port: 18124

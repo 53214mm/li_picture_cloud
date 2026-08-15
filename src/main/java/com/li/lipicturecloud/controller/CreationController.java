@@ -2,6 +2,7 @@ package com.li.lipicturecloud.controller;
 
 import com.li.lipicturecloud.annotation.AuthCheck;
 import com.li.lipicturecloud.application.airuntime.EmojiDraftService;
+import com.li.lipicturecloud.application.airuntime.FusionImageService;
 import com.li.lipicturecloud.application.airuntime.StoryDraftService;
 import com.li.lipicturecloud.application.airuntime.view.CreationTaskView;
 import com.li.lipicturecloud.common.BaseResponse;
@@ -9,6 +10,7 @@ import com.li.lipicturecloud.common.ResultUtils;
 import com.li.lipicturecloud.domain.airuntime.CreationCandidate;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
 import com.li.lipicturecloud.model.dto.airuntime.CreationCreateRequest;
+import com.li.lipicturecloud.model.dto.airuntime.FusionSaveRequest;
 import com.li.lipicturecloud.model.entity.User;
 import com.li.lipicturecloud.service.UserService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,13 +38,16 @@ public class CreationController {
 
     private final StoryDraftService storyDraftService;
     private final EmojiDraftService emojiDraftService;
+    private final FusionImageService fusionImageService;
     private final UserService userService;
 
     public CreationController(StoryDraftService storyDraftService,
                               EmojiDraftService emojiDraftService,
+                              FusionImageService fusionImageService,
                               UserService userService) {
         this.storyDraftService = storyDraftService;
         this.emojiDraftService = emojiDraftService;
+        this.fusionImageService = fusionImageService;
         this.userService = userService;
     }
 
@@ -147,6 +152,43 @@ public class CreationController {
     public BaseResponse<List<CreationTaskView>> listEmoji(@RequestParam(defaultValue = "20") int limit,
                                                           HttpServletRequest request) {
         return ResultUtils.success(emojiDraftService.list(subject(request), limit).stream()
+                .map(CreationTaskView::of).toList());
+    }
+
+    // ===== 多图融合 =====
+
+    @PostMapping("/fusion")
+    @AuthCheck
+    public BaseResponse<CreationTaskView> createFusion(@RequestBody CreationCreateRequest body,
+                                                       HttpServletRequest request) {
+        return ResultUtils.success(CreationTaskView.of(fusionImageService.create(
+                subject(request), body == null ? null : body.getPictureIds(),
+                body == null ? null : body.getIdempotencyKey())));
+    }
+
+    @PostMapping("/fusion/{id}/generate")
+    @AuthCheck
+    public BaseResponse<CreationTaskView> generateFusion(@PathVariable long id,
+                                                         HttpServletRequest request) {
+        return ResultUtils.success(CreationTaskView.of(
+                fusionImageService.generate(subject(request), id)));
+    }
+
+    @PostMapping("/fusion/{id}/save")
+    @AuthCheck
+    public BaseResponse<CreationTaskView> saveFusion(@PathVariable long id,
+                                                     @RequestBody FusionSaveRequest body,
+                                                     HttpServletRequest request) {
+        return ResultUtils.success(CreationTaskView.of(fusionImageService.save(
+                subject(request), id, body == null ? null : body.getSpaceId(),
+                body == null ? null : body.getName())));
+    }
+
+    @GetMapping("/fusion")
+    @AuthCheck
+    public BaseResponse<List<CreationTaskView>> listFusion(@RequestParam(defaultValue = "20") int limit,
+                                                           HttpServletRequest request) {
+        return ResultUtils.success(fusionImageService.list(subject(request), limit).stream()
                 .map(CreationTaskView::of).toList());
     }
 
