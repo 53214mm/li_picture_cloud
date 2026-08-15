@@ -87,6 +87,12 @@ if (COMPANION_UI_ENABLED) {
     component: () => import('@/views/ModelGatewayView.vue'),
     meta: { requiresAuth: true }
   })
+  routes.push({
+    path: '/recipes',
+    name: 'recipe-workshop',
+    component: () => import('@/views/RecipeWorkshopView.vue'),
+    meta: { requiresAuth: true }
+  })
 }
 
 const router = createRouter({

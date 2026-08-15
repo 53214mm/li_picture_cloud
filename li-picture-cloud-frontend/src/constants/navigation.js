@@ -19,6 +19,7 @@ export function buildNavigationGroups({ isLoggedIn, isAdmin, companionEnabled = 
         { label: '我的空间', to: '/space/my' },
         ...(companionEnabled ? [{ label: '我的伙伴', to: '/companion' }] : []),
         ...(companionEnabled ? [{ label: '模型控制中心', to: '/model-gateway' }] : []),
+        ...(companionEnabled ? [{ label: '配方工坊', to: '/recipes' }] : []),
         { label: '空间管理', to: '/spaces' },
         { label: '图库分析', to: '/space/analyze' }
       ]
