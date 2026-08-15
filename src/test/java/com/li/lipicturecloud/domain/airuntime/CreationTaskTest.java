@@ -188,6 +188,30 @@ class CreationTaskTest {
     }
 
     @Test
+    void fusionTransitionsRejectNonFusionKinds() {
+        CreationTask storyOutlining = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
+                List.of(102L), CreationStatus.OUTLINING, null, null, null, null, KEY,
+                1L, NOW, NOW);
+        assertThatThrownBy(() -> storyOutlining.completeFusion(5L, NOW))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("IMAGE_FUSION");
+
+        CreationTask storyAwaiting = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
+                List.of(102L), CreationStatus.AWAITING_CONFIRM, "大纲", null, null, null, KEY,
+                2L, NOW, NOW);
+        assertThatThrownBy(() -> storyAwaiting.confirmFusion(NOW))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("IMAGE_FUSION");
+
+        CreationTask storySaving = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
+                List.of(102L), CreationStatus.SAVING, "大纲", "草稿", null, null, KEY,
+                3L, NOW, NOW);
+        assertThatThrownBy(() -> storySaving.completeFusionSave(300L, NOW))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("IMAGE_FUSION");
+    }
+
+    @Test
     void withIdAndTimestampGuards() {
         CreationTask created = CreationTask.create(7L, CreationKind.STORY_DRAFT, List.of(102L),
                 KEY, NOW);

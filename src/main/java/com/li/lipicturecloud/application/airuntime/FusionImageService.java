@@ -7,6 +7,7 @@ import com.li.lipicturecloud.domain.airuntime.CreationFusionImageRepository;
 import com.li.lipicturecloud.domain.airuntime.CreationKind;
 import com.li.lipicturecloud.domain.airuntime.CreationLineage;
 import com.li.lipicturecloud.domain.airuntime.CreationLineageRepository;
+import com.li.lipicturecloud.domain.airuntime.CreationStatus;
 import com.li.lipicturecloud.domain.airuntime.CreationTask;
 import com.li.lipicturecloud.domain.airuntime.CreationTaskRepository;
 import com.li.lipicturecloud.domain.airuntime.ModelTask;
@@ -104,6 +105,7 @@ public class FusionImageService {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
         }
         ModelRouteDecision route = null;
+        boolean modelInvoked = false;
         try {
             // 执行前重新校验：分享撤销/移动后不得让旧选择越过权限边界（规格 §5）。
             support.reauthorizePictures(subject, task);
@@ -115,8 +117,18 @@ public class FusionImageService {
             String prompt = GENERATE_PROMPT_TEMPLATE.formatted(task.sourcePictureIds().size(),
                     support.grounding(task.sourcePictureIds()));
             ImageGenerationResult result = imageInvoker.invoke(route, prompt, DEFAULT_SIZE);
-            byte[] bytes = decodeInlineImage(result);
-            String mimeType = ImageFormatSniffer.detect(bytes);
+            modelInvoked = true;
+            // 模型调用已成功消耗 BYOK 额度：后续暂存/转移失败不再记失败用量。
+            recordUsageSuccess(subject.userId(), route);
+            byte[] bytes;
+            String mimeType;
+            try {
+                bytes = decodeInlineImage(result);
+                mimeType = ImageFormatSniffer.detect(bytes);
+            } catch (IllegalArgumentException malformed) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR,
+                        "融合生成失败：返回图片格式不受支持");
+            }
             fusionImageRepository.insert(CreationFusionImage.create(
                     task.id(), mimeType, bytes, clock.instant()));
             // 关键：转移成功后把 task 推进到当前状态，后续失败必须基于最新状态写 FAILED。
@@ -124,15 +136,14 @@ public class FusionImageService {
                     clock.instant()));
             recordLineage(task, CAPABILITY_GENERATE, route.connection().modelCode(),
                     CostSource.BYOK.name(), null);
-            recordUsageSuccess(subject.userId(), route);
             return task;
         } catch (RuntimeException failure) {
-            if (route != null && route.isByok()) {
+            if (route != null && route.isByok() && !modelInvoked) {
                 recordUsageFailure(subject.userId(), route, safeErrorCode(failure));
             }
             try {
                 support.transition(task, task.fail(clock.instant()));
-            } catch (RuntimeException alreadyTerminal) {
+            } catch (IllegalStateException alreadyTerminal) {
                 // 已终态则无需再写 FAILED。
             }
             throw failure;
@@ -165,13 +176,14 @@ public class FusionImageService {
                     spaceId, name, staged.mimeType(), staged.bytes()));
             // 关键：转移成功后把 task 推进到当前状态，后续失败必须基于最新状态写 FAILED。
             task = support.transition(task, task.completeFusionSave(pictureId, clock.instant()));
-            recordLineage(task, CAPABILITY_SAVE, connection.modelCode(),
+            // SAVED 已是终态且作品已回库：血缘追加失败只能告警，绝不可把成功保存报成失败。
+            recordLineageBestEffort(task, CAPABILITY_SAVE, connection.modelCode(),
                     CostSource.BYOK.name(), pictureId);
             return task;
         } catch (RuntimeException failure) {
             try {
                 support.transition(task, task.fail(clock.instant()));
-            } catch (RuntimeException alreadyTerminal) {
+            } catch (IllegalStateException alreadyTerminal) {
                 // 已终态则无需再写 FAILED。
             }
             throw failure;
@@ -180,14 +192,18 @@ public class FusionImageService {
 
     public List<CreationTask> list(AuthorizationSubject subject, int limit) {
         Objects.requireNonNull(subject, "subject");
-        return taskRepository.findBySubjectId(subject.userId(), limit).stream()
-                .filter(task -> task.kind() == CreationKind.IMAGE_FUSION)
-                .map(support::applyExpiry)
-                .toList();
+        return taskRepository.findBySubjectIdAndKind(subject.userId(), CreationKind.IMAGE_FUSION,
+                limit).stream().map(support::applyExpiry).toList();
     }
 
     public FusionImageView previewImage(AuthorizationSubject subject, long taskId) {
-        requireFusionTask(subject, taskId);
+        CreationTask task = requireFusionTask(subject, taskId);
+        // 预览只服务于可确认/已保存的任务；失败或过期任务不再暴露暂存字节。
+        if (task.status() != CreationStatus.AWAITING_CONFIRM
+                && task.status() != CreationStatus.SAVING
+                && task.status() != CreationStatus.SAVED) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "融合结果不存在");
+        }
         CreationFusionImage staged = fusionImageRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "融合结果不存在"));
         return new FusionImageView(staged.mimeType(), staged.bytes());
@@ -216,6 +232,17 @@ public class FusionImageService {
             lineageRepository.append(new CreationLineage(null, task.id(), pictureId, resultPictureId,
                     capabilityId, modelCode, PROMPT_TEMPLATE_VERSION, costSource,
                     clock.instant()));
+        }
+    }
+
+    /** 保存路径专用：作品已回库（终态），血缘追加失败只告警不反悔。 */
+    private void recordLineageBestEffort(CreationTask task, String capabilityId, String modelCode,
+                                         String costSource, Long resultPictureId) {
+        try {
+            recordLineage(task, capabilityId, modelCode, costSource, resultPictureId);
+        } catch (RuntimeException lineageFailure) {
+            log.warn("fusion_lineage_append_failed taskId={} capability={}",
+                    task.id(), capabilityId);
         }
     }
 

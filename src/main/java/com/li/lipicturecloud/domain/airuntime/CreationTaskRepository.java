@@ -12,7 +12,8 @@ public interface CreationTaskRepository {
 
     Optional<CreationTask> findById(long id);
 
-    List<CreationTask> findBySubjectId(long subjectId, int limit);
+    /** 按玩法种类分页查询：kind 过滤在数据库内完成，避免 limit 先于过滤导致任务被隐藏。 */
+    List<CreationTask> findBySubjectIdAndKind(long subjectId, CreationKind kind, int limit);
 
     CreationTask insert(CreationTask task);
 

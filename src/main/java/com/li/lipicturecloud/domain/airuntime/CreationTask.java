@@ -131,12 +131,14 @@ public record CreationTask(
 
     /** 融合生成完成：图片字节存于专用暂存表，任务进入等待确认（无文本草稿）。 */
     public CreationTask completeFusion(Long modelConnectionId, Instant now) {
+        requireKind(CreationKind.IMAGE_FUSION, "completeFusion");
         requireStatus(CreationStatus.OUTLINING, "completeFusion");
         return advance(CreationStatus.AWAITING_CONFIRM, null, null, null, now, modelConnectionId);
     }
 
     /** 用户确认融合结果，进入保存（目标空间与可见性在保存时确认）。 */
     public CreationTask confirmFusion(Instant now) {
+        requireKind(CreationKind.IMAGE_FUSION, "confirmFusion");
         requireStatus(CreationStatus.AWAITING_CONFIRM, "confirmFusion");
         if (outlineText != null || draftText != null) {
             throw new IllegalStateException("confirmFusion requires a fusion task awaiting confirmation");
@@ -146,6 +148,7 @@ public record CreationTask(
 
     /** 融合作品回库完成：结果图片 ID 写入 resultText（血缘另行写入 resultPictureId）。 */
     public CreationTask completeFusionSave(long resultPictureId, Instant now) {
+        requireKind(CreationKind.IMAGE_FUSION, "completeFusionSave");
         requireStatus(CreationStatus.SAVING, "completeFusionSave");
         if (resultPictureId <= 0) {
             throw new IllegalArgumentException("resultPictureId must be positive");
@@ -180,6 +183,13 @@ public record CreationTask(
         if (status != expected) {
             throw new IllegalStateException(operation + " requires " + expected
                     + " but task is " + status);
+        }
+    }
+
+    private void requireKind(CreationKind expected, String operation) {
+        if (kind != expected) {
+            throw new IllegalStateException(operation + " requires a " + expected
+                    + " task but this is " + kind);
         }
     }
 

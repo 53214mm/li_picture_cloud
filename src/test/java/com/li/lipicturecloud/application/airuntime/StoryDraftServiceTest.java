@@ -276,7 +276,8 @@ class StoryDraftServiceTest {
         CreationTask awaiting = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
                 List.of(102L), CreationStatus.AWAITING_CONFIRM, "大纲", null, null, null, KEY,
                 2L, stale, stale);
-        when(taskRepository.findBySubjectId(7L, 20)).thenReturn(List.of(awaiting));
+        when(taskRepository.findBySubjectIdAndKind(7L, CreationKind.STORY_DRAFT, 20))
+                .thenReturn(List.of(awaiting));
         when(taskRepository.findById(9L)).thenReturn(Optional.of(awaiting));
 
         List<CreationTask> tasks = service.list(SUBJECT, 20);

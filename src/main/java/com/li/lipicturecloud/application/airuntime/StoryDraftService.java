@@ -184,10 +184,8 @@ public class StoryDraftService {
 
     public List<CreationTask> list(AuthorizationSubject subject, int limit) {
         Objects.requireNonNull(subject, "subject");
-        return taskRepository.findBySubjectId(subject.userId(), limit).stream()
-                .filter(task -> task.kind() == CreationKind.STORY_DRAFT)
-                .map(support::applyExpiry)
-                .toList();
+        return taskRepository.findBySubjectIdAndKind(subject.userId(), CreationKind.STORY_DRAFT,
+                limit).stream().map(support::applyExpiry).toList();
     }
 
     private String invoke(ModelRouteDecision route, String userPrompt) {

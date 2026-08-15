@@ -75,6 +75,23 @@
 3. **E2E 全离线**：`image-stub`（固定 1x1 PNG b64）与 `app.creation.artwork-stub`（回库返回固定作品 ID，不走 COS）两个 stub 属性；E2E 用 API 建 OpenAI/gpt-image-2 连接 + 探测（写能力画像）+ IMAGE_CREATION 路由，雪花 ID 全程字符串传递，结束清理路由/连接/凭据（使用记录按用户追加保留）。
 4. **前端**：伙伴页新增「多图融合」面板（≥2 张多选、生成、预览带 revision 防缓存、显式选目标空间 + 可选作品名、保存后展示新图片 ID）。
 
+## 独立审查与修复（第十轮审查）
+
+审查结论：P0 无；P1×1；P2×9，已全部修复：
+
+- **P1**：保存路径在终态 `SAVED` 之后写血缘，失败被重抛 → 作品已回库却向用户报错且血缘丢失。修复：保存路径血缘改 best-effort（`recordLineageBestEffort`，失败只告警不反悔）。
+- **P2-1**：融合转移缺少领域层玩法种类守门。修复：`completeFusion/confirmFusion/completeFusionSave` 增加 `requireKind(IMAGE_FUSION)` + 领域测试。
+- **P2-2**：列表 LIMIT 先于玩法过滤执行，任务可能被隐藏。修复：仓储端口改 `findBySubjectIdAndKind`，kind 过滤下推数据库，故事/表情/融合三列表统一。
+- **P2-3**：E2E 路由清理不在 finally，断言失败会留悬空规则/连接/凭据。修复：`try/finally` 必清理。
+- **P2-4**：模型成功后转移/血缘失败仍记失败用量。修复：用量成功记录紧跟调用成功，仅调用本身失败才记失败。
+- **P2-5**：FAILED 转移的兜底吞异常面过宽。修复：收窄为 `IllegalStateException`（终态守卫），CAS/DB 错误不再被吞。
+- **P2-6**：图片格式嗅探异常裸抛 500。修复：生成路径包装为友好 `BusinessException`。
+- **P2-7**：CAS 落败遗留暂存字节。记录为已知边界：字节 ≤16MiB，且预览按任务状态守门，后续加清理路径时再处理。
+- **P2-8**：预览不校验任务状态、GET 可惰性过期。修复：预览仅对 `AWAITING_CONFIRM/SAVING/SAVED` 开放。
+- **P2-9**：失败路径测试缺口。修复：补 lineage 后置失败（FAILED 基于 revision 2 最新状态）、保存血缘 best-effort、非法格式、预览状态守门四条测试。
+
+审查确认的安全面：BYOK 大声失败无回退、执行前 PICTURE_VIEW 复核、目标空间 PICTURE_UPLOAD 校验 + 原图永不覆盖、字节防御复制与 16 MiB 上限、提示词仅安全分类落地线索、日志只含安全字段、stub 默认关闭、迁移与分片注册正确、雪花 ID 字符串传递。
+
 ## 独立审查与修复（第五轮审查）
 
 审查结论：P0 无；P1×1；P2×7，已全部修复并回归测试：

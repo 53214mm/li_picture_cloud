@@ -52,9 +52,11 @@ public class MybatisCreationTaskRepository implements CreationTaskRepository {
     }
 
     @Override
-    public List<CreationTask> findBySubjectId(long subjectId, int limit) {
+    public List<CreationTask> findBySubjectIdAndKind(long subjectId, CreationKind kind, int limit) {
+        Objects.requireNonNull(kind, "kind");
         return taskMapper.selectList(new LambdaQueryWrapper<CreationTaskEntity>()
                         .eq(CreationTaskEntity::getSubjectId, subjectId)
+                        .eq(CreationTaskEntity::getKind, kind.name())
                         .orderByDesc(CreationTaskEntity::getUpdateTime)
                         .orderByDesc(CreationTaskEntity::getId)
                         .last("LIMIT " + Math.max(1, Math.min(limit, 100))))

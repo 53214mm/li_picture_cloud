@@ -299,14 +299,90 @@ class FusionImageServiceTest {
     }
 
     @Test
-    void listReturnsOnlyFusionTasks() {
+    void listQueriesByKindInTheRepository() {
         CreationTask fusion = task(CreationStatus.SAVED, 4L, 5L);
-        CreationTask story = new CreationTask(10L, 7L, CreationKind.STORY_DRAFT,
-                List.of(102L), CreationStatus.SAVED, null, null, "作品", null, KEY, 3L, NOW, NOW);
-        when(taskRepository.findBySubjectId(7L, 20)).thenReturn(List.of(fusion, story));
+        when(taskRepository.findBySubjectIdAndKind(7L, CreationKind.IMAGE_FUSION, 20))
+                .thenReturn(List.of(fusion));
 
         List<CreationTask> tasks = service.list(SUBJECT, 20);
 
         assertThat(tasks).containsExactly(fusion);
+        verify(taskRepository).findBySubjectIdAndKind(7L, CreationKind.IMAGE_FUSION, 20);
+    }
+
+    @Test
+    void generateMarksTaskFailedWhenLineageFailsAfterCompleteFusion() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.PENDING, 0L, null)));
+        when(fusionImageRepository.insert(any(CreationFusionImage.class))).thenAnswer(invocation ->
+                invocation.<CreationFusionImage>getArgument(0).withId(1L));
+        when(lineageRepository.append(any(CreationLineage.class)))
+                .thenThrow(new RuntimeException("lineage db down"));
+
+        assertThatThrownBy(() -> service.generate(SUBJECT, 9L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("lineage db down");
+
+        // 失败必须基于 completeFusion 之后的最新状态（AWAITING_CONFIRM，revision 2）写 FAILED。
+        ArgumentCaptor<CreationTask> failed = ArgumentCaptor.forClass(CreationTask.class);
+        verify(taskRepository).save(failed.capture(), eq(2L));
+        assertThat(failed.getValue().status()).isEqualTo(CreationStatus.FAILED);
+        // 模型调用已成功，不得记失败用量。
+        verify(usageService).recordSuccess(7L, ModelTask.IMAGE_CREATION, 5L,
+                ModelProvider.OPENAI, "gpt-image-2", CostSource.BYOK);
+        verify(usageService, never()).recordFailure(anyLong(), any(), anyLong(), any(), anyString(),
+                any(), anyString());
+    }
+
+    @Test
+    void generateRejectsUnsupportedImageFormatAndMarksTaskFailed() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.PENDING, 0L, null)));
+        when(imageInvoker.invoke(any(ModelRouteDecision.class), anyString(), anyString()))
+                .thenReturn(new ImageGenerationResult(null,
+                        Base64.getEncoder().encodeToString(new byte[24])));
+
+        assertThatThrownBy(() -> service.generate(SUBJECT, 9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("格式不受支持");
+
+        ArgumentCaptor<CreationTask> failed = ArgumentCaptor.forClass(CreationTask.class);
+        verify(taskRepository).save(failed.capture(), eq(1L));
+        assertThat(failed.getValue().status()).isEqualTo(CreationStatus.FAILED);
+        verify(fusionImageRepository, never()).insert(any(CreationFusionImage.class));
+    }
+
+    @Test
+    void saveSucceedsEvenWhenLineageAppendFailsAfterTerminalTransition() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.AWAITING_CONFIRM, 2L, 5L)));
+        when(fusionImageRepository.findByTaskId(9L)).thenReturn(Optional.of(
+                CreationFusionImage.create(9L, "image/png",
+                        Base64.getDecoder().decode(TINY_PNG_BASE64), NOW)));
+        when(artworkSaver.save(any(FusionArtworkSaveRequest.class))).thenReturn(300L);
+        when(lineageRepository.append(any(CreationLineage.class)))
+                .thenThrow(new RuntimeException("lineage db down"));
+
+        // 作品已回库且任务已 SAVED：血缘追加失败只告警，绝不把成功保存报成失败。
+        CreationTask result = service.save(SUBJECT, 9L, 100L, null);
+
+        assertThat(result.status()).isEqualTo(CreationStatus.SAVED);
+        assertThat(result.resultText()).isEqualTo("300");
+        verify(lineageRepository).append(any(CreationLineage.class));
+    }
+
+    @Test
+    void previewRefusesFailedAndExpiredTasks() {
+        CreationTask failed = new CreationTask(9L, 7L, CreationKind.IMAGE_FUSION,
+                List.of(102L, 103L), CreationStatus.FAILED, null, null, null, 5L, KEY,
+                3L, NOW, NOW);
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(failed));
+        when(fusionImageRepository.findByTaskId(9L)).thenReturn(Optional.of(
+                CreationFusionImage.create(9L, "image/png",
+                        Base64.getDecoder().decode(TINY_PNG_BASE64), NOW)));
+
+        assertThatThrownBy(() -> service.previewImage(SUBJECT, 9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("融合结果不存在");
     }
 }
