@@ -17,4 +17,6 @@ public interface RecipeRepository {
     Recipe insert(Recipe recipe);
 
     boolean save(Recipe after, long expectedRevision);
+
+    boolean deleteById(long id);
 }

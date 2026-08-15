@@ -62,6 +62,15 @@ public class MybatisRecipeVersionRepository implements RecipeVersionRepository {
                 .map(this::fromRow);
     }
 
+    @Override
+    public int deleteByRecipeId(long recipeId) {
+        if (recipeId <= 0) {
+            return 0;
+        }
+        return versionMapper.delete(new LambdaQueryWrapper<RecipeVersionEntity>()
+                .eq(RecipeVersionEntity::getRecipeId, recipeId));
+    }
+
     private RecipeVersion fromRow(RecipeVersionEntity row) {
         return RecipeVersion.restore(row.getId(), row.getRecipeId(), row.getVersion(),
                 row.getWhenJson(), row.getIfJson(), row.getThenJson(),

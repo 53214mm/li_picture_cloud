@@ -87,6 +87,15 @@ public class MybatisRecipeExecutionRepository implements RecipeExecutionReposito
         return executionMapper.update(null, update) == 1;
     }
 
+    @Override
+    public int deleteByRecipeId(long recipeId) {
+        if (recipeId <= 0) {
+            return 0;
+        }
+        return executionMapper.delete(new LambdaQueryWrapper<RecipeExecutionEntity>()
+                .eq(RecipeExecutionEntity::getRecipeId, recipeId));
+    }
+
     private RecipeExecution fromRow(RecipeExecutionEntity row) {
         return RecipeExecution.restore(row.getId(), row.getRecipeId(), row.getRecipeVersion(),
                 row.getSubjectId(), RecipeExecutionStatus.valueOf(row.getStatus()),

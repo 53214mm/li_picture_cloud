@@ -13,4 +13,6 @@ public interface RecipeVersionRepository {
     List<RecipeVersion> findByRecipeId(long recipeId);
 
     Optional<RecipeVersion> findLatest(long recipeId);
+
+    int deleteByRecipeId(long recipeId);
 }

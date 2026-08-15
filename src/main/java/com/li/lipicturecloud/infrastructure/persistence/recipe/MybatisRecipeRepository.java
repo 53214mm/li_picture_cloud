@@ -78,6 +78,14 @@ public class MybatisRecipeRepository implements RecipeRepository {
         return recipeMapper.update(null, update) == 1;
     }
 
+    @Override
+    public boolean deleteById(long id) {
+        if (id <= 0) {
+            return false;
+        }
+        return recipeMapper.deleteById(id) == 1;
+    }
+
     private Recipe fromRow(RecipeEntity row) {
         return Recipe.restore(row.getId(), row.getSubjectId(), row.getName(),
                 RecipeStatus.valueOf(row.getStatus()), row.getRevision(),

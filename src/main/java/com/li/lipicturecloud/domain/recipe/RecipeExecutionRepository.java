@@ -17,4 +17,6 @@ public interface RecipeExecutionRepository {
     RecipeExecution insert(RecipeExecution execution);
 
     boolean transition(RecipeExecution after, RecipeExecutionStatus expectedStatus);
+
+    int deleteByRecipeId(long recipeId);
 }
