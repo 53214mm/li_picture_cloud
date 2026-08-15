@@ -128,10 +128,14 @@ public class RecipeExecutionService {
             return reject(execution, CONDITION_UNMATCHED);
         }
         try {
-            long taskId = invokeThen(definition.then().capability(), subject, ids);
+            long taskId = invokeThen(definition.then().capability(), subject, ids, execution.id());
             return complete(execution, taskId);
         } catch (RuntimeException failure) {
-            fail(execution, safeErrorCode(failure));
+            try {
+                fail(execution, safeErrorCode(failure));
+            } catch (RuntimeException recordFailure) {
+                // 记录失败不掩盖原始错误。
+            }
             throw failure;
         }
     }
@@ -161,11 +165,16 @@ public class RecipeExecutionService {
     // ===== 内部求值与执行 =====
 
     private long invokeThen(CreationKind capability, AuthorizationSubject subject,
-                            List<Long> pictureIds) {
+                            List<Long> pictureIds, long executionId) {
+        // 执行记录 ID 是幂等单元：重试同一记录沿用同一确定性键，创作服务按唯一键去重，
+        // 避免「任务已创建但执行记录转移冲突」的重试产生第二个任务。
+        String idempotencyKey = java.util.UUID.nameUUIDFromBytes(
+                        ("recipe-execution-" + executionId).getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .toString();
         CreationTask task = switch (capability) {
-            case STORY_DRAFT -> storyDraftService.create(subject, pictureIds, null);
-            case EMOJI_DRAFT -> emojiDraftService.create(subject, pictureIds, null);
-            case IMAGE_FUSION -> fusionImageService.create(subject, pictureIds, null);
+            case STORY_DRAFT -> storyDraftService.create(subject, pictureIds, idempotencyKey);
+            case EMOJI_DRAFT -> emojiDraftService.create(subject, pictureIds, idempotencyKey);
+            case IMAGE_FUSION -> fusionImageService.create(subject, pictureIds, idempotencyKey);
         };
         return Objects.requireNonNull(task.id(), "creation task id");
     }
@@ -237,6 +246,11 @@ public class RecipeExecutionService {
         }
         if (capability == CreationKind.IMAGE_FUSION && pictureIds.size() < 2) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "多图融合至少需要 2 张图片");
+        }
+        for (Long pictureId : pictureIds) {
+            if (pictureId == null || pictureId <= 0) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "图片 ID 不合法");
+            }
         }
         List<Long> ids = List.copyOf(pictureIds);
         for (Long pictureId : ids) {

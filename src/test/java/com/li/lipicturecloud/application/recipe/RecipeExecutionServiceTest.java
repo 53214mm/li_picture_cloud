@@ -159,13 +159,43 @@ class RecipeExecutionServiceTest {
         CreationTask task = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
                 List.of(102L), com.li.lipicturecloud.domain.airuntime.CreationStatus.PENDING,
                 null, null, null, null, KEY, 0L, NOW, NOW);
-        when(storyDraftService.create(SUBJECT, List.of(102L), null)).thenReturn(task);
+        String expectedKey = java.util.UUID.nameUUIDFromBytes(
+                        "recipe-execution-5".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .toString();
+        when(storyDraftService.create(SUBJECT, List.of(102L), expectedKey)).thenReturn(task);
 
         RecipeExecution result = service.execute(SUBJECT, 9L, 5L, List.of(102L));
 
         assertThat(result.status()).isEqualTo(RecipeExecutionStatus.EXECUTED);
         assertThat(result.creationTaskId()).isEqualTo(9L);
-        verify(storyDraftService).create(SUBJECT, List.of(102L), null);
+        verify(storyDraftService).create(SUBJECT, List.of(102L), expectedKey);
+    }
+
+    @Test
+    void executeRetryReusesTheSameIdempotencyKey() {
+        when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
+        when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
+        when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
+        CreationTask task = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
+                List.of(102L), com.li.lipicturecloud.domain.airuntime.CreationStatus.PENDING,
+                null, null, null, null, KEY, 0L, NOW, NOW);
+        String expectedKey = java.util.UUID.nameUUIDFromBytes(
+                        "recipe-execution-5".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .toString();
+        when(storyDraftService.create(SUBJECT, List.of(102L), expectedKey)).thenReturn(task);
+        // 第一次：任务已创建但执行记录转移冲突（complete 与 fail 的转移都落败）。
+        when(executionRepository.transition(any(RecipeExecution.class),
+                any(RecipeExecutionStatus.class))).thenReturn(false, false, true);
+
+        assertThatThrownBy(() -> service.execute(SUBJECT, 9L, 5L, List.of(102L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("并发冲突");
+
+        // 重试沿用同一确定性幂等键：创作服务按唯一键去重，绝不产生第二个任务。
+        RecipeExecution retried = service.execute(SUBJECT, 9L, 5L, List.of(102L));
+        assertThat(retried.status()).isEqualTo(RecipeExecutionStatus.EXECUTED);
+        verify(storyDraftService, org.mockito.Mockito.times(2))
+                .create(SUBJECT, List.of(102L), expectedKey);
     }
 
     @Test
@@ -189,7 +219,7 @@ class RecipeExecutionServiceTest {
         when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
         when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
         when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
-        when(storyDraftService.create(SUBJECT, List.of(102L), null))
+        when(storyDraftService.create(any(), any(), org.mockito.ArgumentMatchers.anyString()))
                 .thenThrow(new BusinessException(com.li.lipicturecloud.exception.ErrorCode.OPERATION_ERROR,
                         "任务状态已变化"));
 
