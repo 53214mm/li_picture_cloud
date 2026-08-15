@@ -2,6 +2,7 @@ package com.li.lipicturecloud.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.li.lipicturecloud.annotation.AuthCheck;
+import com.li.lipicturecloud.application.recipe.RecipeExecutionService;
 import com.li.lipicturecloud.application.recipe.RecipeService;
 import com.li.lipicturecloud.application.recipe.view.RecipeDetailView;
 import com.li.lipicturecloud.application.recipe.view.RecipeTemplateView;
@@ -37,10 +38,14 @@ import java.util.List;
 public class RecipeController {
 
     private final RecipeService recipeService;
+    private final RecipeExecutionService executionService;
     private final UserService userService;
 
-    public RecipeController(RecipeService recipeService, UserService userService) {
+    public RecipeController(RecipeService recipeService,
+                            RecipeExecutionService executionService,
+                            UserService userService) {
         this.recipeService = recipeService;
+        this.executionService = executionService;
         this.userService = userService;
     }
 
@@ -106,6 +111,46 @@ public class RecipeController {
     public BaseResponse<Boolean> delete(@PathVariable long id, HttpServletRequest request) {
         recipeService.delete(subject(request), id);
         return ResultUtils.success(true);
+    }
+
+    // ===== 执行与回放 =====
+
+    @PostMapping("/{id}/dry-run")
+    @AuthCheck
+    public BaseResponse<com.li.lipicturecloud.application.recipe.view.RecipeExecutionView> dryRun(
+            @PathVariable long id, @RequestBody com.li.lipicturecloud.model.dto.recipe.RecipeRunRequest body,
+            HttpServletRequest request) {
+        return ResultUtils.success(executionService.toView(executionService.dryRun(subject(request),
+                id, body == null ? null : body.getPictureIds())));
+    }
+
+    @PostMapping("/{id}/executions/{executionId}/execute")
+    @AuthCheck
+    public BaseResponse<com.li.lipicturecloud.application.recipe.view.RecipeExecutionView> execute(
+            @PathVariable long id, @PathVariable long executionId,
+            @RequestBody com.li.lipicturecloud.model.dto.recipe.RecipeRunRequest body,
+            HttpServletRequest request) {
+        return ResultUtils.success(executionService.toView(executionService.execute(subject(request),
+                id, executionId, body == null ? null : body.getPictureIds())));
+    }
+
+    @GetMapping("/{id}/executions")
+    @AuthCheck
+    public BaseResponse<List<com.li.lipicturecloud.application.recipe.view.RecipeExecutionView>>
+    recipeExecutions(@PathVariable long id,
+                     @RequestParam(defaultValue = "20") int limit,
+                     HttpServletRequest request) {
+        return ResultUtils.success(executionService.toViews(
+                executionService.recentByRecipe(subject(request), id, limit)));
+    }
+
+    @GetMapping("/executions")
+    @AuthCheck
+    public BaseResponse<List<com.li.lipicturecloud.application.recipe.view.RecipeExecutionView>>
+    myExecutions(@RequestParam(defaultValue = "20") int limit,
+                 HttpServletRequest request) {
+        return ResultUtils.success(executionService.toViews(
+                executionService.recentBySubject(subject(request), limit)));
     }
 
     private AuthorizationSubject subject(HttpServletRequest request) {
