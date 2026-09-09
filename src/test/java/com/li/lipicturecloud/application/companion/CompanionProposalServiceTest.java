@@ -12,7 +12,11 @@ import com.li.lipicturecloud.domain.companion.CompanionProposalRepository;
 import com.li.lipicturecloud.domain.companion.CompanionRepository;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
 import com.li.lipicturecloud.domain.companion.ProposalOpportunityType;
+import com.li.lipicturecloud.domain.picture.PictureAsset;
+import com.li.lipicturecloud.domain.picture.PictureAssetRepository;
 import com.li.lipicturecloud.exception.BusinessException;
+import com.li.lipicturecloud.exception.ErrorCode;
+import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -33,10 +37,12 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConstant.PICTURE_VIEW;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -167,6 +173,69 @@ class CompanionProposalServiceTest {
             assertThat(logs.list).anyMatch(event -> event.getFormattedMessage()
                     .contains("companion_proposal_gated subjectId=7 proposalId=none type=WEEKLY_REVIEW "
                             + "reason=CONTRACT_DISABLED"));
+        } finally {
+            releaseProposalLogs(logs);
+        }
+    }
+
+    @Test
+    void revokedSimilarPictureIsNotGatedUnderADisabledContract() {
+        // 历史喂养图片仍存在但已被撤权：相似图片并不存在"真实机会"——
+        // 契约关闭时只记 NO_CANDIDATE，绝不记录 SIMILAR_STORY 被守门拦截。
+        Companion companion = persistedCompanion();
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        GrowthRecordRepository growth = mock(GrowthRecordRepository.class);
+        PictureAssetRepository pictures = mock(PictureAssetRepository.class);
+        SpaceAuthorizationAccessService authorization = mock(SpaceAuthorizationAccessService.class);
+        when(growth.findRecentFedPictureIds(11L, 5)).thenReturn(List.of(101L));
+        when(pictures.findAssetById(101L))
+                .thenReturn(Optional.of(new PictureAsset(101L, 7L, 30L)));
+        doThrow(new BusinessException(ErrorCode.NO_AUTH_ERROR, "缺少权限"))
+                .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+        SimilarStoryOpportunitySource similar = new SimilarStoryOpportunitySource(
+                growth, pictures, authorization, evaluator);
+        CompanionProposalService localService = new CompanionProposalService(companionRepository,
+                contractRepository, proposalRepository, reactionRepository, List.of(similar),
+                evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
+        ListAppender<ILoggingEvent> logs = captureProposalServiceLogs();
+        try {
+            CompanionProposalView view = localService.active(subject);
+
+            assertThat(view).isNull();
+            assertThat(logs.list).noneMatch(event ->
+                    event.getFormattedMessage().contains("companion_proposal_gated"));
+            assertThat(logs.list).anyMatch(event -> event.getFormattedMessage()
+                    .contains("companion_proposal_opportunity subjectId=7 type=SIMILAR_STORY "
+                            + "result=NO_CANDIDATE"));
+        } finally {
+            releaseProposalLogs(logs);
+        }
+    }
+
+    @Test
+    void similarPictureWithoutNewSpacePicturesIsNotGatedUnderADisabledContract() {
+        Companion companion = persistedCompanion();
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        GrowthRecordRepository growth = mock(GrowthRecordRepository.class);
+        PictureAssetRepository pictures = mock(PictureAssetRepository.class);
+        SpaceAuthorizationAccessService authorization = mock(SpaceAuthorizationAccessService.class);
+        when(growth.findRecentFedPictureIds(11L, 5)).thenReturn(List.of(101L));
+        when(pictures.findAssetById(101L))
+                .thenReturn(Optional.of(new PictureAsset(101L, 7L, 30L)));
+        when(pictures.countRecentInSpace(30L, NOW.minus(java.time.Duration.ofDays(7))))
+                .thenReturn(1L);
+        SimilarStoryOpportunitySource similar = new SimilarStoryOpportunitySource(
+                growth, pictures, authorization, evaluator);
+        CompanionProposalService localService = new CompanionProposalService(companionRepository,
+                contractRepository, proposalRepository, reactionRepository, List.of(similar),
+                evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
+        ListAppender<ILoggingEvent> logs = captureProposalServiceLogs();
+        try {
+            CompanionProposalView view = localService.active(subject);
+
+            assertThat(view).isNull();
+            assertThat(logs.list).noneMatch(event ->
+                    event.getFormattedMessage().contains("companion_proposal_gated"));
         } finally {
             releaseProposalLogs(logs);
         }
