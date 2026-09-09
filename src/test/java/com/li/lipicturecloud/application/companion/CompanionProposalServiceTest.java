@@ -13,6 +13,11 @@ import com.li.lipicturecloud.domain.companion.CompanionRepository;
 import com.li.lipicturecloud.domain.companion.ProposalOpportunityType;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -110,15 +115,50 @@ class CompanionProposalServiceTest {
     }
 
     @Test
-    void activeProposalIsBlockedWhenContractIsDisabled() {
+    void contractDisabledGateIsRecordedWithTheRealOpportunityType() {
         Companion companion = persistedCompanion();
         when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        when(opportunitySource.type()).thenReturn(ProposalOpportunityType.WEEKLY_REVIEW);
+        // 契约默认关闭，但真实机会候选存在：Observe 先于守门，拦截日志必须带上机会类型。
+        when(opportunitySource.findOpportunity(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.WEEKLY_REVIEW,
+                        new BigDecimal("30.00"), "这周你喂了我 3 次。想听我讲一段我们的故事吗？")));
+        ListAppender<ILoggingEvent> logs = captureProposalServiceLogs();
+        try {
+            CompanionProposalView view = service.active(subject);
 
-        CompanionProposalView view = service.active(subject);
+            assertThat(view).isNull();
+            // 守门失败不落库；机会源仍被感知，使"契约关闭拦掉的是哪类机会"可观测。
+            verify(opportunitySource).findOpportunity(companion.id(), 7L, NOW);
+            verify(proposalRepository, never()).append(any());
+            assertThat(logs.list).anyMatch(event -> event.getFormattedMessage()
+                    .contains("companion_proposal_gated subjectId=7 proposalId=none type=WEEKLY_REVIEW "
+                            + "reason=CONTRACT_DISABLED"));
+        } finally {
+            releaseProposalLogs(logs);
+        }
+    }
 
-        assertThat(view).isNull();
-        verify(opportunitySource, never()).findOpportunity(anyLong(), anyLong(), any());
-        verify(proposalRepository, never()).append(any());
+    @Test
+    void absenceOfAnyCandidateIsNeverCountedAsGated() {
+        Companion companion = persistedCompanion();
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        when(opportunitySource.type()).thenReturn(ProposalOpportunityType.WEEKLY_REVIEW);
+        when(opportunitySource.findOpportunity(companion.id(), 7L, NOW)).thenReturn(Optional.empty());
+        ListAppender<ILoggingEvent> logs = captureProposalServiceLogs();
+        try {
+            CompanionProposalView view = service.active(subject);
+
+            assertThat(view).isNull();
+            // 没有真实机会时只记 NO_CANDIDATE，绝不能计为 gated（避免把轮询当拦截率分子）。
+            assertThat(logs.list).noneMatch(event ->
+                    event.getFormattedMessage().contains("companion_proposal_gated"));
+            assertThat(logs.list).anyMatch(event -> event.getFormattedMessage()
+                    .contains("companion_proposal_opportunity subjectId=7 type=WEEKLY_REVIEW "
+                            + "result=NO_CANDIDATE"));
+        } finally {
+            releaseProposalLogs(logs);
+        }
     }
 
     @Test
@@ -260,5 +300,22 @@ class CompanionProposalServiceTest {
 
     private Companion persistedCompanion() {
         return Companion.awaken(7L, CompanionBalance.v1()).persistedAs(11L);
+    }
+
+    /** 捕获 CompanionProposalService 的 INFO 日志（含 gated/opportunity 事件），便于断言观测字段。 */
+    private static ListAppender<ILoggingEvent> captureProposalServiceLogs() {
+        LoggerContext context = (LoggerContext) org.slf4j.LoggerFactory.getILoggerFactory();
+        Logger logger = context.getLogger(CompanionProposalService.class);
+        logger.setLevel(Level.INFO);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.setContext(context);
+        appender.start();
+        logger.addAppender(appender);
+        return appender;
+    }
+
+    private static void releaseProposalLogs(ListAppender<ILoggingEvent> appender) {
+        LoggerContext context = (LoggerContext) org.slf4j.LoggerFactory.getILoggerFactory();
+        context.getLogger(CompanionProposalService.class).detachAppender(appender);
     }
 }

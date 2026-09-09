@@ -189,14 +189,10 @@ public class CompanionProposalService {
                 .findFirst().orElse(null);
         ProposalGate.GateResult gate = ProposalGate.check(contract, now, SHANGHAI,
                 latest == null ? null : latest.createdTime());
-        if (!gate.passed()) {
-            log.info("companion_proposal_gated subjectId={} reason={}",
-                    subject.userId(), gate.reasonCode());
-            return null;
-        }
-        // 机会评估按类型记录：每种机会源的"无候选 / 冲动拦截 / 生成"都能从日志区分，
-        // 便于计算三类机会的生成与拦截率。低于最低冲动（零积累）的候选不落库，
-        // 继续尝试下一个机会源而不是短路。
+        // Observe 先于守门记录：只有真实存在候选时，守门拦截才会计入该机会类型的指标
+        // （companion_proposal_gated 带 type）；没有任何候选时只记 NO_CANDIDATE，
+        // 不计为 gated，避免把"请求轮询"误算成"真实机会被守门抑制"。
+        // 顺序：Observe（候选感知）→ 守门（不通过则不落库）→ 冲动阈值 → 落库 PENDING。
         for (CompanionOpportunitySource source : opportunitySources) {
             Optional<ProposalOpportunity> found = source.findOpportunity(
                     companion.id(), subject.userId(), now);
@@ -206,6 +202,11 @@ public class CompanionProposalService {
                 continue;
             }
             ProposalOpportunity opportunity = found.get();
+            if (!gate.passed()) {
+                log.info("companion_proposal_gated subjectId={} proposalId=none type={} reason={}",
+                        subject.userId(), opportunity.type().name(), gate.reasonCode());
+                return null;
+            }
             if (!evaluator.reachesProposalThreshold(opportunity.impulseScore())) {
                 log.info("companion_proposal_opportunity subjectId={} type={} result=BELOW_THRESHOLD "
                                 + "reason=IMPULSE_ZERO score={}",
