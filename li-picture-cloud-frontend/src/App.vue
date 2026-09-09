@@ -8,6 +8,11 @@
         </transition>
       </router-view>
     </main>
+    <footer class="site-footer">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
+        湘ICP备2026039576号
+      </a>
+    </footer>
   </div>
 </template>
 
@@ -22,4 +27,6 @@ userStore.ensureCurrentUser().catch(() => {})
 <style scoped>
 #app-root { min-height: 100vh; display: flex; flex-direction: column; }
 main { flex: 1; }
+.site-footer { padding: 1rem; text-align: center; font-size: 0.875rem; color: var(--gray-600); }
+.site-footer a:hover { color: var(--red); text-decoration: underline; }
 </style>
