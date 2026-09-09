@@ -20,6 +20,9 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByText('未读取图片内容，也未调用视觉模型')).toBeVisible()
   await page.getByRole('button', { name: '唤醒我的伙伴' }).click()
   await expect(page.getByText('光点', { exact: true })).toBeVisible()
+  // 已唤醒但尚未喂养：主页返回服务端中性情绪视图（五轴为 0），关系面板保持空状态。
+  await expect(page.getByTestId('mood-value-energy')).toHaveText('0')
+  await expect(page.getByText('伙伴还没和你建立关系，先喂一张图片开始相处。')).toBeVisible()
 
   await page.getByRole('button', { name: /旅行样片/ }).click()
   const keys = []
@@ -64,6 +67,16 @@ test('awakens a companion and recovers one private-picture feed without double g
   // Demo 喂养产生一条待确认记忆候选，情绪与关系面板也随喂养出现。
   await expect(page.getByTestId('memory-status').first()).toHaveText('待确认')
   await expect(page.getByText('伙伴记得一张让它练习了观察与叙事的演示图片，它把这次练习记进了档案。')).toBeVisible()
+  // 无需 reload：喂养成功后页面自动重取权威主页，情绪与关系面板立即出现最新值。
+  // Demo 档每次喂养五轴 +2；首次完整喂养关系为 熟悉 +5 / 信任 +2 / 亲密 +1 / 默契 +1 / 近期反馈 +5。
+  await expect(page.getByTestId('mood-value-energy')).toHaveText('2')
+  await expect(page.getByTestId('mood-value-joy')).toHaveText('2')
+  await expect(page.getByTestId('mood-value-loneliness')).toHaveText('2')
+  await expect(page.getByTestId('relationship-value-familiarity')).toHaveText('5')
+  await expect(page.getByTestId('relationship-value-trust')).toHaveText('2')
+  await expect(page.getByTestId('relationship-value-closeness')).toHaveText('1')
+  await expect(page.getByTestId('relationship-value-tacit')).toHaveText('1')
+  await expect(page.getByTestId('relationship-value-recentFeedback')).toHaveText('5')
   // 站内对话与主动提案面板：Demo 档聊天不调模型，契约默认关闭所以没有主动提案。
   await expect(page.getByText('和伙伴说说话')).toBeVisible()
   await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。')).toBeVisible()

@@ -170,8 +170,12 @@ public class CompanionFeedingCoordinator {
                 run.correlationId(), now));
         // 情绪、关系与记忆候选与成长在同一事务内原子提交：任何一步失败都整体回滚，重试保持幂等。
         applyMood(locked, nutrition, now);
-        applyRelationship(locked, growth, now);
-        appendMemoryCandidate(locked, record, growth, nutrition, now);
+        // 关系与记忆记录的主体是"发起并通过授权的当前请求主体"（FeedingRun.subjectId），
+        // reserve 阶段由服务端授权主体写入，而不是 locked.ownerId()：前者与
+        // (companionId, subjectId) 领域模型一致，未来出现非所有者的受权主体时依然正确。
+        long feedingSubjectId = run.subjectId();
+        applyRelationship(locked, growth, feedingSubjectId, now);
+        appendMemoryCandidate(locked, record, growth, feedingSubjectId, nutrition, now);
         // run 也要 CAS：失败会让整个事务回滚，避免伙伴成长了却没有可重放的完成回执。
         if (!runRepository.complete(run.id(), run.revision(), record.id(), now)) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "喂养运行状态已变化，请重试");
@@ -210,12 +214,12 @@ public class CompanionFeedingCoordinator {
         }
     }
 
-    private void applyRelationship(Companion locked, FeedingGrowth growth, Instant now) {
+    private void applyRelationship(Companion locked, FeedingGrowth growth, long subjectId, Instant now) {
         RelationshipImpact impact = growth.eventType() == GrowthEventType.PICTURE_FED
                 ? relationshipRules.fullFeedImpact() : relationshipRules.revisitImpact();
         CompanionRelationship relationship = relationshipRepository
-                .findByCompanionAndSubject(locked.id(), locked.ownerId())
-                .orElseGet(() -> relationshipRepository.createIfAbsent(locked.id(), locked.ownerId()));
+                .findByCompanionAndSubject(locked.id(), subjectId)
+                .orElseGet(() -> relationshipRepository.createIfAbsent(locked.id(), subjectId));
         CompanionRelationship after = relationship.apply(impact, relationshipRules);
         if (!relationshipRepository.save(after, relationship.revision())) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "伙伴关系状态已变化，请重试");
@@ -223,7 +227,7 @@ public class CompanionFeedingCoordinator {
     }
 
     private void appendMemoryCandidate(Companion locked, GrowthRecord record, FeedingGrowth growth,
-                                       PictureNutrition nutrition, Instant now) {
+                                       long subjectId, PictureNutrition nutrition, Instant now) {
         if (growth.eventType() != GrowthEventType.PICTURE_FED || !nutrition.hasMemorySeed()) {
             return;
         }
@@ -234,7 +238,7 @@ public class CompanionFeedingCoordinator {
         };
         BigDecimal confidence = nutrition.provenance().confidence() == null
                 ? new BigDecimal("0.50") : nutrition.provenance().confidence();
-        memoryRepository.append(CompanionMemory.candidate(locked.id(), locked.ownerId(),
+        memoryRepository.append(CompanionMemory.candidate(locked.id(), subjectId,
                 record.pictureId(), record.id(), sourceType, nutrition.memorySeed(), confidence, now));
     }
 

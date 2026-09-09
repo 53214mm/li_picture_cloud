@@ -214,7 +214,10 @@ public class CompanionLifeService implements CompanionLife {
                     }
                     return decayed;
                 })
-                .map(assembler::mood).orElse(null);
+                .map(assembler::mood)
+                // 已唤醒但还没有 companion_mood 行时返回服务端生成的中性情绪视图；
+                // 普通主页读取不为了展示中性值而插入数据库行。
+                .orElseGet(() -> assembler.mood(CompanionMood.neutral(companion.id(), clock.instant())));
         CompanionRelationshipView relationship = relationshipRepository
                 .findByCompanionAndSubject(companion.id(), subject.userId())
                 .map(assembler::relationship).orElse(null);

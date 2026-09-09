@@ -31,6 +31,20 @@ export function applyFeedResult(home, result) {
   }
 }
 
+/**
+ * 采用一次全新的权威主页快照替换当前视图（喂养成功后调用）。
+ *
+ * <p>情绪与关系只随服务端主页返回，不随喂养回执下发：喂养成功后立即重取
+ * GET /companion/me 就能让面板无需 reload 显示最新值。服务端 CAS 只前进不回退，
+ * 且页面内请求串行，最新响应的 companion revision 不可能低于当前展示值，因此整体
+ * 采用新快照不会把旧幂等键 replay 的旧状态带回面板。空载响应（无 companion 字段）
+ * 视为异常信号，保留当前视图等待下次成功读取。</p>
+ */
+export function adoptAuthoritativeHome(previous, authoritative) {
+  if (authoritative && authoritative.companion) return authoritative
+  return previous
+}
+
 export function selectOldestPrivateSpace(spaces = [], userId) {
   // 只读取当前用户的私有空间，避免伙伴页无意浏览团队空间或其他成员的图片。
   return spaces

@@ -91,6 +91,9 @@ public class CompanionMemoryService {
     /**
      * 读取路径上的惰性失效传播：来源图片撤权或消失的记忆转为 INVALIDATED，内容不再对外展示。
      * 同一来源图片的多条记忆只做一次授权检查。
+     *
+     * <p>授权服务或基础设施异常不属于撤权：整个读取请求失败并回滚本事务，既不会把记忆
+     * 错误地永久标记为 INVALIDATED，也不会在无法确认权限时继续展示记忆内容。</p>
      */
     private void invalidateRevoked(Companion companion, AuthorizationSubject subject) {
         Set<Long> unavailablePictures = new HashSet<>();
@@ -100,7 +103,7 @@ public class CompanionMemoryService {
             }
             boolean unavailable = unavailablePictures.contains(memory.pictureId());
             if (!unavailable) {
-                unavailable = pictureUnavailable(memory.pictureId(), subject.userId());
+                unavailable = sourcePictureRevokedOrMissing(memory.pictureId(), subject.userId());
                 if (unavailable) {
                     unavailablePictures.add(memory.pictureId());
                 }
@@ -119,7 +122,15 @@ public class CompanionMemoryService {
         }
     }
 
-    private boolean pictureUnavailable(long pictureId, long userId) {
+    /**
+     * 判断来源图片是否处于"撤权或已不存在"状态。
+     *
+     * <p>只有 NOT_FOUND / NO_AUTH 属于撤权语义并返回 true；其他 BusinessException 与运行时异常
+     * （登录态失效、系统错误、授权服务故障、数据库错误等）一律按"暂时无法验证权限"抛出操作错误，
+     * 绝不放行：既不能把基础设施故障当撤权永久落库，也不能在无法确认权限时继续展示内容
+     * 或执行状态转移。错误响应与日志都不携带记忆正文、图片 URL、Token 或模型原始响应。</p>
+     */
+    private boolean sourcePictureRevokedOrMissing(long pictureId, long userId) {
         try {
             authorization.checkForUser(PICTURE_VIEW, pictureId, userId);
             return false;
@@ -128,9 +139,17 @@ public class CompanionMemoryService {
                     || error.getCode() == ErrorCode.NO_AUTH_ERROR.getCode()) {
                 return true;
             }
-            // 登录态或基础设施异常不当作撤权；保留记忆，等待下次读取再传播。
-            return false;
+            throw authorizationUnverifiable(pictureId, userId, error.getClass());
+        } catch (RuntimeException error) {
+            throw authorizationUnverifiable(pictureId, userId, error.getClass());
         }
+    }
+
+    private BusinessException authorizationUnverifiable(long pictureId, long userId,
+                                                        Class<? extends Throwable> exceptionType) {
+        log.warn("companion_memory_authorization_unverifiable subjectId={} pictureId={} exceptionType={}",
+                userId, pictureId, exceptionType.getName());
+        return new BusinessException(ErrorCode.OPERATION_ERROR, "暂时无法验证图片访问权限，请稍后重试");
     }
 
     private CompanionMemoryView transition(AuthorizationSubject subject, long memoryId, String action,
@@ -139,7 +158,8 @@ public class CompanionMemoryService {
         CompanionMemory memory = requireOwnedMemory(companion, subject, memoryId);
         // 撤权传播覆盖转移端点：来源图片已撤权或消失时，直接拒绝操作且不返回记忆内容。
         // 状态失效仍由列表读取路径惰性传播，避免本事务内"先失效再报错"被整体回滚。
-        if (memory.pictureId() != null && pictureUnavailable(memory.pictureId(), subject.userId())) {
+        // 授权无法验证（系统或基础设施异常）时同样拒绝操作，绝不默认放行。
+        if (memory.pictureId() != null && sourcePictureRevokedOrMissing(memory.pictureId(), subject.userId())) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "记忆来源图片已不可用");
         }
         try {

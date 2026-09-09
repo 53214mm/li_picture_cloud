@@ -154,6 +154,7 @@ import CompanionFusionPanel from '@/components/companion/CompanionFusionPanel.vu
 import CompanionChatPanel from '@/components/companion/CompanionChatPanel.vue'
 import CompanionProposalPanel from '@/components/companion/CompanionProposalPanel.vue'
 import {
+  adoptAuthoritativeHome,
   applyFeedResult,
   beginFeedAttempt,
   buildCompanionPictureQuery,
@@ -218,6 +219,20 @@ async function loadHome() {
     else loadError.value = error.message || '伙伴状态加载失败，请稍后重试。'
   } finally {
     pageLoading.value = false
+  }
+}
+
+/**
+ * 喂养成功后再取一次权威主页：情绪与关系只随 /companion/me 返回，不随喂养回执下发。
+ * 静默执行，失败时保留已合并的本次喂养结果，只影响面板的即时性。
+ */
+async function refreshAuthoritativeHome() {
+  try {
+    const authoritative = await getCompanionHome()
+    home.value = adoptAuthoritativeHome(home.value, authoritative)
+  } catch (error) {
+    // 不把刷新失败误报成喂养失败：成长与记忆已经展示，下一次读取会补上最新情绪/关系。
+    console.warn('[companion] 喂养后权威主页刷新失败，情绪与关系面板可能停留在旧值', error)
   }
 }
 
@@ -295,6 +310,9 @@ async function submitFeed() {
         ? '伙伴认出了这张图片，只获得了一点熟悉感。'
         : '伙伴完成了这次喂养。'
     pendingAttempt.value = null
+    // 情绪与关系面板直接读取 home.mood / home.relationship：喂养成功后重取权威主页，
+    // 用户无需手动刷新页面即可看到本次喂养后的最新情绪与关系。
+    await refreshAuthoritativeHome()
   } catch (error) {
     // 结果不确定时留下 key，下一次重试由后端决定回放还是继续处理，前端绝不猜测是否已成长。
     const retrySameKey = shouldRetrySameFeedKey(error)

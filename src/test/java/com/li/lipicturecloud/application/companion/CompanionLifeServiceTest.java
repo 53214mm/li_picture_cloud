@@ -138,6 +138,45 @@ class CompanionLifeServiceTest {
     }
 
     @Test
+    void awakenedCompanionWithoutMoodRowReceivesAServerSideNeutralMoodView() {
+        Companion companion = persistedCompanion();
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(growthRepository.findRecent(companion.id(), 20)).thenReturn(List.of());
+        when(moodRepository.findByCompanionId(companion.id())).thenReturn(Optional.empty());
+        when(relationshipRepository.findByCompanionAndSubject(companion.id(), 7L))
+                .thenReturn(Optional.empty());
+
+        var home = service.home(subject);
+
+        // 中性视图来自服务端展示层，不是 null：情绪面板能显示全部五轴为 0 与平静摘要。
+        assertThat(home.mood()).isNotNull();
+        assertThat(home.mood().energy()).isEqualByComparingTo("0.00");
+        assertThat(home.mood().joy()).isEqualByComparingTo("0.00");
+        assertThat(home.mood().loneliness()).isEqualByComparingTo("0.00");
+        assertThat(home.mood().inspiration()).isEqualByComparingTo("0.00");
+        assertThat(home.mood().irritation()).isEqualByComparingTo("0.00");
+        assertThat(home.mood().summary()).contains("平静");
+        // 普通主页读取不得为了中性视图插入数据库行，也不得触发衰减写回。
+        verify(moodRepository, never()).insert(any());
+        verify(moodRepository, never()).save(any(), anyLong());
+    }
+
+    @Test
+    void dormantHomeKeepsItsOriginalEmptyStateWithoutMoodOrRelationship() {
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.empty());
+
+        var home = service.home(subject);
+
+        assertThat(home.companion()).isNull();
+        assertThat(home.mood()).isNull();
+        assertThat(home.relationship()).isNull();
+        assertThat(home.recentGrowth()).isEmpty();
+        verify(moodRepository, never()).findByCompanionId(anyLong());
+        verify(moodRepository, never()).insert(any());
+        verify(relationshipRepository, never()).findByCompanionAndSubject(anyLong(), anyLong());
+    }
+
+    @Test
     void analyzerFailurePersistsSafeFailureWithoutLeakingItsMessage() {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion);

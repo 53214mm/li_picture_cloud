@@ -11,10 +11,11 @@
     </div>
     <div v-else class="relationship-body">
       <ul class="relationship-axes">
-        <li v-for="axis in RELATIONSHIP_AXES" :key="axis.key" class="axis-row">
+        <li v-for="axis in RELATIONSHIP_AXES" :key="axis.key" class="axis-row"
+            :data-testid="`relationship-axis-${axis.key}`">
           <div class="axis-head">
             <span>{{ axis.label }}</span>
-            <strong>{{ axisValue(axis.key) }}</strong>
+            <strong :data-testid="`relationship-value-${axis.key}`">{{ axisValue(axis.key) }}</strong>
           </div>
           <div class="axis-bar" aria-hidden="true">
             <span :class="{ negative: axis.key === 'recentFeedback' && axisValue(axis.key) < 0 }"

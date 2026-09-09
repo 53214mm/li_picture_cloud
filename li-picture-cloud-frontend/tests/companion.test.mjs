@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import {
+  adoptAuthoritativeHome,
   applyFeedResult,
   beginFeedAttempt,
   buildCompanionPictureQuery,
@@ -123,6 +124,57 @@ test('an old idempotent replay cannot roll back the visible companion or timelin
   assert.equal(merged.companion.revision, '2')
   assert.equal(merged.companion.lifeExperience, '43')
   assert.deepEqual(merged.recentGrowth.map(item => item.id), ['32', '31'])
+})
+
+test('after a successful feed the authoritative home snapshot refreshes mood and relationship without reload', () => {
+  // 喂养回执不含情绪/关系；喂养成功后前端重取 /companion/me，用权威快照整体替换本地视图。
+  const stale = {
+    companion: { revision: '1', lifeExperience: '42' },
+    mood: { energy: '0.00', joy: '0.00', summary: '它此刻很平静，正等着和你一起看看图片。', updatedAt: '2026-08-11T08:00:00Z' },
+    relationship: null,
+    recentGrowth: []
+  }
+  const authoritative = {
+    companion: { revision: '1', lifeExperience: '42' },
+    mood: { energy: '2.00', joy: '2.00', loneliness: '2.00', inspiration: '2.00', irritation: '2.00', summary: '它此刻很平静，正等着和你一起看看图片。', updatedAt: '2026-08-11T08:00:10Z' },
+    relationship: { familiarity: '5.00', trust: '2.00', closeness: '1.00', tacit: '1.00', recentFeedback: '5.00' },
+    recentGrowth: [{ id: '31', createdTime: '2026-08-11T08:00:00Z' }]
+  }
+  const adopted = adoptAuthoritativeHome(stale, authoritative)
+  assert.equal(adopted.mood.energy, '2.00')
+  assert.equal(adopted.mood.joy, '2.00')
+  assert.equal(adopted.relationship.familiarity, '5.00')
+  assert.equal(adopted.relationship.recentFeedback, '5.00')
+  assert.deepEqual(adopted.recentGrowth.map(item => item.id), ['31'])
+})
+
+test('an empty or missing authoritative snapshot keeps the current view instead of blanking panels', () => {
+  const current = {
+    companion: { revision: '2' },
+    mood: { energy: '2.00', summary: '它此刻很平静，正等着和你一起看看图片。' },
+    relationship: { familiarity: '5.00' }
+  }
+  assert.equal(adoptAuthoritativeHome(current, null), current)
+  assert.equal(adoptAuthoritativeHome(current, { companion: null, mood: null }), current)
+  assert.equal(adoptAuthoritativeHome(current, undefined), current)
+})
+
+test('feed success path refetches the authoritative home so mood and relationship panels update without reload', async () => {
+  const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/CompanionView.vue', import.meta.url)), 'utf8')
+  const utils = await readFile(fileURLToPath(new globalThis.URL('../src/utils/companion.js', import.meta.url)), 'utf8')
+  const mood = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionMoodPanel.vue', import.meta.url)), 'utf8')
+  const relationship = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionRelationshipPanel.vue', import.meta.url)), 'utf8')
+
+  // 喂养成功后（无论新喂养还是旧 key 回放）都会重取权威主页并整体采用新快照。
+  assert.match(page, /await refreshAuthoritativeHome\(\)/)
+  assert.match(page, /const authoritative = await getCompanionHome\(\)/)
+  assert.match(page, /home\.value = adoptAuthoritativeHome\(home\.value, authoritative\)/)
+  assert.match(utils, /export function adoptAuthoritativeHome\(previous, authoritative\)/)
+  // 情绪与关系面板直接由 home.mood / home.relationship 驱动，快照替换即面板更新。
+  assert.match(page, /:mood="home\.mood"/)
+  assert.match(page, /:relationship="home\.relationship"/)
+  assert.match(mood, /mood\.summary/)
+  assert.match(relationship, /recentFeedback/)
 })
 
 test('orders growth instants by time even when fractional precision differs', () => {

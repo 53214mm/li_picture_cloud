@@ -345,6 +345,42 @@ class CompanionFeedingCoordinatorTest {
     }
 
     @Test
+    void relationshipAndMemorySubjectComeFromTheAuthorizedFeedingRunContext() {
+        Companion companion = persistedCompanion();
+        FeedingRun run = FeedingRun.processing(companion.id(), 7L, 102L, KEY, fingerprint(102L), CORRELATION,
+                NutritionMode.DEMO_DETERMINISTIC, false, NOW).persistedAs(21L);
+        PictureNutrition nutrition = new PictureNutrition(42L, TraitDelta.zero(), Map.of(),
+                "演示营养", NutritionProvenance.demo(),
+                new MoodImpact(bd("1.00"), bd("0.00"), bd("0.00"), bd("0.00"), bd("0.00")),
+                "伙伴记得一张演示图片。");
+        when(companionRepository.findByOwnerIdForUpdate(run.subjectId())).thenReturn(Optional.of(companion));
+        when(companionRepository.save(any(), eq(companion.revision()))).thenReturn(true);
+        when(growthRepository.append(any())).thenAnswer(invocation ->
+                invocation.<GrowthRecord>getArgument(0).withId(31L));
+        when(runRepository.complete(run.id(), run.revision(), 31L, NOW)).thenReturn(true);
+        when(moodRepository.findByCompanionId(companion.id())).thenReturn(Optional.empty());
+        // 关系行不存在：结算必须用 run.subjectId()（服务端授权上下文）查询并创建关系行。
+        when(relationshipRepository.findByCompanionAndSubject(companion.id(), run.subjectId()))
+                .thenReturn(Optional.empty());
+        when(relationshipRepository.createIfAbsent(companion.id(), run.subjectId()))
+                .thenReturn(CompanionRelationship.initial(companion.id(), run.subjectId()));
+
+        coordinator.complete(run, nutrition);
+
+        // 查询与创建都以 FeedingRun.subjectId 为主体；该值在 reserve 时由服务端授权主体写入，
+        // 不由前端传入，也与 (companionId, subjectId) 的关系/记忆模型保持一致。
+        verify(relationshipRepository).findByCompanionAndSubject(companion.id(), run.subjectId());
+        ArgumentCaptor<CompanionRelationship> relationshipSave = ArgumentCaptor.forClass(CompanionRelationship.class);
+        verify(relationshipRepository).save(relationshipSave.capture(), eq(0L));
+        assertThat(relationshipSave.getValue().companionId()).isEqualTo(companion.id());
+        assertThat(relationshipSave.getValue().subjectId()).isEqualTo(run.subjectId());
+        ArgumentCaptor<CompanionMemory> memoryAppend = ArgumentCaptor.forClass(CompanionMemory.class);
+        verify(memoryRepository).append(memoryAppend.capture());
+        assertThat(memoryAppend.getValue().companionId()).isEqualTo(companion.id());
+        assertThat(memoryAppend.getValue().subjectId()).isEqualTo(run.subjectId());
+    }
+
+    @Test
     void revisitCompletionSkipsMemoryCandidateButStillUpdatesRelationship() {
         Companion companion = persistedCompanion();
         FeedingRun run = processingRun(companion, 102L);

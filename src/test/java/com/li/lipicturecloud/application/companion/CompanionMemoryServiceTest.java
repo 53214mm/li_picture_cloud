@@ -143,6 +143,78 @@ class CompanionMemoryServiceTest {
     }
 
     @Test
+    void listingInvalidatesMemoriesWhoseSourcePictureNoLongerExists() {
+        Companion companion = persistedCompanion();
+        CompanionMemory missing = candidate(companion, 31L, 101L);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(memoryRepository.findActive(companion.id(), 100)).thenReturn(List.of(missing));
+        when(memoryRepository.save(any(), anyLong())).thenReturn(true);
+        doThrow(new BusinessException(ErrorCode.NOT_FOUND_ERROR, "图片不存在"))
+                .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+        CompanionMemory invalidated = missing.invalidate("PICTURE_UNAVAILABLE", NOW);
+        when(memoryRepository.findRecent(companion.id(), 50)).thenReturn(List.of(invalidated));
+
+        CompanionMemoryListView list = service.memories(subject, 50);
+
+        assertThat(list.records()).hasSize(1);
+        assertThat(list.records().get(0).status()).isEqualTo("INVALIDATED");
+        assertThat(list.records().get(0).content()).isNull();
+        assertThat(list.records().get(0).invalidatedReason()).isEqualTo("PICTURE_UNAVAILABLE");
+    }
+
+    @Test
+    void listingKeepsContentWhenEverySourcePictureIsStillAuthorized() {
+        Companion companion = persistedCompanion();
+        CompanionMemory accessible = candidate(companion, 31L, 101L);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(memoryRepository.findActive(companion.id(), 100)).thenReturn(List.of(accessible));
+        when(memoryRepository.findRecent(companion.id(), 50)).thenReturn(List.of(accessible));
+
+        CompanionMemoryListView list = service.memories(subject, 50);
+
+        assertThat(list.records()).hasSize(1);
+        assertThat(list.records().get(0).status()).isEqualTo("PENDING");
+        assertThat(list.records().get(0).content()).isEqualTo(accessible.content());
+        verify(memoryRepository, never()).save(any(), anyLong());
+    }
+
+    @Test
+    void authorizationInfrastructureFailureFailsTheListInsteadOfShowingContent() {
+        Companion companion = persistedCompanion();
+        CompanionMemory memory = candidate(companion, 31L, 101L);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(memoryRepository.findActive(companion.id(), 100)).thenReturn(List.of(memory));
+        when(memoryRepository.findRecent(companion.id(), 50)).thenReturn(List.of(memory));
+        doThrow(new BusinessException(ErrorCode.SYSTEM_ERROR, "授权服务数据库暂时不可用"))
+                .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+
+        // fail-closed：授权无法验证时本次列表请求失败，不返回任何记忆内容，
+        // 也不会把系统故障当成撤权永久落库为 INVALIDATED。
+        assertThatThrownBy(() -> service.memories(subject, 50))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode(), Throwable::getMessage)
+                .containsExactly(ErrorCode.OPERATION_ERROR.getCode(), "暂时无法验证图片访问权限，请稍后重试");
+        verify(memoryRepository, never()).save(any(), anyLong());
+    }
+
+    @Test
+    void runtimeAuthorizationFailureAlsoFailsTheListClosed() {
+        Companion companion = persistedCompanion();
+        CompanionMemory memory = candidate(companion, 31L, 101L);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(memoryRepository.findActive(companion.id(), 100)).thenReturn(List.of(memory));
+        when(memoryRepository.findRecent(companion.id(), 50)).thenReturn(List.of(memory));
+        doThrow(new IllegalStateException("authorization backend unavailable"))
+                .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+
+        assertThatThrownBy(() -> service.memories(subject, 50))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode(), Throwable::getMessage)
+                .containsExactly(ErrorCode.OPERATION_ERROR.getCode(), "暂时无法验证图片访问权限，请稍后重试");
+        verify(memoryRepository, never()).save(any(), anyLong());
+    }
+
+    @Test
     void transitionRejectsMemoryWhoseSourcePictureWasRevoked() {
         Companion companion = persistedCompanion();
         CompanionMemory memory = candidate(companion, 31L, 101L);
@@ -159,19 +231,35 @@ class CompanionMemoryServiceTest {
     }
 
     @Test
-    void infrastructureAuthorizationFailureDoesNotInvalidateMemories() {
+    void transitionRejectsMemoryWhoseSourcePictureWasDeleted() {
         Companion companion = persistedCompanion();
         CompanionMemory memory = candidate(companion, 31L, 101L);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(memoryRepository.findActive(companion.id(), 100)).thenReturn(List.of(memory));
-        when(memoryRepository.findRecent(companion.id(), 50)).thenReturn(List.of(memory));
-        doThrow(new BusinessException(ErrorCode.SYSTEM_ERROR, "暂时不可用"))
+        when(memoryRepository.findById(31L)).thenReturn(Optional.of(memory));
+        doThrow(new BusinessException(ErrorCode.NOT_FOUND_ERROR, "图片不存在"))
                 .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
 
-        CompanionMemoryListView list = service.memories(subject, 50);
+        assertThatThrownBy(() -> service.dismiss(subject, 31L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode())
+                .isEqualTo(ErrorCode.NOT_FOUND_ERROR.getCode());
+        verify(memoryRepository, never()).save(any(), anyLong());
+    }
 
-        assertThat(list.records()).hasSize(1);
-        assertThat(list.records().get(0).status()).isEqualTo("PENDING");
+    @Test
+    void transitionFailsClosedWhenAuthorizationCannotVerify() {
+        Companion companion = persistedCompanion();
+        CompanionMemory memory = candidate(companion, 31L, 101L);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(memoryRepository.findById(31L)).thenReturn(Optional.of(memory));
+        doThrow(new BusinessException(ErrorCode.SYSTEM_ERROR, "授权服务暂时不可用"))
+                .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+
+        // 授权基础设施异常不能让状态转移继续执行：请求失败且不落库。
+        assertThatThrownBy(() -> service.confirm(subject, 31L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode(), Throwable::getMessage)
+                .containsExactly(ErrorCode.OPERATION_ERROR.getCode(), "暂时无法验证图片访问权限，请稍后重试");
         verify(memoryRepository, never()).save(any(), anyLong());
     }
 

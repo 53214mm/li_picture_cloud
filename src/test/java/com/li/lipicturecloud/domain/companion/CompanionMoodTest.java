@@ -38,7 +38,50 @@ class CompanionMoodTest {
         assertThat(decayed.inspiration()).isEqualByComparingTo("0.00");
         assertThat(decayed.irritation()).isEqualByComparingTo("0.00");
         assertThat(decayed.revision()).isEqualTo(4L);
-        assertThat(decayed.updatedAt()).isEqualTo(NOW.plusSeconds(2 * 3600 + 59));
+        // 衰减基准只推进已消费的完整小时，不足 59 分钟的时间余量保留给下一次读取。
+        assertThat(decayed.updatedAt()).isEqualTo(NOW.plusSeconds(2 * 3600L));
+    }
+
+    @Test
+    void partialHourRemainderIsKeptForTheNextDecay() {
+        CompanionMood mood = new CompanionMood(null, 11L,
+                bd("60.00"), bd("0.00"), bd("0.00"), bd("0.00"), bd("0.00"),
+                3L, NOW);
+
+        // T+1 小时 59 分读取：只消费第一个完整小时，基准推进到 T+1 小时。
+        CompanionMood first = mood.decayed(NOW.plusSeconds(3600L + 59 * 60L), rules);
+        assertThat(first.energy()).isEqualByComparingTo("55.00");
+        assertThat(first.revision()).isEqualTo(4L);
+        assertThat(first.updatedAt()).isEqualTo(NOW.plusSeconds(3600L));
+
+        // T+2 小时再次读取：从 T+1 小时的基准起又满 1 小时，累计衰减两次而不是只有一次。
+        CompanionMood second = first.decayed(NOW.plusSeconds(2 * 3600L), rules);
+        assertThat(second.energy()).isEqualByComparingTo("50.00");
+        assertThat(second.revision()).isEqualTo(5L);
+        assertThat(second.updatedAt()).isEqualTo(NOW.plusSeconds(2 * 3600L));
+    }
+
+    @Test
+    void feedingUsesTheEventTimeAsTheNewDecayAnchor() {
+        CompanionMood mood = new CompanionMood(null, 11L,
+                bd("60.00"), bd("0.00"), bd("0.00"), bd("0.00"), bd("0.00"),
+                3L, NOW);
+
+        // 喂养是真实新事件：T+1 小时 59 分喂养先按完整小时衰减（-5），再叠加影响，
+        // 事件时刻成为新基准，不再保留不足整小时的余量。
+        CompanionMood after = mood.apply(new MoodImpact(
+                bd("4.00"), bd("0.00"), bd("0.00"), bd("0.00"), bd("0.00")),
+                NOW.plusSeconds(3600L + 59 * 60L), rules);
+
+        assertThat(after.energy()).isEqualByComparingTo("59.00");
+        assertThat(after.revision()).isEqualTo(4L);
+        assertThat(after.updatedAt()).isEqualTo(NOW.plusSeconds(3600L + 59 * 60L));
+        // 事件后的下一次衰减从事件时刻（T+1 小时 59 分）起算：再满 1 小时（到 T+2 小时 59 分）
+        // 才衰减一次，证明事件基准是事件时间而不是 T 点，也没有把事件吸收的 59 分钟双算。
+        CompanionMood afterFullHour = after.decayed(NOW.plusSeconds(2 * 3600L + 59 * 60L), rules);
+        assertThat(afterFullHour.energy()).isEqualByComparingTo("54.00");
+        assertThat(afterFullHour.revision()).isEqualTo(5L);
+        assertThat(afterFullHour.updatedAt()).isEqualTo(NOW.plusSeconds(2 * 3600L + 59 * 60L));
     }
 
     @Test

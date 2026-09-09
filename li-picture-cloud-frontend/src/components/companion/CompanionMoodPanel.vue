@@ -13,10 +13,11 @@
       <div class="mood-body">
         <CompanionMessageBubble :message="mood.summary" />
         <ul class="mood-axes">
-          <li v-for="axis in MOOD_AXES" :key="axis.key" class="axis-row">
+          <li v-for="axis in MOOD_AXES" :key="axis.key" class="axis-row"
+              :data-testid="`mood-axis-${axis.key}`">
             <div class="axis-head">
               <span>{{ axis.label }}</span>
-              <strong>{{ axisValue(axis.key) }}</strong>
+              <strong :data-testid="`mood-value-${axis.key}`">{{ axisValue(axis.key) }}</strong>
             </div>
             <div class="axis-bar" aria-hidden="true">
               <span :style="{ width: `${axisValue(axis.key)}%` }"></span>
