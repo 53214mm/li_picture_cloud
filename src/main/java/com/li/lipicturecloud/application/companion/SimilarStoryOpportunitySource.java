@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import static com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConstant.PICTURE_VIEW;
@@ -22,10 +23,12 @@ import static com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConsta
 /**
  * 相似图片故事机会：最近完整喂养过的图片所属空间，最近 7 天又出现其他图片时产生。
  *
- * <p>只读取图片的空间归属与计数，不读取图片内容。机会源在引用一张喂养图之前必须重新
- * 校验当前主体对该图仍有查看权限（用户可能已被移出团队空间）：真实撤权/图片不存在则
- * 跳过该图继续扫描；授权服务或基础设施异常按 fail-closed 处理——本轮不产出任何候选，
- * 绝不在无法确认权限时向用户声称"那个空间最近又攒下了 N 张图片"。
+ * <p>两段式：{@code observe} 只判断"是否有最近喂养图"（守门之前的最轻量观察，不读
+ * 图片表、不校验授权、不做空间统计）；{@code materialize} 在守门通过后才定位图片与
+ * 空间、重新校验当前主体的查看权限（用户可能已被移出团队空间）并统计近 7 天图片数。
+ * 只读取图片的空间归属与计数，不读取图片内容；真实撤权/图片不存在则跳过该图继续
+ * 扫描；授权服务或基础设施异常按 fail-closed 处理——本轮不产出任何候选，绝不在
+ * 无法确认权限时向用户声称"那个空间最近又攒下了 N 张图片"。
  * 机会源优先级第 3（机会源按 @Order 顺序短路选择）。</p>
  */
 @Component
@@ -58,7 +61,21 @@ public class SimilarStoryOpportunitySource implements CompanionOpportunitySource
     }
 
     @Override
-    public Optional<ProposalOpportunity> findOpportunity(long companionId, long subjectId, Instant now) {
+    public Optional<OpportunityObservation> observe(long companionId, long subjectId, Instant now) {
+        // 守门之前只确认"存在最近喂养过的图"这一最小事实；图库归属、权限与空间统计
+        // 全部推迟到 materialize（守门通过后），硬门禁失败时不做任何候选级探查。
+        return growthRepository.findRecentFedPictureIds(companionId, RECENT_FED_SCAN).isEmpty()
+                ? Optional.empty()
+                : Optional.of(new OpportunityObservation(ProposalOpportunityType.SIMILAR_STORY));
+    }
+
+    @Override
+    public Optional<ProposalOpportunity> materialize(OpportunityObservation observation,
+                                                     long companionId, long subjectId, Instant now) {
+        Objects.requireNonNull(observation, "observation");
+        if (observation.type() != ProposalOpportunityType.SIMILAR_STORY) {
+            return Optional.empty();
+        }
         List<Long> fedPictureIds = growthRepository.findRecentFedPictureIds(companionId, RECENT_FED_SCAN);
         for (Long pictureId : fedPictureIds) {
             PictureAsset picture = pictureRepository.findAssetById(pictureId).orElse(null);

@@ -189,24 +189,35 @@ public class CompanionProposalService {
                 .findFirst().orElse(null);
         ProposalGate.GateResult gate = ProposalGate.check(contract, now, SHANGHAI,
                 latest == null ? null : latest.createdTime());
-        // Observe 先于守门记录：只有真实存在候选时，守门拦截才会计入该机会类型的指标
-        // （companion_proposal_gated 带 type）；没有任何候选时只记 NO_CANDIDATE，
-        // 不计为 gated，避免把"请求轮询"误算成"真实机会被守门抑制"。
-        // 顺序：Observe（候选感知）→ 守门（不通过则不落库）→ 冲动阈值 → 落库 PENDING。
+        // 三段式顺序（Observe → 守门 → Materialize）：
+        // 1) 机会源先轻量观察：只返回真实机会类型与最小事实（不评分、不读取/写回情绪、
+        //    不校验授权、不统计、不生成文案），使硬门禁拦截日志能带上类型；
+        // 2) 有观察后执行守门：失败只记 companion_proposal_gated（type + reason）并停止，
+        //    此时不会发生任何候选级工作，满足"守门先于候选生成"的硬门禁边界；
+        // 3) 守门通过后才物化完整候选（冲动评分、文案等），再经冲动阈值后落库。
+        // 没有任何候选时只记 NO_CANDIDATE，不计为 gated，避免把轮询当拦截率分子。
         for (CompanionOpportunitySource source : opportunitySources) {
-            Optional<ProposalOpportunity> found = source.findOpportunity(
+            Optional<OpportunityObservation> observed = source.observe(
                     companion.id(), subject.userId(), now);
-            if (found.isEmpty()) {
+            if (observed.isEmpty()) {
                 log.info("companion_proposal_opportunity subjectId={} type={} result=NO_CANDIDATE",
                         subject.userId(), sourceTypeName(source));
                 continue;
             }
-            ProposalOpportunity opportunity = found.get();
+            OpportunityObservation observation = observed.get();
             if (!gate.passed()) {
                 log.info("companion_proposal_gated subjectId={} proposalId=none type={} reason={}",
-                        subject.userId(), opportunity.type().name(), gate.reasonCode());
+                        subject.userId(), observation.type().name(), gate.reasonCode());
                 return null;
             }
+            Optional<ProposalOpportunity> materialized = source.materialize(
+                    observation, companion.id(), subject.userId(), now);
+            if (materialized.isEmpty()) {
+                log.info("companion_proposal_opportunity subjectId={} type={} result=NO_CANDIDATE",
+                        subject.userId(), observation.type().name());
+                continue;
+            }
+            ProposalOpportunity opportunity = materialized.get();
             if (!evaluator.reachesProposalThreshold(opportunity.impulseScore())) {
                 log.info("companion_proposal_opportunity subjectId={} type={} result=BELOW_THRESHOLD "
                                 + "reason=IMPULSE_ZERO score={}",

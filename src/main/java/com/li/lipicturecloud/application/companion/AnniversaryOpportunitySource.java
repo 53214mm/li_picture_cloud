@@ -8,13 +8,15 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
  * 纪念日机会：往年同月同日（上海日历）至少完整喂养过一次时产生。
  *
- * <p>只依赖成长记录（不查询图片表），文案确定性生成；冲动得分由"当前情绪 + 关系"评估。
- * 机会源优先级第 2（次于每周回顾，先于相似图片）。</p>
+ * <p>只依赖成长记录（不查询图片表），文案确定性生成。两段式：{@code observe}
+ * 只做往年同日计数（守门之前）；{@code materialize} 在守门通过后才复验并完成
+ * 冲动评分与文案。机会源优先级第 2（次于每周回顾，先于相似图片）。</p>
  */
 @Component
 @org.springframework.core.annotation.Order(2)
@@ -39,10 +41,22 @@ public class AnniversaryOpportunitySource implements CompanionOpportunitySource 
     }
 
     @Override
-    public Optional<ProposalOpportunity> findOpportunity(long companionId, long subjectId, Instant now) {
+    public Optional<OpportunityObservation> observe(long companionId, long subjectId, Instant now) {
         LocalDate today = now.atZone(SHANGHAI).toLocalDate();
-        long feeds = growthRepository.countAnniversaryFeeds(companionId,
-                today.getMonthValue(), today.getDayOfMonth());
+        return anniversaryFeeds(companionId, today) >= 1
+                ? Optional.of(new OpportunityObservation(ProposalOpportunityType.ANNIVERSARY))
+                : Optional.empty();
+    }
+
+    @Override
+    public Optional<ProposalOpportunity> materialize(OpportunityObservation observation,
+                                                     long companionId, long subjectId, Instant now) {
+        Objects.requireNonNull(observation, "observation");
+        if (observation.type() != ProposalOpportunityType.ANNIVERSARY) {
+            return Optional.empty();
+        }
+        LocalDate today = now.atZone(SHANGHAI).toLocalDate();
+        long feeds = anniversaryFeeds(companionId, today);
         if (feeds < 1) {
             return Optional.empty();
         }
@@ -50,5 +64,10 @@ public class AnniversaryOpportunitySource implements CompanionOpportunitySource 
                 today.getMonthValue(), today.getDayOfMonth());
         return Optional.of(new ProposalOpportunity(ProposalOpportunityType.ANNIVERSARY,
                 evaluator.score(companionId, subjectId, JOY_WEIGHT, FAMILIARITY_WEIGHT), content));
+    }
+
+    private long anniversaryFeeds(long companionId, LocalDate today) {
+        return growthRepository.countAnniversaryFeeds(companionId,
+                today.getMonthValue(), today.getDayOfMonth());
     }
 }

@@ -10,6 +10,7 @@ import com.li.lipicturecloud.domain.companion.CompanionProposal;
 import com.li.lipicturecloud.domain.companion.CompanionProposalReactionRepository;
 import com.li.lipicturecloud.domain.companion.CompanionProposalRepository;
 import com.li.lipicturecloud.domain.companion.CompanionRepository;
+import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
 import com.li.lipicturecloud.domain.companion.ProposalOpportunityType;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
@@ -65,6 +66,9 @@ class CompanionProposalServiceTest {
         opportunitySource = mock(WeeklyReviewOpportunitySource.class);
         evaluator = mock(ProposalOpportunityEvaluator.class);
         when(evaluator.reachesProposalThreshold(any())).thenReturn(true);
+        when(opportunitySource.type()).thenReturn(ProposalOpportunityType.WEEKLY_REVIEW);
+        // 默认没有可观察机会；用例需要时再 stub observe/materialize。
+        when(opportunitySource.observe(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
         when(proposalRepository.append(any())).thenAnswer(invocation ->
                 invocation.<CompanionProposal>getArgument(0).withId(61L));
         when(proposalRepository.findActive(anyLong(), anyInt())).thenReturn(List.of());
@@ -102,7 +106,9 @@ class CompanionProposalServiceTest {
                 .thenAnswer(invocation -> CompanionAutonomyContract.initial(
                         invocation.getArgument(0), invocation.getArgument(1)).updated(
                         true, LocalTime.of(23, 0), LocalTime.of(8, 0), 72));
-        when(opportunitySource.findOpportunity(companion.id(), 7L, NOW))
+        when(opportunitySource.observe(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new OpportunityObservation(ProposalOpportunityType.WEEKLY_REVIEW)));
+        when(opportunitySource.materialize(any(), anyLong(), anyLong(), any()))
                 .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.WEEKLY_REVIEW,
                         new BigDecimal("30.00"), "这周你喂了我 3 次。想听我讲一段我们的故事吗？")));
 
@@ -118,19 +124,46 @@ class CompanionProposalServiceTest {
     void contractDisabledGateIsRecordedWithTheRealOpportunityType() {
         Companion companion = persistedCompanion();
         when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
-        when(opportunitySource.type()).thenReturn(ProposalOpportunityType.WEEKLY_REVIEW);
-        // 契约默认关闭，但真实机会候选存在：Observe 先于守门，拦截日志必须带上机会类型。
-        when(opportunitySource.findOpportunity(companion.id(), 7L, NOW))
-                .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.WEEKLY_REVIEW,
-                        new BigDecimal("30.00"), "这周你喂了我 3 次。想听我讲一段我们的故事吗？")));
+        // 契约默认关闭，但真实机会可观察：Observe 先于守门，拦截日志必须带上机会类型。
+        when(opportunitySource.observe(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new OpportunityObservation(ProposalOpportunityType.WEEKLY_REVIEW)));
         ListAppender<ILoggingEvent> logs = captureProposalServiceLogs();
         try {
             CompanionProposalView view = service.active(subject);
 
             assertThat(view).isNull();
-            // 守门失败不落库；机会源仍被感知，使"契约关闭拦掉的是哪类机会"可观测。
-            verify(opportunitySource).findOpportunity(companion.id(), 7L, NOW);
+            // 守门失败不落库、不物化候选：只记录"被拦的是哪类机会"。
+            verify(opportunitySource).observe(companion.id(), 7L, NOW);
+            verify(opportunitySource, never()).materialize(any(), anyLong(), anyLong(), any());
             verify(proposalRepository, never()).append(any());
+            assertThat(logs.list).anyMatch(event -> event.getFormattedMessage()
+                    .contains("companion_proposal_gated subjectId=7 proposalId=none type=WEEKLY_REVIEW "
+                            + "reason=CONTRACT_DISABLED"));
+        } finally {
+            releaseProposalLogs(logs);
+        }
+    }
+
+    @Test
+    void contractDisabledNeverScoresOrMaterializesTheCandidate() {
+        Companion companion = persistedCompanion();
+        GrowthRecordRepository growth = mock(GrowthRecordRepository.class);
+        when(growth.countSince(11L, NOW.minus(java.time.Duration.ofDays(7)))).thenReturn(3L);
+        WeeklyReviewOpportunitySource realSource = new WeeklyReviewOpportunitySource(growth, evaluator);
+        CompanionProposalService localService = new CompanionProposalService(companionRepository,
+                contractRepository, proposalRepository, reactionRepository, List.of(realSource),
+                evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        ListAppender<ILoggingEvent> logs = captureProposalServiceLogs();
+        try {
+            CompanionProposalView view = localService.active(subject);
+
+            assertThat(view).isNull();
+            verify(proposalRepository, never()).append(any());
+            // 硬门禁边界：守门失败后，冲动评分（情绪读取/写回的唯一入口）不被调用，
+            // 提案不落库——契约关闭时只做轻量观察与 gated 记录。
+            verify(evaluator, never()).score(anyLong(), anyLong(), any(), any());
+            verify(evaluator, never()).reachesProposalThreshold(any());
             assertThat(logs.list).anyMatch(event -> event.getFormattedMessage()
                     .contains("companion_proposal_gated subjectId=7 proposalId=none type=WEEKLY_REVIEW "
                             + "reason=CONTRACT_DISABLED"));
@@ -143,8 +176,6 @@ class CompanionProposalServiceTest {
     void absenceOfAnyCandidateIsNeverCountedAsGated() {
         Companion companion = persistedCompanion();
         when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
-        when(opportunitySource.type()).thenReturn(ProposalOpportunityType.WEEKLY_REVIEW);
-        when(opportunitySource.findOpportunity(companion.id(), 7L, NOW)).thenReturn(Optional.empty());
         ListAppender<ILoggingEvent> logs = captureProposalServiceLogs();
         try {
             CompanionProposalView view = service.active(subject);
@@ -173,7 +204,7 @@ class CompanionProposalServiceTest {
         CompanionProposalView view = service.active(subject);
 
         assertThat(view.id()).isEqualTo(61L);
-        verify(opportunitySource, never()).findOpportunity(anyLong(), anyLong(), any());
+        verify(opportunitySource, never()).observe(anyLong(), anyLong(), any());
         verify(proposalRepository, never()).append(any());
     }
 
@@ -192,8 +223,10 @@ class CompanionProposalServiceTest {
                 .thenAnswer(invocation -> CompanionAutonomyContract.initial(
                         invocation.getArgument(0), invocation.getArgument(1)).updated(
                         true, LocalTime.of(23, 0), LocalTime.of(8, 0), 72));
-        when(emptySource.findOpportunity(companion.id(), 7L, NOW)).thenReturn(Optional.empty());
-        when(hitSource.findOpportunity(companion.id(), 7L, NOW))
+        when(emptySource.observe(companion.id(), 7L, NOW)).thenReturn(Optional.empty());
+        when(hitSource.observe(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new OpportunityObservation(ProposalOpportunityType.ANNIVERSARY)));
+        when(hitSource.materialize(any(), anyLong(), anyLong(), any()))
                 .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.ANNIVERSARY,
                         new BigDecimal("20.00"), "往年的今天我们相遇过。")));
 
@@ -201,10 +234,10 @@ class CompanionProposalServiceTest {
 
         assertThat(view).isNotNull();
         assertThat(view.opportunityType()).isEqualTo("ANNIVERSARY");
-        verify(emptySource).findOpportunity(companion.id(), 7L, NOW);
-        verify(hitSource).findOpportunity(companion.id(), 7L, NOW);
+        verify(emptySource).observe(companion.id(), 7L, NOW);
+        verify(hitSource).observe(companion.id(), 7L, NOW);
         // 命中后短路：第三个机会源不再调用。
-        verify(thirdSource, never()).findOpportunity(anyLong(), anyLong(), any());
+        verify(thirdSource, never()).observe(anyLong(), anyLong(), any());
         verify(proposalRepository).append(any());
     }
 
@@ -223,10 +256,14 @@ class CompanionProposalServiceTest {
                         invocation.getArgument(0), invocation.getArgument(1)).updated(
                         true, LocalTime.of(23, 0), LocalTime.of(8, 0), 72));
         // 第一个机会源的候选冲动为 0（没有任何正向情绪/关系积累）→ 被阈值拦截。
-        when(zeroSource.findOpportunity(companion.id(), 7L, NOW))
+        when(zeroSource.observe(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new OpportunityObservation(ProposalOpportunityType.WEEKLY_REVIEW)));
+        when(zeroSource.materialize(any(), anyLong(), anyLong(), any()))
                 .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.WEEKLY_REVIEW,
                         new BigDecimal("0.00"), "这周你喂了我 1 次。")));
-        when(nextSource.findOpportunity(companion.id(), 7L, NOW))
+        when(nextSource.observe(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new OpportunityObservation(ProposalOpportunityType.ANNIVERSARY)));
+        when(nextSource.materialize(any(), anyLong(), anyLong(), any()))
                 .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.ANNIVERSARY,
                         new BigDecimal("25.00"), "往年的今天我们相遇过。")));
         when(evaluator.reachesProposalThreshold(argThat(score -> score.signum() == 0)))
@@ -240,8 +277,10 @@ class CompanionProposalServiceTest {
         ArgumentCaptor<CompanionProposal> captor = ArgumentCaptor.forClass(CompanionProposal.class);
         verify(proposalRepository).append(captor.capture());
         assertThat(captor.getValue().opportunityType()).isEqualTo(ProposalOpportunityType.ANNIVERSARY);
-        verify(zeroSource).findOpportunity(companion.id(), 7L, NOW);
-        verify(nextSource).findOpportunity(companion.id(), 7L, NOW);
+        verify(zeroSource).observe(companion.id(), 7L, NOW);
+        verify(zeroSource).materialize(any(), anyLong(), anyLong(), any());
+        verify(nextSource).observe(companion.id(), 7L, NOW);
+        verify(nextSource).materialize(any(), anyLong(), anyLong(), any());
     }
 
     @Test
@@ -252,7 +291,9 @@ class CompanionProposalServiceTest {
                 .thenAnswer(invocation -> CompanionAutonomyContract.initial(
                         invocation.getArgument(0), invocation.getArgument(1)).updated(
                         true, LocalTime.of(23, 0), LocalTime.of(8, 0), 72));
-        when(opportunitySource.findOpportunity(companion.id(), 7L, NOW))
+        when(opportunitySource.observe(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new OpportunityObservation(ProposalOpportunityType.WEEKLY_REVIEW)));
+        when(opportunitySource.materialize(any(), anyLong(), anyLong(), any()))
                 .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.WEEKLY_REVIEW,
                         new BigDecimal("0.00"), "这周你喂了我 1 次。想听我讲一段我们的故事吗？")));
         when(evaluator.reachesProposalThreshold(argThat(score -> score.signum() == 0)))

@@ -59,7 +59,7 @@ class SimilarStoryOpportunitySourceTest {
         when(pictureRepository.countRecentInSpace(30L, NOW.minus(java.time.Duration.ofDays(7))))
                 .thenReturn(4L);
 
-        Optional<ProposalOpportunity> opportunity = source.findOpportunity(11L, 7L, NOW);
+        Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 
         assertThat(opportunity).isPresent();
         assertThat(opportunity.get().type()).isEqualTo(ProposalOpportunityType.SIMILAR_STORY);
@@ -75,9 +75,23 @@ class SimilarStoryOpportunitySourceTest {
         when(pictureRepository.findAssetById(102L))
                 .thenReturn(Optional.of(new PictureAsset(102L, 7L, null)));
 
-        Optional<ProposalOpportunity> opportunity = source.findOpportunity(11L, 7L, NOW);
+        Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 
         assertThat(opportunity).isEmpty();
+        verify(pictureRepository, never()).countRecentInSpace(anyLong(), any());
+        verify(authorization, never()).checkForUser(any(), any(), any());
+    }
+
+    @Test
+    void observeOnlyConfirmsFedPicturesWithoutPictureTableAccess() {
+        when(growthRepository.findRecentFedPictureIds(11L, 5)).thenReturn(List.of(101L));
+
+        Optional<OpportunityObservation> observation = source.observe(11L, 7L, NOW);
+
+        assertThat(observation).isPresent();
+        assertThat(observation.get().type()).isEqualTo(ProposalOpportunityType.SIMILAR_STORY);
+        // 守门前的观察不碰图片表、不校验授权、不统计空间。
+        verify(pictureRepository, never()).findAssetById(anyLong());
         verify(pictureRepository, never()).countRecentInSpace(anyLong(), any());
         verify(authorization, never()).checkForUser(any(), any(), any());
     }
@@ -90,7 +104,7 @@ class SimilarStoryOpportunitySourceTest {
         when(pictureRepository.countRecentInSpace(30L, NOW.minus(java.time.Duration.ofDays(7))))
                 .thenReturn(1L);
 
-        Optional<ProposalOpportunity> opportunity = source.findOpportunity(11L, 7L, NOW);
+        Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 
         assertThat(opportunity).isEmpty();
     }
@@ -99,7 +113,7 @@ class SimilarStoryOpportunitySourceTest {
     void staysQuietWithoutAnyFedPictures() {
         when(growthRepository.findRecentFedPictureIds(11L, 5)).thenReturn(List.of());
 
-        assertThat(source.findOpportunity(11L, 7L, NOW)).isEmpty();
+        assertThat(source.observe(11L, 7L, NOW)).isEmpty();
         verify(pictureRepository, never()).findAssetById(anyLong());
     }
 
@@ -116,7 +130,7 @@ class SimilarStoryOpportunitySourceTest {
         when(pictureRepository.countRecentInSpace(31L, NOW.minus(java.time.Duration.ofDays(7))))
                 .thenReturn(3L);
 
-        Optional<ProposalOpportunity> opportunity = source.findOpportunity(11L, 7L, NOW);
+        Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 
         assertThat(opportunity).isPresent();
         assertThat(opportunity.get().content()).contains("3 张图片");
@@ -132,7 +146,7 @@ class SimilarStoryOpportunitySourceTest {
         doThrow(new BusinessException(ErrorCode.NO_AUTH_ERROR, "缺少权限"))
                 .when(authorization).checkForUser(PICTURE_VIEW, 102L, 7L);
 
-        Optional<ProposalOpportunity> opportunity = source.findOpportunity(11L, 7L, NOW);
+        Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 
         assertThat(opportunity).isEmpty();
         verify(pictureRepository, never()).countRecentInSpace(anyLong(), any());
@@ -150,7 +164,7 @@ class SimilarStoryOpportunitySourceTest {
         when(pictureRepository.countRecentInSpace(31L, NOW.minus(java.time.Duration.ofDays(7))))
                 .thenReturn(3L);
 
-        Optional<ProposalOpportunity> opportunity = source.findOpportunity(11L, 7L, NOW);
+        Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 
         assertThat(opportunity).isPresent();
         assertThat(opportunity.get().content()).contains("3 张图片");
@@ -166,10 +180,15 @@ class SimilarStoryOpportunitySourceTest {
         doThrow(new BusinessException(ErrorCode.SYSTEM_ERROR, "授权服务暂时不可用"))
                 .when(authorization).checkForUser(PICTURE_VIEW, 102L, 7L);
 
-        Optional<ProposalOpportunity> opportunity = source.findOpportunity(11L, 7L, NOW);
+        Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 
         // fail-closed：授权无法验证时不产出任何候选，绝不在无权限确认时告诉用户空间动态。
         assertThat(opportunity).isEmpty();
         verify(pictureRepository, never()).countRecentInSpace(anyLong(), any());
+    }
+
+    private Optional<ProposalOpportunity> materialize(long companionId, long subjectId) {
+        return source.observe(companionId, subjectId, NOW)
+                .flatMap(observation -> source.materialize(observation, companionId, subjectId, NOW));
     }
 }

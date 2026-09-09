@@ -45,12 +45,13 @@ class AnniversaryOpportunitySourceTest {
     void proposesWhenFeedsHappenedOnThisDayInPreviousYears() {
         when(growthRepository.countAnniversaryFeeds(11L, 8, 14)).thenReturn(2L);
 
-        Optional<ProposalOpportunity> opportunity = source.findOpportunity(11L, 7L, NOW);
+        Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 
         assertThat(opportunity).isPresent();
         assertThat(opportunity.get().type()).isEqualTo(ProposalOpportunityType.ANNIVERSARY);
         assertThat(opportunity.get().content()).contains("8 月 14 日");
         assertThat(opportunity.get().content()).contains("往年的今天");
+        // 情绪读取只发生在守门后的 materialize 阶段。
         verify(moodRepository).findByCompanionId(11L);
         verify(relationshipRepository).findByCompanionAndSubject(11L, 7L);
     }
@@ -59,9 +60,9 @@ class AnniversaryOpportunitySourceTest {
     void staysQuietWithoutPastFeedsOnThisDay() {
         when(growthRepository.countAnniversaryFeeds(11L, 8, 14)).thenReturn(0L);
 
-        Optional<ProposalOpportunity> opportunity = source.findOpportunity(11L, 7L, NOW);
+        Optional<OpportunityObservation> observation = source.observe(11L, 7L, NOW);
 
-        assertThat(opportunity).isEmpty();
+        assertThat(observation).isEmpty();
         verify(moodRepository, never()).findByCompanionId(anyLong());
         verify(relationshipRepository, never()).findByCompanionAndSubject(anyLong(), anyLong());
     }
@@ -72,9 +73,14 @@ class AnniversaryOpportunitySourceTest {
         Instant lateNight = Instant.parse("2026-08-13T18:30:00Z");
         when(growthRepository.countAnniversaryFeeds(11L, 8, 14)).thenReturn(1L);
 
-        Optional<ProposalOpportunity> opportunity = source.findOpportunity(11L, 7L, lateNight);
+        Optional<OpportunityObservation> observation = source.observe(11L, 7L, lateNight);
 
-        assertThat(opportunity).isPresent();
+        assertThat(observation).isPresent();
         verify(growthRepository).countAnniversaryFeeds(11L, 8, 14);
+    }
+
+    private Optional<ProposalOpportunity> materialize(long companionId, long subjectId) {
+        return source.observe(companionId, subjectId, NOW)
+                .flatMap(observation -> source.materialize(observation, companionId, subjectId, NOW));
     }
 }
