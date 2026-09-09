@@ -50,6 +50,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -486,7 +487,7 @@ class CompanionChatServiceTest {
     }
 
     @Test
-    void cancellingTheModelStreamNeverPersistsAnInterruptedReply() {
+    void cancellingTheModelStreamReleasesTheTrialReservationExactlyOnceAndNeverPersistsAReply() {
         Companion companion = persistedCompanion();
         properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
@@ -499,15 +500,39 @@ class CompanionChatServiceTest {
         Disposable subscription = service.chat(subject, "你好").subscribe();
         subscription.dispose();
 
-        // 取消后 doOnComplete 不再执行：中断的回复不得落库，平台结算也不发生。
+        // 取消终态：中断的回复不得落库、不结算；平台试用预占必须恰好释放一次，
+        // 避免客户端断开后试用余额被永久冻结（每日聊天次数按"中断不退还"保留）。
         verify(messageRepository, times(1)).append(any());
         verify(trialLedger).reserve(7L, 1L);
+        verify(trialLedger).release(7L, 1L);
         verify(trialLedger, never()).settle(anyLong(), anyLong());
+    }
+
+    @Test
+    void cancellingTheByokStreamNeverTouchesThePlatformTrialLedger() {
+        Companion companion = persistedCompanion();
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        when(languageRouter.decide(7L)).thenReturn(
+                ModelRouteDecision.byok(byokConnection(), "sk-secret"));
+        when(languageInvoker.stream(any(ModelRouteDecision.class), anyList()))
+                .thenReturn(Flux.never());
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), anyList())).thenReturn("系统提示");
+
+        Disposable subscription = service.chat(subject, "在吗").subscribe();
+        subscription.dispose();
+
+        // BYOK 路径没有平台试用预占：取消只中断生成与落库，不产生任何 ledger/usage 副作用。
+        verify(messageRepository, times(1)).append(any());
+        verify(trialLedger, never()).reserve(anyLong(), anyLong());
         verify(trialLedger, never()).release(anyLong(), anyLong());
+        verify(trialLedger, never()).settle(anyLong(), anyLong());
+        verify(modelUsageService, never()).recordSuccess(anyLong(), any(), any(), any(), any(), any());
+        verify(modelUsageService, never()).recordFailure(
+                anyLong(), any(), any(), any(), any(), any(), anyString());
     }
 
     private static BigDecimal bd(String value) {
         return new BigDecimal(value);
     }
 }
-

@@ -151,11 +151,11 @@ class CompanionControllerTest {
                 timeout.set(callback);
             }
         };
-        Disposable[] subscription = new Disposable[1];
+        AtomicReference<Disposable> subscription = new AtomicReference<>();
         AtomicBoolean terminal = new AtomicBoolean(false);
         AtomicBoolean cancelled = new AtomicBoolean(false);
         CompanionController.attachTerminalCancellation(emitter, subscription, terminal);
-        subscription[0] = () -> cancelled.set(true);
+        subscription.set(() -> cancelled.set(true));
 
         // 浏览器断开/正常完成 → onCompletion → 取消仍在运行的模型流订阅。
         completion.get().run();
@@ -179,17 +179,17 @@ class CompanionControllerTest {
                 completion.set(callback);
             }
         };
-        Disposable[] subscription = new Disposable[1];
+        AtomicReference<Disposable> subscription = new AtomicReference<>();
         AtomicBoolean terminal = new AtomicBoolean(false);
         CompanionController.attachTerminalCancellation(emitter, subscription, terminal);
 
         // 发射器在订阅建立前就完成（罕见窗口：subscribe 尚未返回）。
         completion.get().run();
         AtomicBoolean cancelled = new AtomicBoolean(false);
-        subscription[0] = () -> cancelled.set(true);
+        subscription.set(() -> cancelled.set(true));
         // chatStream 在赋值后会检查 terminal 标志并立即取消新订阅。
         if (terminal.get()) {
-            subscription[0].dispose();
+            subscription.get().dispose();
         }
         assertThat(cancelled).isTrue();
     }

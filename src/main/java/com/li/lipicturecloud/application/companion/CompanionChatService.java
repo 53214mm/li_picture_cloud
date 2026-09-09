@@ -254,6 +254,14 @@ public class CompanionChatService {
                     if (platformReserved) {
                         releaseTrial(subject);
                     }
+                })
+                .doOnCancel(() -> {
+                    // 客户端断开等取消终态：没有产生完整回复，模型流也不会走 doOnComplete/
+                    // doOnError——必须在此释放平台试用预占，否则试用余额会被永久冻结。
+                    // 每日聊天次数按规格"中断不退还"语义保留，不在此处理。
+                    if (platformReserved) {
+                        releaseTrial(subject);
+                    }
                 });
     }
 

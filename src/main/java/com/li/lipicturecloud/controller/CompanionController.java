@@ -48,6 +48,7 @@ import reactor.core.Disposable;
 import java.io.IOException;
 import java.time.LocalTime;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 @RestController
 @RequestMapping(value = "/companion", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -158,10 +159,11 @@ public class CompanionController {
         AuthorizationSubject subject = subject(request);
         // 发射器进入终态（完成/超时/客户端断开/错误关闭）时必须取消模型流订阅：
         // 浏览器断线后模型不能继续生成、消耗额度，也不能把中断的回复落库。
-        Disposable[] subscription = new Disposable[1];
+        // AtomicReference 保证终态回调线程与订阅赋值线程之间对订阅的可见性。
+        AtomicReference<Disposable> subscription = new AtomicReference<>();
         AtomicBoolean terminal = new AtomicBoolean(false);
         attachTerminalCancellation(emitter, subscription, terminal);
-        subscription[0] = chatService.chat(subject, body.getMessage()).subscribe(
+        subscription.set(chatService.chat(subject, body.getMessage()).subscribe(
                 chunk -> {
                     try {
                         emitter.send(SseEmitter.event().data(chunk));
@@ -188,10 +190,13 @@ public class CompanionController {
                     } catch (IOException error) {
                         log.warn("companion_chat_sse_done_failed subjectId={}", subject.userId());
                     }
-                });
+                }));
         if (terminal.get()) {
             // 发射器在订阅赋值前已进入终态（罕见窗口）：立即取消刚建立的订阅。
-            subscription[0].dispose();
+            Disposable active = subscription.get();
+            if (active != null) {
+                active.dispose();
+            }
         }
         return emitter;
     }
@@ -203,11 +208,12 @@ public class CompanionController {
      * 触发 {@code onCompletion}；这里统一在该回调中 dispose 当前订阅。超时回调则先显式
      * {@code complete()} 让发射器走同一条取消链。dispose 已结束的订阅是空操作，幂等安全。</p>
      */
-    static void attachTerminalCancellation(SseEmitter emitter, Disposable[] subscription,
+    static void attachTerminalCancellation(SseEmitter emitter,
+                                           AtomicReference<Disposable> subscription,
                                            AtomicBoolean terminal) {
         Runnable cancel = () -> {
             terminal.set(true);
-            Disposable active = subscription[0];
+            Disposable active = subscription.get();
             if (active != null) {
                 active.dispose();
             }
