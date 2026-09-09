@@ -19,11 +19,9 @@ import com.li.lipicturecloud.domain.companion.CompanionChatMessageRepository;
 import com.li.lipicturecloud.domain.companion.CompanionMemory;
 import com.li.lipicturecloud.domain.companion.CompanionMood;
 import com.li.lipicturecloud.domain.companion.CompanionMoodRepository;
-import com.li.lipicturecloud.domain.companion.CompanionMemoryRepository;
-import com.li.lipicturecloud.domain.companion.CompanionRelationship;
+import com.li.lipicturecloud.domain.companion.CompanionMoodRules;
 import com.li.lipicturecloud.domain.companion.CompanionRelationshipRepository;
 import com.li.lipicturecloud.domain.companion.CompanionRepository;
-import com.li.lipicturecloud.domain.companion.MemoryStatus;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
@@ -63,6 +61,8 @@ public class CompanionChatService {
     private static final Logger log = LoggerFactory.getLogger(CompanionChatService.class);
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final int MAX_USER_CODE_POINTS = 500;
+    /** 每次撤权扫描/可用记忆读取的候选上限（与记忆列表读取路径一致）。 */
+    private static final int MAX_MEMORY_SCAN = 100;
     /** 每条历史消息在预算中的角色/结构开销（码点）。 */
     private static final int PER_MESSAGE_OVERHEAD = 16;
     /** 平台钱包路径每轮对话的试用额度成本。 */
@@ -71,8 +71,9 @@ public class CompanionChatService {
     private final CompanionRepository companionRepository;
     private final CompanionChatMessageRepository messageRepository;
     private final CompanionMoodRepository moodRepository;
+    private final CompanionMoodRules moodRules;
     private final CompanionRelationshipRepository relationshipRepository;
-    private final CompanionMemoryRepository memoryRepository;
+    private final CompanionMemoryService memoryService;
     private final CompanionChatContextAssembler contextAssembler;
     private final ChatQuotaGuard quotaGuard;
     private final CompanionFeatureProperties properties;
@@ -86,8 +87,9 @@ public class CompanionChatService {
     public CompanionChatService(CompanionRepository companionRepository,
                                 CompanionChatMessageRepository messageRepository,
                                 CompanionMoodRepository moodRepository,
+                                CompanionMoodRules moodRules,
                                 CompanionRelationshipRepository relationshipRepository,
-                                CompanionMemoryRepository memoryRepository,
+                                CompanionMemoryService memoryService,
                                 CompanionChatContextAssembler contextAssembler,
                                 ChatQuotaGuard quotaGuard,
                                 CompanionFeatureProperties properties,
@@ -100,8 +102,9 @@ public class CompanionChatService {
         this.companionRepository = companionRepository;
         this.messageRepository = messageRepository;
         this.moodRepository = moodRepository;
+        this.moodRules = moodRules;
         this.relationshipRepository = relationshipRepository;
-        this.memoryRepository = memoryRepository;
+        this.memoryService = memoryService;
         this.contextAssembler = contextAssembler;
         this.quotaGuard = quotaGuard;
         this.properties = properties;
@@ -150,21 +153,24 @@ public class CompanionChatService {
         quotaGuard.reserve(subject.userId(), LocalDate.now(clock.withZone(SHANGHAI)),
                 properties.getChatDailyLimit());
         Instant now = clock.instant();
-        messageRepository.append(CompanionChatMessage.user(companion.id(), subject.userId(), normalized, now));
+        // 保留本轮落库消息的精确 id：历史去重与上下文排除都按它进行，而不是按角色猜测。
+        CompanionChatMessage currentMessage = messageRepository.append(
+                CompanionChatMessage.user(companion.id(), subject.userId(), normalized, now));
         log.info("companion_chat_message_sent subjectId={} policy={}",
                 subject.userId(), properties.getChatPolicy().name());
 
         if (route != null) {
-            return modelReply(companion, subject, normalized, now, route, platformReserved);
+            return modelReply(companion, subject, currentMessage, normalized, now, route, platformReserved);
         }
-        String reply = demoReply(companion.id(), subject.userId(), normalized);
+        String reply = demoReply(companion, subject, normalized);
         return Flux.just(reply).doOnComplete(() ->
                 persistReply(companion, subject, reply, "internal", "demo-v1", now));
     }
 
-    private Flux<String> modelReply(Companion companion, AuthorizationSubject subject, String message,
+    private Flux<String> modelReply(Companion companion, AuthorizationSubject subject,
+                                    CompanionChatMessage currentMessage, String message,
                                     Instant now, ModelRouteDecision route, boolean platformReserved) {
-        List<ChatTurn> turns = assembleTurns(companion, subject, message);
+        List<ChatTurn> turns = assembleTurns(companion, subject, currentMessage, message);
         if (route.isByok()) {
             return byokReply(companion, subject, route, turns, now);
         }
@@ -172,29 +178,30 @@ public class CompanionChatService {
     }
 
     /**
-     * 组装上下文与历史（预算守卫同模型路径）：系统提示 + 预算内历史（旧→新）+ 当前消息。
+     * 组装上下文与历史（预算守卫同模型路径）：先完成记忆撤权守卫与情绪惰性衰减，
+     * 再拼接系统提示 + 预算内历史（旧→新）+ 当前消息。
      */
-    private List<ChatTurn> assembleTurns(Companion companion, AuthorizationSubject subject, String message) {
+    private List<ChatTurn> assembleTurns(Companion companion, AuthorizationSubject subject,
+                                         CompanionChatMessage currentMessage, String message) {
+        // 记忆进入模型上下文前必须通过来源撤权检查：真实撤权记忆被排除并落库失效，
+        // 授权基础设施异常让本轮请求失败并回滚（fail-closed，绝不把无法确认权限的
+        // 记忆发送给外部模型）。
+        List<CompanionMemory> usableMemories = memoryService.confirmedMemoriesUsableBy(
+                companion, subject, MAX_MEMORY_SCAN);
+        // 情绪必须是"当前情绪"：先按完整小时惰性衰减（与主页同口径）再引用。
+        CompanionMood currentMood = decayedCurrentMood(companion.id());
         String systemPrompt = contextAssembler.systemPrompt(companion.id(), subject.userId(),
-                properties.getChatMemoryLimit());
+                properties.getChatMemoryLimit(), currentMood, usableMemories);
         List<CompanionChatMessage> history = messageRepository.findRecent(
                 companion.id(), properties.getChatHistoryLimit());
-        // 历史为倒序；跳过刚落库的本轮用户消息（稍后显式追加，避免重复）。
-        int latestUserIndex = -1;
-        for (int i = 0; i < history.size(); i++) {
-            if (history.get(i).role().name().equals("USER")) {
-                latestUserIndex = i;
-                break;
-            }
-        }
-        // 预算守卫：系统提示 + 当前消息优先，历史从最新往最旧填充，超出总预算的部分被截断。
+        // 历史为倒序；只按本轮落库消息的精确 id 排除自己，不再用"最新一条 USER"猜测——
+        // 并发窗口的 USER 消息即使时间/位置更新也不会被误跳过，自己的消息也不会被重复加入。
         int used = codePoints(systemPrompt) + codePoints(message) + PER_MESSAGE_OVERHEAD;
         List<CompanionChatMessage> included = new ArrayList<>();
-        for (int i = 0; i < history.size(); i++) {
-            if (i == latestUserIndex) {
+        for (CompanionChatMessage past : history) {
+            if (Objects.equals(past.id(), currentMessage.id())) {
                 continue;
             }
-            CompanionChatMessage past = history.get(i);
             int size = codePoints(past.content()) + PER_MESSAGE_OVERHEAD;
             if (used + size > properties.getChatContextBudget()) {
                 break;
@@ -323,29 +330,50 @@ public class CompanionChatService {
         }
     }
 
-    private String demoReply(long companionId, long subjectId, String message) {
+    private String demoReply(Companion companion, AuthorizationSubject subject, String message) {
         String normalized = message.toLowerCase(Locale.ROOT);
-        long confirmed = memoryRepository.findRecent(companionId, 100).stream()
-                .filter(memory -> memory.status() == MemoryStatus.CONFIRMED)
-                .count();
         if (containsAny(normalized, "记忆", "记得", "记住", "回忆")) {
+            // 计数也只统计通过撤权检查的已确认记忆：失效记忆不再参与"确认记忆"声称。
+            long confirmed = memoryService.confirmedMemoriesUsableBy(
+                    companion, subject, MAX_MEMORY_SCAN).size();
             return confirmed > 0
                     ? String.format("我记得最近留下过 %d 条确认的记忆，它们都来自你喂给我的图片。想听哪一段？", confirmed)
                     : "我现在还没有确认的记忆。喂我一张图片，我就能开始记住我们的经历。";
         }
         if (containsAny(normalized, "情绪", "心情", "感觉", "状态", "累")) {
-            return moodRepository.findByCompanionId(companionId)
-                    .map(mood -> "我此刻的精力是 " + plain(mood.energy()) + "，愉悦 " + plain(mood.joy())
-                            + "。喂图会让我波动，安静一会儿就会平复。")
-                    .orElse("我还没有明显情绪，先喂我一张图片吧。");
+            CompanionMood current = decayedCurrentMood(companion.id());
+            if (current == null) {
+                return "我还没有明显情绪，先喂我一张图片吧。";
+            }
+            return "我此刻的精力是 " + plain(current.energy()) + "，愉悦 " + plain(current.joy())
+                    + "。喂图会让我波动，安静一会儿就会平复。";
         }
         if (containsAny(normalized, "关系", "熟悉", "信任", "默契", "我们")) {
-            return relationshipRepository.findByCompanionAndSubject(companionId, subjectId)
+            return relationshipRepository.findByCompanionAndSubject(companion.id(), subject.userId())
                     .map(relationship -> "我们越来越熟了：熟悉度 " + plain(relationship.familiarity())
                             + "，信任 " + plain(relationship.trust()) + "。继续相处下去吧。")
                     .orElse("我们才刚认识，多喂我几张图片，我会更懂你。");
         }
         return "我在听。你可以和我聊聊图片，或者从图库里挑一张喂给我，我会慢慢记住我们的经历。";
+    }
+
+    /**
+     * 读取"当前情绪"：先按完整小时惰性衰减，再以 revision CAS 条件写回（与主页读取同口径）。
+     * 写回成功与当前事务一起提交；与喂养/主页写竞争失败时丢弃本次衰减写，聊天仍使用
+     * 刚算出的衰减值，下一次读取会重新计算。没有情绪行时返回 {@code null}。
+     */
+    private CompanionMood decayedCurrentMood(long companionId) {
+        Instant now = clock.instant();
+        return moodRepository.findByCompanionId(companionId)
+                .map(existing -> {
+                    CompanionMood decayed = existing.decayed(now, moodRules);
+                    if (decayed != existing && !moodRepository.save(decayed,
+                            Math.subtractExact(decayed.revision(), 1L))) {
+                        log.warn("companion_chat_mood_decay_conflict companionId={}", companionId);
+                    }
+                    return decayed;
+                })
+                .orElse(null);
     }
 
     private void persistReply(Companion companion, AuthorizationSubject subject, String reply,

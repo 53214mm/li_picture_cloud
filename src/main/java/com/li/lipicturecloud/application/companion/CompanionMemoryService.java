@@ -6,6 +6,7 @@ import com.li.lipicturecloud.domain.companion.Companion;
 import com.li.lipicturecloud.domain.companion.CompanionMemory;
 import com.li.lipicturecloud.domain.companion.CompanionMemoryRepository;
 import com.li.lipicturecloud.domain.companion.CompanionRepository;
+import com.li.lipicturecloud.domain.companion.MemoryStatus;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
@@ -62,9 +63,69 @@ public class CompanionMemoryService {
     public CompanionMemoryListView memories(AuthorizationSubject subject, int limit) {
         Objects.requireNonNull(subject, "subject");
         Companion companion = requireCompanion(subject);
-        invalidateRevoked(companion, subject);
+        propagateRevocation(companion, subject);
         List<CompanionMemory> recent = memoryRepository.findRecent(companion.id(), boundedLimit(limit));
         return new CompanionMemoryListView(recent.stream().map(assembler::memory).toList());
+    }
+
+    /**
+     * 返回该伙伴当前仍可安全用于衍生使用（如聊天上下文）的已确认记忆，按最近优先。
+     *
+     * <p>与记忆列表共用同一撤权传播：来源图片真实撤权或消失的记忆先落库为 INVALIDATED，
+     * 且无论落库是否成功都从可用结果中排除——并发竞态下也不能把刚撤权的记忆继续外发；
+     * 授权基础设施异常按 fail-closed 抛出，让本次（外层）请求失败并回滚，不让任何
+     * 无法确认权限的记忆进入上下文。</p>
+     */
+    @Transactional
+    public List<CompanionMemory> confirmedMemoriesUsableBy(Companion companion, AuthorizationSubject subject,
+                                                           int limit) {
+        Objects.requireNonNull(companion, "companion");
+        Objects.requireNonNull(subject, "subject");
+        Set<Long> unavailable = propagateRevocation(companion, subject);
+        return memoryRepository.findRecent(companion.id(), boundedLimit(limit)).stream()
+                .filter(memory -> memory.status() == MemoryStatus.CONFIRMED
+                        && !unavailable.contains(memory.id()))
+                .toList();
+    }
+
+    /**
+     * 撤权传播（列表读取与衍生使用共用）：来源图片撤权或消失的 active 记忆转为
+     * INVALIDATED 并落库；返回被判定不可用的记忆 id 集合。
+     *
+     * <p>同一来源图片的多条记忆只做一次授权检查。授权服务或基础设施异常不属于撤权：
+     * 抛出操作错误让外层事务回滚，既不会把记忆错误地永久标记为 INVALIDATED，也不会在
+     * 无法确认权限时继续展示或外发记忆内容。</p>
+     */
+    private Set<Long> propagateRevocation(Companion companion, AuthorizationSubject subject) {
+        Set<Long> unavailablePictures = new HashSet<>();
+        Set<Long> unavailableMemories = new HashSet<>();
+        for (CompanionMemory memory : memoryRepository.findActive(companion.id(), MAX_ACTIVE_SCAN)) {
+            if (memory.pictureId() == null) {
+                continue;
+            }
+            boolean unavailable = unavailablePictures.contains(memory.pictureId());
+            if (!unavailable) {
+                unavailable = sourcePictureRevokedOrMissing(memory.pictureId(), subject.userId());
+                if (unavailable) {
+                    unavailablePictures.add(memory.pictureId());
+                }
+            }
+            if (!unavailable) {
+                continue;
+            }
+            // 无论落库是否成功都必须排除该记忆：CAS 失败只说明别人并发推进了状态，
+            // 不代表来源图片重新获得了授权。
+            unavailableMemories.add(memory.id());
+            CompanionMemory invalidated = memory.invalidate("PICTURE_UNAVAILABLE", now());
+            if (!memoryRepository.save(invalidated, memory.revision())) {
+                log.warn("companion_memory_invalidate_conflict memoryId={} companionId={}",
+                        memory.id(), companion.id());
+                continue;
+            }
+            log.info("companion_memory_invalidated subjectId={} memoryId={} pictureId={} reason=PICTURE_UNAVAILABLE",
+                    subject.userId(), memory.id(), memory.pictureId());
+        }
+        return unavailableMemories;
     }
 
     @Transactional
@@ -86,40 +147,6 @@ public class CompanionMemoryService {
     @Transactional
     public CompanionMemoryView delete(AuthorizationSubject subject, long memoryId) {
         return transition(subject, memoryId, "delete", memory -> memory.delete(now()));
-    }
-
-    /**
-     * 读取路径上的惰性失效传播：来源图片撤权或消失的记忆转为 INVALIDATED，内容不再对外展示。
-     * 同一来源图片的多条记忆只做一次授权检查。
-     *
-     * <p>授权服务或基础设施异常不属于撤权：整个读取请求失败并回滚本事务，既不会把记忆
-     * 错误地永久标记为 INVALIDATED，也不会在无法确认权限时继续展示记忆内容。</p>
-     */
-    private void invalidateRevoked(Companion companion, AuthorizationSubject subject) {
-        Set<Long> unavailablePictures = new HashSet<>();
-        for (CompanionMemory memory : memoryRepository.findActive(companion.id(), MAX_ACTIVE_SCAN)) {
-            if (memory.pictureId() == null) {
-                continue;
-            }
-            boolean unavailable = unavailablePictures.contains(memory.pictureId());
-            if (!unavailable) {
-                unavailable = sourcePictureRevokedOrMissing(memory.pictureId(), subject.userId());
-                if (unavailable) {
-                    unavailablePictures.add(memory.pictureId());
-                }
-            }
-            if (!unavailable) {
-                continue;
-            }
-            CompanionMemory invalidated = memory.invalidate("PICTURE_UNAVAILABLE", now());
-            if (!memoryRepository.save(invalidated, memory.revision())) {
-                log.warn("companion_memory_invalidate_conflict memoryId={} companionId={}",
-                        memory.id(), companion.id());
-                continue;
-            }
-            log.info("companion_memory_invalidated subjectId={} memoryId={} pictureId={} reason=PICTURE_UNAVAILABLE",
-                    subject.userId(), memory.id(), memory.pictureId());
-        }
     }
 
     /**

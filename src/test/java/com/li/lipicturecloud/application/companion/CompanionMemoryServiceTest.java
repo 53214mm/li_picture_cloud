@@ -263,6 +263,63 @@ class CompanionMemoryServiceTest {
         verify(memoryRepository, never()).save(any(), anyLong());
     }
 
+    @Test
+    void chatUsableMemoriesExcludeRevokedOnesEvenWhenInvalidationSaveLosesTheRace() {
+        Companion companion = persistedCompanion();
+        CompanionMemory revoked = candidate(companion, 31L, 101L).confirm(NOW);
+        CompanionMemory kept = candidate(companion, 32L, 202L).confirm(NOW);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(memoryRepository.findActive(companion.id(), 100)).thenReturn(List.of(revoked, kept));
+        // CAS 落库失败（他人并发推进）：撤权记忆绝不能因此回到可用集合。
+        when(memoryRepository.save(any(), anyLong())).thenReturn(false);
+        // 失效传播后列表查询仍返回（尚未被别的请求改成 INVALIDATED 的）原行。
+        when(memoryRepository.findRecent(companion.id(), 100)).thenReturn(List.of(revoked, kept));
+        doThrow(new BusinessException(ErrorCode.NO_AUTH_ERROR, "缺少权限"))
+                .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+
+        List<CompanionMemory> usable = service.confirmedMemoriesUsableBy(companion, subject, 100);
+
+        assertThat(usable).hasSize(1);
+        assertThat(usable.get(0).id()).isEqualTo(32L);
+        verify(memoryRepository).save(any(), anyLong());
+    }
+
+    @Test
+    void chatUsableMemoriesOnlyReturnConfirmedMemoriesThatAreStillAuthorized() {
+        Companion companion = persistedCompanion();
+        CompanionMemory pending = CompanionMemory.candidate(companion.id(), 7L, null, 31L,
+                MemorySourceType.VISUAL, "待确认的记忆不应进入聊天上下文。",
+                new BigDecimal("0.5"), NOW);
+        CompanionMemory confirmed = candidate(companion, 32L, 202L).confirm(NOW);
+        when(memoryRepository.findActive(companion.id(), 100)).thenReturn(List.of(pending, confirmed));
+        when(memoryRepository.findRecent(companion.id(), 100))
+                .thenReturn(List.of(confirmed, pending));
+
+        List<CompanionMemory> usable = service.confirmedMemoriesUsableBy(companion, subject, 100);
+
+        assertThat(usable).hasSize(1);
+        assertThat(usable.get(0).status()).isEqualTo(MemoryStatus.CONFIRMED);
+        assertThat(usable.get(0).id()).isEqualTo(32L);
+        verify(memoryRepository, never()).save(any(), anyLong());
+    }
+
+    @Test
+    void chatUsableMemoriesFailClosedWhenAuthorizationCannotVerify() {
+        Companion companion = persistedCompanion();
+        CompanionMemory confirmed = candidate(companion, 31L, 101L).confirm(NOW);
+        when(memoryRepository.findActive(companion.id(), 100)).thenReturn(List.of(confirmed));
+        when(memoryRepository.findRecent(companion.id(), 100)).thenReturn(List.of(confirmed));
+        doThrow(new BusinessException(ErrorCode.SYSTEM_ERROR, "授权服务数据库不可用"))
+                .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+
+        // 授权基础设施异常不能让任何无法确认权限的记忆进入聊天上下文：整轮请求失败。
+        assertThatThrownBy(() -> service.confirmedMemoriesUsableBy(companion, subject, 100))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode(), Throwable::getMessage)
+                .containsExactly(ErrorCode.OPERATION_ERROR.getCode(), "暂时无法验证图片访问权限，请稍后重试");
+        verify(memoryRepository, never()).save(any(), anyLong());
+    }
+
     private Companion persistedCompanion() {
         return Companion.awaken(7L, CompanionBalance.v1()).persistedAs(11L);
     }

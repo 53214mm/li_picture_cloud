@@ -2,9 +2,7 @@ package com.li.lipicturecloud.application.companion;
 
 import com.li.lipicturecloud.domain.companion.Companion;
 import com.li.lipicturecloud.domain.companion.CompanionMemory;
-import com.li.lipicturecloud.domain.companion.CompanionMemoryRepository;
 import com.li.lipicturecloud.domain.companion.CompanionMood;
-import com.li.lipicturecloud.domain.companion.CompanionMoodRepository;
 import com.li.lipicturecloud.domain.companion.CompanionRelationship;
 import com.li.lipicturecloud.domain.companion.CompanionRelationshipRepository;
 import com.li.lipicturecloud.domain.companion.CompanionRepository;
@@ -19,8 +17,10 @@ import java.util.Objects;
 /**
  * 把伙伴的持久化事实组装成可解释的对话上下文。
  *
- * <p>系统提示词只引用已落库的等级、阶段、性格、情绪、关系与已确认记忆；
- * 模型不得声称记得提示词之外的内容。记忆按时间取最近 N 条并截断。</p>
+ * <p>系统提示词只引用已落库的等级、阶段、性格、关系，以及调用方注入的"当前情绪"与
+ * "可用已确认记忆"；模型不得声称记得提示词之外的内容。情绪与记忆不在本组件内查询：
+ * 调用方负责先完成情绪惰性衰减与来源图片撤权检查（fail-closed），本组件只负责截断、
+ * 截尾与格式化，避免衍生使用路径绕过授权守卫。</p>
  */
 @Component
 public class CompanionChatContextAssembler {
@@ -28,21 +28,23 @@ public class CompanionChatContextAssembler {
     private static final int MEMORY_CODE_POINT_LIMIT = 120;
 
     private final CompanionRepository companionRepository;
-    private final CompanionMoodRepository moodRepository;
     private final CompanionRelationshipRepository relationshipRepository;
-    private final CompanionMemoryRepository memoryRepository;
 
     public CompanionChatContextAssembler(CompanionRepository companionRepository,
-                                         CompanionMoodRepository moodRepository,
-                                         CompanionRelationshipRepository relationshipRepository,
-                                         CompanionMemoryRepository memoryRepository) {
+                                         CompanionRelationshipRepository relationshipRepository) {
         this.companionRepository = companionRepository;
-        this.moodRepository = moodRepository;
         this.relationshipRepository = relationshipRepository;
-        this.memoryRepository = memoryRepository;
     }
 
-    public String systemPrompt(long companionId, long subjectId, int memoryLimit) {
+    /**
+     * 组装系统提示词。
+     *
+     * @param currentMood    已按完整小时衰减过的当前情绪；无情绪行时为 {@code null}
+     * @param usableMemories 已通过来源图片撤权检查的已确认记忆（最近优先，调用方保证）
+     */
+    public String systemPrompt(long companionId, long subjectId, int memoryLimit,
+                               CompanionMood currentMood, List<CompanionMemory> usableMemories) {
+        Objects.requireNonNull(usableMemories, "usableMemories");
         Companion companion = companionRepository.findByOwnerId(subjectId)
                 .filter(value -> value.id() != null && value.id() == companionId)
                 .orElseThrow(() -> new IllegalStateException("伙伴不存在: " + companionId));
@@ -56,10 +58,11 @@ public class CompanionChatContextAssembler {
         prompt.append("- 生命阶段：").append(stageLabel(companion)).append("（等级 ")
                 .append(companion.level()).append("）\n");
         prompt.append("- 性格倾向：").append(traitSummary(companion.traits())).append("\n");
-        prompt.append("- 当前情绪：").append(moodSummary(companionId)).append("\n");
+        prompt.append("- 当前情绪：").append(moodSummary(currentMood)).append("\n");
         prompt.append("- 与主人的关系：").append(relationshipSummary(companionId, subjectId)).append("\n");
 
-        List<CompanionMemory> memories = memoryRepository.findRecent(companionId, 100).stream()
+        // 防御性状态过滤：输入已由调用方做过撤权扫描与 CONFIRMED 过滤，这里不再查询数据库。
+        List<CompanionMemory> memories = usableMemories.stream()
                 .filter(memory -> memory.status() == MemoryStatus.CONFIRMED)
                 .limit(Math.max(1, Math.min(memoryLimit, 10)))
                 .toList();
@@ -83,22 +86,19 @@ public class CompanionChatContextAssembler {
         return prompt.toString();
     }
 
-    private String moodSummary(long companionId) {
-        return moodRepository.findByCompanionId(companionId)
-                .map(CompanionChatContextAssembler::describeMood)
-                .orElse("还没有明显情绪");
+    private static String moodSummary(CompanionMood mood) {
+        if (mood == null) {
+            return "还没有明显情绪";
+        }
+        return String.format("精力 %s、愉悦 %s、孤独 %s、灵感 %s、烦躁 %s（0-100）",
+                plain(mood.energy()), plain(mood.joy()), plain(mood.loneliness()),
+                plain(mood.inspiration()), plain(mood.irritation()));
     }
 
     private String relationshipSummary(long companionId, long subjectId) {
         return relationshipRepository.findByCompanionAndSubject(companionId, subjectId)
                 .map(CompanionChatContextAssembler::describeRelationship)
                 .orElse("刚认识，还在互相熟悉");
-    }
-
-    private static String describeMood(CompanionMood mood) {
-        return String.format("精力 %s、愉悦 %s、孤独 %s、灵感 %s、烦躁 %s（0-100）",
-                plain(mood.energy()), plain(mood.joy()), plain(mood.loneliness()),
-                plain(mood.inspiration()), plain(mood.irritation()));
     }
 
     private static String describeRelationship(CompanionRelationship relationship) {

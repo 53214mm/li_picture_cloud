@@ -43,9 +43,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.Disposable;
 
 import java.io.IOException;
 import java.time.LocalTime;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @RestController
 @RequestMapping(value = "/companion", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -154,7 +156,12 @@ public class CompanionController {
         response.setHeader("X-Accel-Buffering", "no");
         SseEmitter emitter = new SseEmitter(300000L);
         AuthorizationSubject subject = subject(request);
-        chatService.chat(subject, body.getMessage()).subscribe(
+        // 发射器进入终态（完成/超时/客户端断开/错误关闭）时必须取消模型流订阅：
+        // 浏览器断线后模型不能继续生成、消耗额度，也不能把中断的回复落库。
+        Disposable[] subscription = new Disposable[1];
+        AtomicBoolean terminal = new AtomicBoolean(false);
+        attachTerminalCancellation(emitter, subscription, terminal);
+        subscription[0] = chatService.chat(subject, body.getMessage()).subscribe(
                 chunk -> {
                     try {
                         emitter.send(SseEmitter.event().data(chunk));
@@ -182,7 +189,34 @@ public class CompanionController {
                         log.warn("companion_chat_sse_done_failed subjectId={}", subject.userId());
                     }
                 });
+        if (terminal.get()) {
+            // 发射器在订阅赋值前已进入终态（罕见窗口）：立即取消刚建立的订阅。
+            subscription[0].dispose();
+        }
         return emitter;
+    }
+
+    /**
+     * 把"取消模型流订阅"挂到发射器终态回调上（供单元测试直接验证取消链路）。
+     *
+     * <p>Spring 在客户端断开、{@code complete}/{@code completeWithError} 或容器超时后都会
+     * 触发 {@code onCompletion}；这里统一在该回调中 dispose 当前订阅。超时回调则先显式
+     * {@code complete()} 让发射器走同一条取消链。dispose 已结束的订阅是空操作，幂等安全。</p>
+     */
+    static void attachTerminalCancellation(SseEmitter emitter, Disposable[] subscription,
+                                           AtomicBoolean terminal) {
+        Runnable cancel = () -> {
+            terminal.set(true);
+            Disposable active = subscription[0];
+            if (active != null) {
+                active.dispose();
+            }
+        };
+        emitter.onCompletion(cancel);
+        emitter.onTimeout(() -> {
+            terminal.set(true);
+            emitter.complete();
+        });
     }
 
     @GetMapping("/contract")
