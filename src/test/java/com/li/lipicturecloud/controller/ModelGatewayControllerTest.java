@@ -158,6 +158,8 @@ class ModelGatewayControllerTest {
     void usageListReturnsOnlySafeFields() throws Exception {
         ModelUsageRecord record = ModelUsageRecord.success(7L, ModelTask.CONNECTIVITY_CHECK, 9L,
                 ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK,
+                new com.li.lipicturecloud.domain.airuntime.ModelUsageSnapshot(
+                        120L, 35L, null, null),
                 "fef53056-2d9f-467d-9b1d-1afe9a6638fe", Instant.parse("2026-08-14T08:00:00Z"))
                 .withId(3L);
         when(usageService.listRecent(7L, 50)).thenReturn(List.of(record));
@@ -167,7 +169,11 @@ class ModelGatewayControllerTest {
                 .andExpect(jsonPath("$.data[0].id").value(3))
                 .andExpect(jsonPath("$.data[0].success").value(true))
                 .andExpect(jsonPath("$.data[0].correlationId")
-                        .value("fef53056-2d9f-467d-9b1d-1afe9a6638fe"));
+                        .value("fef53056-2d9f-467d-9b1d-1afe9a6638fe"))
+                // 最小统一用量快照进入安全展示视图（供应商原始计量不展示）。
+                .andExpect(jsonPath("$.data[0].inputTokens").value(120))
+                .andExpect(jsonPath("$.data[0].outputTokens").value(35))
+                .andExpect(jsonPath("$.data[0].imageCount").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test

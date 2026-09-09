@@ -106,3 +106,18 @@ test('mcp admin section is admin-gated and fail-closed', async () => {
   assert.match(api, /request\.post\(`\/model\/mcp\/services\/\$\{code\}\/tools\/\$\{toolName\}\/disable`\)/)
   assert.match(api, /request\.delete\(`\/model\/mcp\/services\/\$\{code\}\/tools\/\$\{toolName\}`\)/)
 })
+
+test('usage table exposes the minimal unified usage snapshot columns', async () => {
+  const view = await readFile(fileURLToPath(new globalThis.URL('../src/views/ModelGatewayView.vue', import.meta.url)), 'utf8')
+
+  // 控制中心使用记录展示最小统一用量（输入/输出 token 与图片张数）。
+  assert.match(view, /data-testid="usage-table"/)
+  assert.match(view, /用量（输入 \/ 输出 \/ 图片）/)
+  assert.match(view, /usageAmountLabel\(record\)/)
+  assert.match(view, /function usageAmountLabel\(record\)/)
+  assert.match(view, /record\.inputTokens/)
+  assert.match(view, /record\.outputTokens/)
+  assert.match(view, /record\.imageCount/)
+  // 供应商原始计量不进入展示视图（只落库，供审计核算）。
+  assert.doesNotMatch(view, /record\.rawUsage/)
+})

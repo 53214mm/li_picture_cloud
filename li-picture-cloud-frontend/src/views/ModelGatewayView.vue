@@ -259,6 +259,7 @@
               <th scope="col">任务</th>
               <th scope="col">供应商 / 模型</th>
               <th scope="col">费用来源</th>
+              <th scope="col">用量（输入 / 输出 / 图片）</th>
               <th scope="col">结果</th>
             </tr>
           </thead>
@@ -268,6 +269,7 @@
               <td>{{ taskLabel(record.task) }}</td>
               <td>{{ providerLabel(record.provider) }} / {{ record.modelCode }}</td>
               <td>{{ costSourceLabel(record.costSource) }}</td>
+              <td>{{ usageAmountLabel(record) }}</td>
               <td>
                 <span v-if="record.success" class="usage-success">成功</span>
                 <span v-else class="usage-failure">{{ safeErrorLabel(record.safeErrorCode) }}</span>
@@ -610,6 +612,16 @@ async function removeMcpToolFor(service, tool) {
 function formatTime(value) {
   if (!value) return ''
   return new Date(value).toLocaleString()
+}
+
+/** 最小统一用量展示：输入/输出 token 与图片张数；缺失显示 —。 */
+function usageAmountLabel(record) {
+  const parts = [
+    record.inputTokens != null ? String(record.inputTokens) : '—',
+    record.outputTokens != null ? String(record.outputTokens) : '—',
+    record.imageCount != null ? `${record.imageCount} 张` : '—'
+  ]
+  return parts.join(' / ')
 }
 
 function extractMessage(failure, fallback) {
