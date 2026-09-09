@@ -12,6 +12,7 @@ import com.li.lipicturecloud.domain.companion.CompanionProposalReactionRepositor
 import com.li.lipicturecloud.domain.companion.CompanionProposalRepository;
 import com.li.lipicturecloud.domain.companion.CompanionRepository;
 import com.li.lipicturecloud.domain.companion.ProposalGate;
+import com.li.lipicturecloud.domain.companion.ProposalOpportunityType;
 import com.li.lipicturecloud.domain.companion.ProposalReactionType;
 import com.li.lipicturecloud.domain.companion.TraitDelta;
 import com.li.lipicturecloud.exception.BusinessException;
@@ -34,10 +35,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 自主契约与主动提案：契约查询/更新，机会感知、守门、提案落库，用户反馈（接受/忽略/敲打）。
+ * 自主契约与主动提案：契约查询/更新，机会感知、冲动决策、守门、提案落库，用户反馈。
  *
- * <p>提案在读取活跃提案时惰性生成与惰性过期；守门失败只记录指标，不打扰用户。
- * 重复敲打（30 天内满 3 次）才缓慢下调"好奇"性格，单次敲打只抑制当前提案。</p>
+ * <p>提案在读取活跃提案时惰性生成与惰性过期；守门与冲动拦截只记录指标，不打扰用户。
+ * 冲动得分由机会评估器按"当前情绪 + 关系"计算，只影响"是否生成候选"：低于最低冲动
+ * （零积累）的机会不落库并记 reason=IMPULSE_ZERO。重复敲打（30 天内满 3 次）才缓慢
+ * 下调"好奇"性格，单次敲打只抑制当前提案。</p>
  */
 @Service
 @ConditionalOnProperty(prefix = "app.companion", name = "enabled",
@@ -55,6 +58,7 @@ public class CompanionProposalService {
     private final CompanionProposalRepository proposalRepository;
     private final CompanionProposalReactionRepository reactionRepository;
     private final List<CompanionOpportunitySource> opportunitySources;
+    private final ProposalOpportunityEvaluator evaluator;
     private final CompanionBalance balance;
     private final Clock clock;
 
@@ -63,14 +67,17 @@ public class CompanionProposalService {
                                     CompanionProposalRepository proposalRepository,
                                     CompanionProposalReactionRepository reactionRepository,
                                     List<CompanionOpportunitySource> opportunitySources,
+                                    ProposalOpportunityEvaluator evaluator,
                                     CompanionBalance balance,
                                     Clock clock) {
         this.companionRepository = companionRepository;
         this.contractRepository = contractRepository;
         this.proposalRepository = proposalRepository;
         this.reactionRepository = reactionRepository;
-        // 机会源按 @Order 优先级短路尝试（每周回顾 → 纪念日 → 相似图片），第一个有候选的产生提案。
+        // 机会源按 @Order 优先级短路尝试（每周回顾 → 纪念日 → 相似图片），
+        // 第一个"有候选且冲动得分达标"的产生提案；低于阈值的候选记拦截后继续下一个源。
         this.opportunitySources = List.copyOf(opportunitySources);
+        this.evaluator = evaluator;
         this.balance = balance;
         this.clock = clock;
     }
@@ -106,7 +113,12 @@ public class CompanionProposalService {
         Companion companion = companionRepository.findByOwnerIdForUpdate(subject.userId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "请先唤醒伙伴"));
         CompanionProposal proposal = maybePropose(companion, subject, clock.instant());
-        return proposal == null ? null : view(proposal);
+        if (proposal == null) {
+            return null;
+        }
+        log.info("companion_proposal_viewed subjectId={} proposalId={} type={}",
+                subject.userId(), proposal.id(), proposal.opportunityType().name());
+        return view(proposal);
     }
 
     @Transactional
@@ -182,20 +194,37 @@ public class CompanionProposalService {
                     subject.userId(), gate.reasonCode());
             return null;
         }
-        return opportunitySources.stream()
-                .map(source -> source.findOpportunity(companion.id(), subject.userId(), now))
-                .filter(Optional::isPresent)
-                .map(Optional::get)
-                .findFirst()
-                .map(opportunity -> {
-                    CompanionProposal saved = proposalRepository.append(CompanionProposal.pending(
-                            companion.id(), subject.userId(), opportunity.type(),
-                            opportunity.impulseScore(), opportunity.content(), now));
-                    log.info("companion_proposal_generated subjectId={} proposalId={} type={}",
-                            subject.userId(), saved.id(), saved.opportunityType().name());
-                    return saved;
-                })
-                .orElse(null);
+        // 机会评估按类型记录：每种机会源的"无候选 / 冲动拦截 / 生成"都能从日志区分，
+        // 便于计算三类机会的生成与拦截率。低于最低冲动（零积累）的候选不落库，
+        // 继续尝试下一个机会源而不是短路。
+        for (CompanionOpportunitySource source : opportunitySources) {
+            Optional<ProposalOpportunity> found = source.findOpportunity(
+                    companion.id(), subject.userId(), now);
+            if (found.isEmpty()) {
+                log.info("companion_proposal_opportunity subjectId={} type={} result=NO_CANDIDATE",
+                        subject.userId(), sourceTypeName(source));
+                continue;
+            }
+            ProposalOpportunity opportunity = found.get();
+            if (!evaluator.reachesProposalThreshold(opportunity.impulseScore())) {
+                log.info("companion_proposal_opportunity subjectId={} type={} result=BELOW_THRESHOLD "
+                                + "reason=IMPULSE_ZERO score={}",
+                        subject.userId(), opportunity.type().name(), opportunity.impulseScore());
+                continue;
+            }
+            CompanionProposal saved = proposalRepository.append(CompanionProposal.pending(
+                    companion.id(), subject.userId(), opportunity.type(),
+                    opportunity.impulseScore(), opportunity.content(), now));
+            log.info("companion_proposal_generated subjectId={} proposalId={} type={}",
+                    subject.userId(), saved.id(), saved.opportunityType().name());
+            return saved;
+        }
+        return null;
+    }
+
+    private static String sourceTypeName(CompanionOpportunitySource source) {
+        ProposalOpportunityType type = source.type();
+        return type == null ? "UNKNOWN" : type.name();
     }
 
     private void applyCuriosityPenalty(AuthorizationSubject subject) {

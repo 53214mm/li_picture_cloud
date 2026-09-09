@@ -1,13 +1,16 @@
 package com.li.lipicturecloud.application.companion;
 
 import com.li.lipicturecloud.domain.companion.CompanionMoodRepository;
+import com.li.lipicturecloud.domain.companion.CompanionMoodRules;
 import com.li.lipicturecloud.domain.companion.CompanionRelationshipRepository;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
 import com.li.lipicturecloud.domain.companion.ProposalOpportunityType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +35,10 @@ class AnniversaryOpportunitySourceTest {
         growthRepository = mock(GrowthRecordRepository.class);
         moodRepository = mock(CompanionMoodRepository.class);
         relationshipRepository = mock(CompanionRelationshipRepository.class);
-        source = new AnniversaryOpportunitySource(growthRepository, moodRepository, relationshipRepository);
+        ProposalOpportunityEvaluator evaluator = new ProposalOpportunityEvaluator(
+                moodRepository, relationshipRepository, CompanionMoodRules.v1(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        source = new AnniversaryOpportunitySource(growthRepository, evaluator);
     }
 
     @Test

@@ -15,6 +15,7 @@ import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -45,6 +47,7 @@ class CompanionProposalServiceTest {
     private CompanionAutonomyContractRepository contractRepository;
     private CompanionProposalRepository proposalRepository;
     private CompanionProposalReactionRepository reactionRepository;
+    private ProposalOpportunityEvaluator evaluator;
     private WeeklyReviewOpportunitySource opportunitySource;
     private CompanionProposalService service;
 
@@ -55,6 +58,8 @@ class CompanionProposalServiceTest {
         proposalRepository = mock(CompanionProposalRepository.class);
         reactionRepository = mock(CompanionProposalReactionRepository.class);
         opportunitySource = mock(WeeklyReviewOpportunitySource.class);
+        evaluator = mock(ProposalOpportunityEvaluator.class);
+        when(evaluator.reachesProposalThreshold(any())).thenReturn(true);
         when(proposalRepository.append(any())).thenAnswer(invocation ->
                 invocation.<CompanionProposal>getArgument(0).withId(61L));
         when(proposalRepository.findActive(anyLong(), anyInt())).thenReturn(List.of());
@@ -66,7 +71,7 @@ class CompanionProposalServiceTest {
         when(proposalRepository.save(any(), anyLong())).thenReturn(true);
         service = new CompanionProposalService(companionRepository, contractRepository,
                 proposalRepository, reactionRepository, List.of(opportunitySource),
-                CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
+                evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -140,7 +145,7 @@ class CompanionProposalServiceTest {
         CompanionOpportunitySource thirdSource = mock(CompanionOpportunitySource.class);
         CompanionProposalService localService = new CompanionProposalService(companionRepository,
                 contractRepository, proposalRepository, reactionRepository,
-                List.of(emptySource, hitSource, thirdSource), CompanionBalance.v1(),
+                List.of(emptySource, hitSource, thirdSource), evaluator, CompanionBalance.v1(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
         when(contractRepository.createIfAbsent(companion.id(), 7L))
@@ -161,6 +166,62 @@ class CompanionProposalServiceTest {
         // 命中后短路：第三个机会源不再调用。
         verify(thirdSource, never()).findOpportunity(anyLong(), anyLong(), any());
         verify(proposalRepository).append(any());
+    }
+
+    @Test
+    void zeroImpulseCandidateIsInterceptedAndTheNextOpportunitySourceStillRuns() {
+        Companion companion = persistedCompanion();
+        CompanionOpportunitySource zeroSource = mock(CompanionOpportunitySource.class);
+        CompanionOpportunitySource nextSource = mock(CompanionOpportunitySource.class);
+        CompanionProposalService localService = new CompanionProposalService(companionRepository,
+                contractRepository, proposalRepository, reactionRepository,
+                List.of(zeroSource, nextSource), evaluator, CompanionBalance.v1(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        when(contractRepository.createIfAbsent(companion.id(), 7L))
+                .thenAnswer(invocation -> CompanionAutonomyContract.initial(
+                        invocation.getArgument(0), invocation.getArgument(1)).updated(
+                        true, LocalTime.of(23, 0), LocalTime.of(8, 0), 72));
+        // 第一个机会源的候选冲动为 0（没有任何正向情绪/关系积累）→ 被阈值拦截。
+        when(zeroSource.findOpportunity(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.WEEKLY_REVIEW,
+                        new BigDecimal("0.00"), "这周你喂了我 1 次。")));
+        when(nextSource.findOpportunity(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.ANNIVERSARY,
+                        new BigDecimal("25.00"), "往年的今天我们相遇过。")));
+        when(evaluator.reachesProposalThreshold(argThat(score -> score.signum() == 0)))
+                .thenReturn(false);
+
+        CompanionProposalView view = localService.active(subject);
+
+        assertThat(view).isNotNull();
+        assertThat(view.opportunityType()).isEqualTo("ANNIVERSARY");
+        // 只有通过阈值的那条候选落库。
+        ArgumentCaptor<CompanionProposal> captor = ArgumentCaptor.forClass(CompanionProposal.class);
+        verify(proposalRepository).append(captor.capture());
+        assertThat(captor.getValue().opportunityType()).isEqualTo(ProposalOpportunityType.ANNIVERSARY);
+        verify(zeroSource).findOpportunity(companion.id(), 7L, NOW);
+        verify(nextSource).findOpportunity(companion.id(), 7L, NOW);
+    }
+
+    @Test
+    void zeroImpulseCandidateAloneProducesNoProposal() {
+        Companion companion = persistedCompanion();
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        when(contractRepository.createIfAbsent(companion.id(), 7L))
+                .thenAnswer(invocation -> CompanionAutonomyContract.initial(
+                        invocation.getArgument(0), invocation.getArgument(1)).updated(
+                        true, LocalTime.of(23, 0), LocalTime.of(8, 0), 72));
+        when(opportunitySource.findOpportunity(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.WEEKLY_REVIEW,
+                        new BigDecimal("0.00"), "这周你喂了我 1 次。想听我讲一段我们的故事吗？")));
+        when(evaluator.reachesProposalThreshold(argThat(score -> score.signum() == 0)))
+                .thenReturn(false);
+
+        CompanionProposalView view = service.active(subject);
+
+        assertThat(view).isNull();
+        verify(proposalRepository, never()).append(any());
     }
 
     @Test
