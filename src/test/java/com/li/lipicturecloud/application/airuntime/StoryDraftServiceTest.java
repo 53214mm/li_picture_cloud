@@ -9,6 +9,7 @@ import com.li.lipicturecloud.domain.airuntime.CreationTask;
 import com.li.lipicturecloud.domain.airuntime.CreationTaskRepository;
 import com.li.lipicturecloud.domain.airuntime.ModelConnection;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;
+import com.li.lipicturecloud.domain.airuntime.ModelTask;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
@@ -31,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -50,6 +52,7 @@ class StoryDraftServiceTest {
     private LanguageRouter languageRouter;
     private LanguageModelInvoker languageInvoker;
     private PlatformTrialLedgerService trialLedger;
+    private ModelUsageService usageService;
     @SuppressWarnings("unchecked")
     private org.springframework.beans.factory.ObjectProvider<
             org.springframework.ai.chat.model.ChatModel> chatModelProvider =
@@ -72,6 +75,7 @@ class StoryDraftServiceTest {
         languageRouter = mock(LanguageRouter.class);
         languageInvoker = mock(LanguageModelInvoker.class);
         trialLedger = mock(PlatformTrialLedgerService.class);
+        usageService = mock(ModelUsageService.class);
         chatModel = mock(org.springframework.ai.chat.model.ChatModel.class);
         when(chatModelProvider.getIfAvailable()).thenReturn(chatModel);
         when(chatModel.call(any(org.springframework.ai.chat.prompt.Prompt.class))).thenAnswer(
@@ -89,7 +93,7 @@ class StoryDraftServiceTest {
                 new CreationServiceSupport(taskRepository, authorization, pictureRepository,
                         Clock.fixed(NOW, ZoneOffset.UTC)),
                 languageRouter, languageInvoker, chatModelProvider,
-                trialLedger, Clock.fixed(NOW, ZoneOffset.UTC));
+                trialLedger, usageService, Clock.fixed(NOW, ZoneOffset.UTC));
         when(taskRepository.save(any(CreationTask.class), anyLong())).thenReturn(true);
         when(languageRouter.decide(7L)).thenReturn(ModelRouteDecision.platform());
         when(languageInvoker.stream(any(ModelRouteDecision.class), any()))
@@ -223,7 +227,7 @@ class StoryDraftServiceTest {
     }
 
     @Test
-    void draftMapsUnsafeModelTextToFriendlyErrorAndFailsTask() {
+    void draftMapsUnsafeModelTextToFriendlyErrorSettlesTrialAndFailsTask() {
         when(taskRepository.findById(9L)).thenReturn(Optional.of(
                 task(CreationStatus.AWAITING_CONFIRM, 2L, "大纲", null)));
         when(chatModel.call(any(org.springframework.ai.chat.prompt.Prompt.class))).thenAnswer(
@@ -242,9 +246,12 @@ class StoryDraftServiceTest {
         assertThatThrownBy(() -> service.draft(SUBJECT, 9L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("安全文本要求");
-        // 试用额度释放且任务转入 FAILED 终态，不裸抛 500。
-        verify(trialLedger).release(7L, StoryDraftService.DRAFT_TRIAL_COST);
-        verify(trialLedger, never()).settle(anyLong(), anyLong());
+        // 模型已成功返回：后处理安全校验失败不再释放试用预占——平台成本已经产生，
+        // 应结算并单独记录业务失败；任务转入 FAILED 终态，不裸抛 500。
+        verify(trialLedger, never()).release(anyLong(), anyLong());
+        verify(trialLedger).settle(7L, StoryDraftService.DRAFT_TRIAL_COST);
+        verify(usageService).recordSuccess(eq(7L), eq(ModelTask.LANGUAGE_AGENT), isNull(),
+                eq(ModelProvider.DASHSCOPE), eq("qwen-max"), eq(CostSource.PLATFORM), any());
         verify(taskRepository).save(org.mockito.ArgumentMatchers.argThat(t ->
                 t.status() == CreationStatus.FAILED), anyLong());
     }

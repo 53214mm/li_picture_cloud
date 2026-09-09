@@ -5,6 +5,7 @@ import com.li.lipicturecloud.domain.airuntime.CreationKind;
 import com.li.lipicturecloud.domain.airuntime.CreationStatus;
 import com.li.lipicturecloud.domain.airuntime.CreationTask;
 import com.li.lipicturecloud.domain.airuntime.CreationTaskRepository;
+import com.li.lipicturecloud.domain.airuntime.ModelUsageSnapshot;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
@@ -133,6 +134,63 @@ public class CreationServiceSupport {
 
     public static String costSource(ModelRouteDecision route) {
         return route.isByok() ? CostSource.BYOK.name() : CostSource.PLATFORM.name();
+    }
+
+    /** 平台语言路径使用记录的供应商与费用来源。 */
+    public static com.li.lipicturecloud.domain.airuntime.ModelProvider providerOf(ModelRouteDecision route) {
+        return route.isByok() ? route.connection().provider()
+                : com.li.lipicturecloud.domain.airuntime.ModelProvider.DASHSCOPE;
+    }
+
+    public static CostSource costSourceOf(ModelRouteDecision route) {
+        return route.isByok() ? CostSource.BYOK : CostSource.PLATFORM;
+    }
+
+    /** 模型调用失败的安全错误码（不泄露底层异常文本）。 */
+    public static String safeErrorCode(RuntimeException failure) {
+        if (failure instanceof com.li.lipicturecloud.application.airuntime.ModelInvocationException invocation) {
+            return invocation.safeErrorCode();
+        }
+        return "INTERNAL";
+    }
+
+    /** 从平台语言模型响应元数据提取最小用量快照（供应商未返回时为 none）。 */
+    public static ModelUsageSnapshot usageOf(org.springframework.ai.chat.model.ChatResponse response) {
+        if (response == null || response.getMetadata() == null || response.getMetadata().getUsage() == null) {
+            return ModelUsageSnapshot.none();
+        }
+        org.springframework.ai.chat.metadata.Usage usage = response.getMetadata().getUsage();
+        return new ModelUsageSnapshot(
+                usage.getPromptTokens() == null ? null : usage.getPromptTokens().longValue(),
+                usage.getCompletionTokens() == null ? null : usage.getCompletionTokens().longValue(),
+                null,
+                sanitizeRawUsage(usage.getNativeUsage()));
+    }
+
+    /** 供应商原始计量只保留安全摘要文本（去控制字符，超长截断）。 */
+    private static String sanitizeRawUsage(Object nativeUsage) {
+        if (nativeUsage == null) {
+            return null;
+        }
+        String raw = String.valueOf(nativeUsage);
+        if (raw.isBlank()) {
+            return null;
+        }
+        String safe = raw.codePoints()
+                .filter(codePoint -> !Character.isISOControl(codePoint))
+                .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+                .toString();
+        return safe.isBlank() ? null : safe;
+    }
+
+    /**
+     * 一次语言模型调用结果：文本与用量快照（模型已成功返回即成本已产生，
+     * 文本为空由调用方按业务后处理失败处理，不再释放试用预占）。
+     */
+    public record LanguageInvocation(String text, ModelUsageSnapshot usage) {
+        public LanguageInvocation {
+            Objects.requireNonNull(usage, "usage");
+        }
     }
 
     /** 确认等待超时的任务惰性转 EXPIRED（终态）。 */

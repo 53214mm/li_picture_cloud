@@ -5,6 +5,7 @@ import com.li.lipicturecloud.domain.airuntime.ModelProvider;
 import com.li.lipicturecloud.domain.airuntime.ModelTask;
 import com.li.lipicturecloud.domain.airuntime.ModelUsageRecord;
 import com.li.lipicturecloud.domain.airuntime.ModelUsageRecordRepository;
+import com.li.lipicturecloud.domain.airuntime.ModelUsageSnapshot;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -29,20 +30,37 @@ public class ModelUsageService {
     public ModelUsageRecord recordSuccess(long subjectId, ModelTask task, Long connectionId,
                                           ModelProvider provider, String modelCode,
                                           CostSource costSource) {
+        return recordSuccess(subjectId, task, connectionId, provider, modelCode, costSource,
+                ModelUsageSnapshot.none());
+    }
+
+    /** 记录成功调用并携带最小统一用量快照（紧跟模型调用结果，独立于后续任务状态）。 */
+    public ModelUsageRecord recordSuccess(long subjectId, ModelTask task, Long connectionId,
+                                          ModelProvider provider, String modelCode,
+                                          CostSource costSource, ModelUsageSnapshot usage) {
         checkArguments(subjectId, task, provider, modelCode, costSource);
         return usageRepository.append(ModelUsageRecord.success(subjectId, task, connectionId,
-                provider, modelCode, costSource, UUID.randomUUID().toString(),
+                provider, modelCode, costSource, usage, UUID.randomUUID().toString(),
                 clock.instant()));
     }
 
     public ModelUsageRecord recordFailure(long subjectId, ModelTask task, Long connectionId,
                                           ModelProvider provider, String modelCode,
                                           CostSource costSource, String safeErrorCode) {
+        return recordFailure(subjectId, task, connectionId, provider, modelCode, costSource,
+                ModelUsageSnapshot.none(), safeErrorCode);
+    }
+
+    /** 记录失败调用并携带最小统一用量快照（供应商若在失败前返回了部分用量）。 */
+    public ModelUsageRecord recordFailure(long subjectId, ModelTask task, Long connectionId,
+                                          ModelProvider provider, String modelCode,
+                                          CostSource costSource, ModelUsageSnapshot usage,
+                                          String safeErrorCode) {
         checkArguments(subjectId, task, provider, modelCode, costSource);
         Objects.requireNonNull(safeErrorCode, "safeErrorCode");
         return usageRepository.append(ModelUsageRecord.failure(subjectId, task, connectionId,
-                provider, modelCode, costSource, safeErrorCode, UUID.randomUUID().toString(),
-                clock.instant()));
+                provider, modelCode, costSource, usage, safeErrorCode,
+                UUID.randomUUID().toString(), clock.instant()));
     }
 
     /** 最近使用记录（倒序），limit 由仓储钳制在 [1, 100]。 */

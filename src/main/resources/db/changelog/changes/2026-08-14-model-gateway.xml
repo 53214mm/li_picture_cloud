@@ -159,4 +159,37 @@ CREATE INDEX idx_model_usage_subject
                        tableName="model_usage_record"/>
         </rollback>
     </changeSet>
+
+    <changeSet id="20260814-36" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><columnExists tableName="model_usage_record" columnName="inputTokens"/></not>
+        </preConditions>
+        <!-- H2 与 MySQL 都要求每个 ALTER TABLE 只加一列；逐条执行保证两库兼容。 -->
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE model_usage_record ADD COLUMN inputTokens BIGINT NULL;
+        ]]></sql>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE model_usage_record ADD COLUMN outputTokens BIGINT NULL;
+        ]]></sql>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE model_usage_record ADD COLUMN imageCount INT NULL;
+        ]]></sql>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE model_usage_record ADD COLUMN rawUsage VARCHAR(200) NULL;
+        ]]></sql>
+        <rollback>
+            <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE model_usage_record DROP COLUMN inputTokens;
+            ]]></sql>
+            <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE model_usage_record DROP COLUMN outputTokens;
+            ]]></sql>
+            <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE model_usage_record DROP COLUMN imageCount;
+            ]]></sql>
+            <sql splitStatements="false" stripComments="true"><![CDATA[
+ALTER TABLE model_usage_record DROP COLUMN rawUsage;
+            ]]></sql>
+        </rollback>
+    </changeSet>
 </databaseChangeLog>

@@ -1,0 +1,45 @@
+fix(airuntime): close the five stage-4 blockers with explicit not-open gates, usage snapshots, and whitelisted polling
+
+阶段 4 审核整改（5 项阻断，按用户裁决执行；未新增专用视觉架构，统一能力内核登记 Q3 未完成项）：
+
+1. 多图融合未使用源图内容（阻断）：
+   当前唯一图像适配器只支持 OpenAI 兼容 images/generations（文生图），无 reference
+   image / image edit 输入，无法把多张授权源图真正融合。FusionImageService.generate
+   改为玩法未开放：在模型调用前明确失败（FORBIDDEN + 明示文案），不调用图像模型、
+   不预占/结算额度、不生成误导性血缘；任务进入安全失败终态。前端融合面板明示
+   "真实多图融合能力尚未开放"，移除创建/生成/保存入口（历史任务只读展示）；
+   单测与 E2E 断言零创作请求。
+2. 表情草稿未从图片提取元素（阻断）：
+   EmojiDraftService.generate 改为暂未开放：不再用图片数量与分类模拟元素，不调用
+   语言/视觉模型、不预占/结算、不生成候选，任务转安全失败终态；前端明示需要
+   "视觉理解能力"。视觉理解执行器不借本轮另建，随统一能力内核统一设计与实现。
+3. 模型已产生成本后后处理失败仍释放预占（阻断）：
+   StoryDraftService.outline/draft 现在区分终态：模型成功返回（含文本安全校验、
+   状态 CAS、血缘写入等后处理失败）→ 结算试用预占并单独记录业务失败；模型调用前
+   或未成功返回 → 释放预占。被测试固化的旧断言（后处理失败=release）已修正为
+   settle+never release。
+4. 使用记录缺少用量且漏掉故事/表情（阻断）：
+   - 新增 ModelUsageSnapshot（inputTokens/outputTokens/imageCount/rawUsage，安全
+     归一化）；ModelUsageRecord 持久化新增四列（Liquibase 20260814-36，H2/MySQL
+     兼容逐列 ALTER）；ModelUsageService 增加带用量快照的 overloads。
+   - Story 大纲/草稿平台路径从 Spring AI ChatResponse 元数据提取 token 用量并记录
+     成功/失败使用记录（紧跟模型调用结果，独立于任务状态）；Fusion 记录
+     imageCount=1（玩法开放后生效）。
+   - rawUsage 只保留供应商原始计量的安全摘要（去控制字符、≤200 码点）。
+5. MCP 内部轮询绕过工具白名单（安全阻断）：
+   RefreshableMcpToolProvider 的 get_task_status 内部轮询（入口与每次调用）统一经
+   McpToolAccessDecider 裁决：状态工具被停用/未审核时立即返回明确提示并停止轮询，
+   绝不后台调用停用工具（fail-closed）。补回归测试：生成工具允许、状态工具禁用时
+   轮询零调用、立即返回；裁决器缺失同样拒绝。
+
+登记（docs/未决问题.md"明确延期项"小节）：统一能力内核 discover/invoke/observe
+为 Q3 未完成项；多图融合与表情草稿的未开放边界与开放前置条件一并登记。
+
+测试与验证：
+- 后端：Story/Emoji/Fusion/Usage/Recipe/MCP 相关 95 项单测通过（其中生成失败语义、
+  未开放语义、usage snapshot 校验与持久化为新增/改写断言）；ModelGateway 持久化
+  集成 7/7（含新列 DDL 在 H2 的迁移验证）。
+- 前端：npm test 46/46、lint、build 通过。
+- E2E（真实后端）：companion 3/3、emoji 未开放 1/1、fusion 未开放 1/1、
+  story-draft 1/1、recipe-workshop 1/1，共 7/7 通过。
+- 未进入阶段 5；未合并/推送 main；未勾选任何人工验收清单条目。

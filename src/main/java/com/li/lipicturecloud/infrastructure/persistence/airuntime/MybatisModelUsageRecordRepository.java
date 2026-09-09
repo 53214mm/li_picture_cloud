@@ -40,6 +40,10 @@ public class MybatisModelUsageRecordRepository implements ModelUsageRecordReposi
         row.setSuccess(record.success());
         row.setSafeErrorCode(record.safeErrorCode());
         row.setCorrelationId(record.correlationId());
+        row.setInputTokens(record.inputTokens());
+        row.setOutputTokens(record.outputTokens());
+        row.setImageCount(record.imageCount());
+        row.setRawUsage(record.rawUsage());
         row.setCreatedTime(Date.from(record.createdTime()));
         usageMapper.insert(row);
         return record.withId(Objects.requireNonNull(row.getId(), "assigned usage record id"));
@@ -69,7 +73,8 @@ public class MybatisModelUsageRecordRepository implements ModelUsageRecordReposi
                 ModelProvider.valueOf(row.getProvider()), row.getModelCode(),
                 CostSource.valueOf(row.getCostSource()), Boolean.TRUE.equals(row.getSuccess()),
                 row.getSafeErrorCode(), row.getCorrelationId(),
-                Objects.requireNonNull(row.getCreatedTime(), "createdTime").toInstant());
+                Objects.requireNonNull(row.getCreatedTime(), "createdTime").toInstant(),
+                row.getInputTokens(), row.getOutputTokens(), row.getImageCount(), row.getRawUsage());
     }
 
     private static int boundedLimit(int limit) {

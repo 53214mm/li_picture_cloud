@@ -1,7 +1,6 @@
 package com.li.lipicturecloud.application.airuntime;
 
 import com.li.lipicturecloud.application.airuntime.view.FusionImageView;
-import com.li.lipicturecloud.domain.airuntime.CostSource;
 import com.li.lipicturecloud.domain.airuntime.CreationFusionImage;
 import com.li.lipicturecloud.domain.airuntime.CreationFusionImageRepository;
 import com.li.lipicturecloud.domain.airuntime.CreationKind;
@@ -12,8 +11,8 @@ import com.li.lipicturecloud.domain.airuntime.CreationTask;
 import com.li.lipicturecloud.domain.airuntime.CreationTaskRepository;
 import com.li.lipicturecloud.domain.airuntime.ModelConnection;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;
-import com.li.lipicturecloud.domain.airuntime.ModelTask;
 import com.li.lipicturecloud.exception.BusinessException;
+import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,8 +31,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -54,11 +51,7 @@ class FusionImageServiceTest {
     private CreationFusionImageRepository fusionImageRepository;
     private CreationLineageRepository lineageRepository;
     private SpaceAuthorizationAccessService authorization;
-    private com.li.lipicturecloud.repository.PictureRepository pictureRepository;
-    private ImageRouter imageRouter;
-    private ImageModelInvoker imageInvoker;
     private FusionArtworkSaver artworkSaver;
-    private ModelUsageService usageService;
     private ModelConnectionService connectionService;
     private FusionImageService service;
 
@@ -68,27 +61,16 @@ class FusionImageServiceTest {
         fusionImageRepository = mock(CreationFusionImageRepository.class);
         lineageRepository = mock(CreationLineageRepository.class);
         authorization = mock(SpaceAuthorizationAccessService.class);
-        pictureRepository = mock(com.li.lipicturecloud.repository.PictureRepository.class);
-        com.li.lipicturecloud.model.entity.Picture picture =
-                new com.li.lipicturecloud.model.entity.Picture();
-        picture.setId(102L);
-        picture.setCategory("旅行");
-        when(pictureRepository.findById(102L)).thenReturn(Optional.of(picture));
-        imageRouter = mock(ImageRouter.class);
-        imageInvoker = mock(ImageModelInvoker.class);
+        com.li.lipicturecloud.repository.PictureRepository pictureRepository =
+                mock(com.li.lipicturecloud.repository.PictureRepository.class);
         artworkSaver = mock(FusionArtworkSaver.class);
-        usageService = mock(ModelUsageService.class);
         connectionService = mock(ModelConnectionService.class);
         service = new FusionImageService(taskRepository, fusionImageRepository,
                 lineageRepository,
                 new CreationServiceSupport(taskRepository, authorization, pictureRepository,
                         Clock.fixed(NOW, ZoneOffset.UTC)),
-                imageRouter, imageInvoker, artworkSaver, usageService, connectionService,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                artworkSaver, connectionService, Clock.fixed(NOW, ZoneOffset.UTC));
         when(taskRepository.save(any(CreationTask.class), anyLong())).thenReturn(true);
-        when(imageRouter.decide(7L)).thenReturn(ModelRouteDecision.byok(CONNECTION, "sk-test"));
-        when(imageInvoker.invoke(any(ModelRouteDecision.class), anyString(), anyString()))
-                .thenReturn(new ImageGenerationResult(null, TINY_PNG_BASE64));
         when(connectionService.findOwned(5L, 7L)).thenReturn(CONNECTION);
     }
 
@@ -115,89 +97,33 @@ class FusionImageServiceTest {
     }
 
     @Test
-    void generateStagesBytesAndCompletesFusionAwaitingConfirmation() {
+    void generateIsExplicitlyNotOpenYetAndNeverInvokesAnyModel() {
         when(taskRepository.findById(9L)).thenReturn(Optional.of(
                 task(CreationStatus.PENDING, 0L, null)));
-        when(fusionImageRepository.insert(any(CreationFusionImage.class))).thenAnswer(invocation ->
-                invocation.<CreationFusionImage>getArgument(0).withId(1L));
 
-        CreationTask result = service.generate(SUBJECT, 9L);
-
-        assertThat(result.status()).isEqualTo(CreationStatus.AWAITING_CONFIRM);
-        assertThat(result.modelConnectionId()).isEqualTo(5L);
-        assertThat(result.outlineText()).isNull();
-        assertThat(result.draftText()).isNull();
-
-        ArgumentCaptor<CreationFusionImage> staged =
-                ArgumentCaptor.forClass(CreationFusionImage.class);
-        verify(fusionImageRepository).insert(staged.capture());
-        assertThat(staged.getValue().mimeType()).isEqualTo("image/png");
-        assertThat(staged.getValue().bytes()).isEqualTo(Base64.getDecoder().decode(TINY_PNG_BASE64));
-
-        ArgumentCaptor<CreationLineage> lineage =
-                ArgumentCaptor.forClass(CreationLineage.class);
-        verify(lineageRepository, org.mockito.Mockito.times(2)).append(lineage.capture());
-        assertThat(lineage.getAllValues())
-                .allSatisfy(row -> {
-                    assertThat(row.capabilityId()).isEqualTo("IMAGE_FUSION_GENERATE");
-                    assertThat(row.resultPictureId()).isNull();
-                    assertThat(row.costSource()).isEqualTo(CostSource.BYOK.name());
-                });
-        verify(usageService).recordSuccess(7L, ModelTask.IMAGE_CREATION, 5L,
-                ModelProvider.OPENAI, "gpt-image-2", CostSource.BYOK);
-    }
-
-    @Test
-    void generateFailsLoudlyOnPlatformRouteAndMarksTaskFailed() {
-        when(taskRepository.findById(9L)).thenReturn(Optional.of(
-                task(CreationStatus.PENDING, 0L, null)));
-        when(imageRouter.decide(7L)).thenReturn(ModelRouteDecision.platform());
-
+        // 融合玩法未开放：生成入口明确失败——不调用图像模型、不预占/结算、
+        // 不写暂存与血缘；任务进入安全失败终态。
         assertThatThrownBy(() -> service.generate(SUBJECT, 9L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("平台图片创作尚未开放");
-
+                .extracting(error -> ((BusinessException) error).getCode(), Throwable::getMessage)
+                .containsExactly(ErrorCode.FORBIDDEN_ERROR.getCode(),
+                        FusionImageService.NOT_OPEN_YET_MESSAGE);
         ArgumentCaptor<CreationTask> failed = ArgumentCaptor.forClass(CreationTask.class);
-        verify(taskRepository).save(failed.capture(), eq(1L));
-        assertThat(failed.getValue().status()).isEqualTo(CreationStatus.FAILED);
-        verify(imageInvoker, never()).invoke(any(), anyString(), anyString());
-    }
-
-    @Test
-    void generateRejectsUrlOnlyResultsAndMarksTaskFailed() {
-        when(taskRepository.findById(9L)).thenReturn(Optional.of(
-                task(CreationStatus.PENDING, 0L, null)));
-        when(imageInvoker.invoke(any(ModelRouteDecision.class), anyString(), anyString()))
-                .thenReturn(new ImageGenerationResult(
-                        URI.create("https://provider.example/fusion.png"), null));
-
-        assertThatThrownBy(() -> service.generate(SUBJECT, 9L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("只返回图片链接");
-
-        ArgumentCaptor<CreationTask> failed = ArgumentCaptor.forClass(CreationTask.class);
-        verify(taskRepository).save(failed.capture(), eq(1L));
+        verify(taskRepository).save(failed.capture(), org.mockito.ArgumentMatchers.eq(0L));
         assertThat(failed.getValue().status()).isEqualTo(CreationStatus.FAILED);
         verify(fusionImageRepository, never()).insert(any(CreationFusionImage.class));
+        verify(lineageRepository, never()).append(any(CreationLineage.class));
     }
 
     @Test
-    void generateRecordsUsageFailureOnInvocationError() {
-        when(taskRepository.findById(9L)).thenReturn(Optional.of(
-                task(CreationStatus.PENDING, 0L, null)));
-        when(imageInvoker.invoke(any(ModelRouteDecision.class), anyString(), anyString()))
-                .thenThrow(new ModelInvocationException(
-                        ConnectivityResult.CREDENTIAL_REJECTED, "credential rejected"));
+    void generateOnTerminalFailedTaskRejectsWithoutRewritingState() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(task(CreationStatus.FAILED, 3L, null)));
 
         assertThatThrownBy(() -> service.generate(SUBJECT, 9L))
-                .isInstanceOf(ModelInvocationException.class);
-
-        verify(usageService).recordFailure(7L, ModelTask.IMAGE_CREATION, 5L,
-                ModelProvider.OPENAI, "gpt-image-2", CostSource.BYOK,
-                ConnectivityResult.CREDENTIAL_REJECTED);
-        ArgumentCaptor<CreationTask> failed = ArgumentCaptor.forClass(CreationTask.class);
-        verify(taskRepository).save(failed.capture(), eq(1L));
-        assertThat(failed.getValue().status()).isEqualTo(CreationStatus.FAILED);
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode())
+                .isEqualTo(ErrorCode.FORBIDDEN_ERROR.getCode());
+        verify(taskRepository, never()).save(any(), anyLong());
     }
 
     @Test
@@ -259,7 +185,7 @@ class FusionImageServiceTest {
                 .hasMessageContaining("融合结果已失效");
 
         ArgumentCaptor<CreationTask> failed = ArgumentCaptor.forClass(CreationTask.class);
-        verify(taskRepository).save(failed.capture(), eq(3L));
+        verify(taskRepository).save(failed.capture(), org.mockito.ArgumentMatchers.eq(3L));
         assertThat(failed.getValue().status()).isEqualTo(CreationStatus.FAILED);
     }
 
@@ -308,48 +234,6 @@ class FusionImageServiceTest {
 
         assertThat(tasks).containsExactly(fusion);
         verify(taskRepository).findBySubjectIdAndKind(7L, CreationKind.IMAGE_FUSION, 20);
-    }
-
-    @Test
-    void generateMarksTaskFailedWhenLineageFailsAfterCompleteFusion() {
-        when(taskRepository.findById(9L)).thenReturn(Optional.of(
-                task(CreationStatus.PENDING, 0L, null)));
-        when(fusionImageRepository.insert(any(CreationFusionImage.class))).thenAnswer(invocation ->
-                invocation.<CreationFusionImage>getArgument(0).withId(1L));
-        when(lineageRepository.append(any(CreationLineage.class)))
-                .thenThrow(new RuntimeException("lineage db down"));
-
-        assertThatThrownBy(() -> service.generate(SUBJECT, 9L))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("lineage db down");
-
-        // 失败必须基于 completeFusion 之后的最新状态（AWAITING_CONFIRM，revision 2）写 FAILED。
-        ArgumentCaptor<CreationTask> failed = ArgumentCaptor.forClass(CreationTask.class);
-        verify(taskRepository).save(failed.capture(), eq(2L));
-        assertThat(failed.getValue().status()).isEqualTo(CreationStatus.FAILED);
-        // 模型调用已成功，不得记失败用量。
-        verify(usageService).recordSuccess(7L, ModelTask.IMAGE_CREATION, 5L,
-                ModelProvider.OPENAI, "gpt-image-2", CostSource.BYOK);
-        verify(usageService, never()).recordFailure(anyLong(), any(), anyLong(), any(), anyString(),
-                any(), anyString());
-    }
-
-    @Test
-    void generateRejectsUnsupportedImageFormatAndMarksTaskFailed() {
-        when(taskRepository.findById(9L)).thenReturn(Optional.of(
-                task(CreationStatus.PENDING, 0L, null)));
-        when(imageInvoker.invoke(any(ModelRouteDecision.class), anyString(), anyString()))
-                .thenReturn(new ImageGenerationResult(null,
-                        Base64.getEncoder().encodeToString(new byte[24])));
-
-        assertThatThrownBy(() -> service.generate(SUBJECT, 9L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("格式不受支持");
-
-        ArgumentCaptor<CreationTask> failed = ArgumentCaptor.forClass(CreationTask.class);
-        verify(taskRepository).save(failed.capture(), eq(1L));
-        assertThat(failed.getValue().status()).isEqualTo(CreationStatus.FAILED);
-        verify(fusionImageRepository, never()).insert(any(CreationFusionImage.class));
     }
 
     @Test

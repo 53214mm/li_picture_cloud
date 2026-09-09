@@ -23,4 +23,8 @@ public class ModelUsageRecordEntity {
     private String safeErrorCode;
     private String correlationId;
     private Date createdTime;
+    private Long inputTokens;
+    private Long outputTokens;
+    private Integer imageCount;
+    private String rawUsage;
 }

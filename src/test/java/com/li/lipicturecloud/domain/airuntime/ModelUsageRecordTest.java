@@ -48,12 +48,13 @@ class ModelUsageRecordTest {
     void successRejectsErrorCodeAndMixedIdentityFields() {
         assertThatThrownBy(() -> new ModelUsageRecord(null, 7L, ModelTask.LANGUAGE_AGENT, 11L,
                 ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK, true, "EXTRA_CODE",
-                CORRELATION, NOW))
+                CORRELATION, NOW, null, null, null, null))
                 .describedAs("success 记录不允许携带错误码")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new ModelUsageRecord(0L, 7L, ModelTask.LANGUAGE_AGENT, 11L,
                 ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK, true, null,
-                CORRELATION, NOW)).isInstanceOf(IllegalArgumentException.class);
+                CORRELATION, NOW, null, null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> ModelUsageRecord.success(0L, ModelTask.LANGUAGE_AGENT, 11L,
                 ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK, CORRELATION, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -97,5 +98,39 @@ class ModelUsageRecordTest {
 
         assertThatThrownBy(() -> persisted.withId(12L)).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> created.withId(0L)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void usageSnapshotIsCarriedIntoSuccessAndFailureRecords() {
+        ModelUsageSnapshot snapshot = new ModelUsageSnapshot(120L, 35L, 1, "{\"total\":155}");
+
+        ModelUsageRecord success = ModelUsageRecord.success(7L, ModelTask.IMAGE_CREATION, null,
+                ModelProvider.DASHSCOPE, "wanx2.1", CostSource.PLATFORM, snapshot,
+                CORRELATION, NOW);
+        assertThat(success.inputTokens()).isEqualTo(120L);
+        assertThat(success.outputTokens()).isEqualTo(35L);
+        assertThat(success.imageCount()).isEqualTo(1);
+        assertThat(success.rawUsage()).isEqualTo("{\"total\":155}");
+
+        ModelUsageRecord failure = ModelUsageRecord.failure(7L, ModelTask.LANGUAGE_AGENT, null,
+                ModelProvider.DASHSCOPE, "qwen-max", CostSource.PLATFORM, snapshot,
+                "UPSTREAM_TIMEOUT", CORRELATION, NOW);
+        assertThat(failure.inputTokens()).isEqualTo(120L);
+        assertThat(failure.rawUsage()).isEqualTo("{\"total\":155}");
+        assertThat(failure.safeErrorCode()).isEqualTo("UPSTREAM_TIMEOUT");
+    }
+
+    @Test
+    void usageSnapshotValidatesNegativeCountsAndOversizedRawText() {
+        assertThatThrownBy(() -> new ModelUsageSnapshot(-1L, null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ModelUsageSnapshot(null, -1L, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ModelUsageSnapshot(null, null, -1, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        // 控制字符与超长原始计量都会被归一化/截断而不是抛错。
+        ModelUsageSnapshot noisy = new ModelUsageSnapshot(null, null, null, "a\u0007" + "x".repeat(300));
+        assertThat(noisy.rawUsage()).doesNotContain("\u0007");
+        assertThat(noisy.rawUsage().codePointCount(0, noisy.rawUsage().length())).isEqualTo(200);
     }
 }

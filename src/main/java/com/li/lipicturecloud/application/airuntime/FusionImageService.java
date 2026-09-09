@@ -10,7 +10,6 @@ import com.li.lipicturecloud.domain.airuntime.CreationLineageRepository;
 import com.li.lipicturecloud.domain.airuntime.CreationStatus;
 import com.li.lipicturecloud.domain.airuntime.CreationTask;
 import com.li.lipicturecloud.domain.airuntime.CreationTaskRepository;
-import com.li.lipicturecloud.domain.airuntime.ModelTask;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
@@ -19,40 +18,36 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
-import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 多图融合应用服务：授权图片 → 图片创作路由生成融合图（字节暂存专用表）
- * → 用户确认目标空间 → 复用图片上传/保存管线回库 → 血缘记录结果图片。
+ * 多图融合应用服务。
  *
- * <p>平台图片创作账本未上线前平台路由大声失败；BYOK 失败绝不静默回退。
- * 生成提示词只由安全落地线索构建，绝不携带图片字节、名称或用户原文；
- * 暂存字节不进入任务文本字段；日志不记录提示词与结果。原图永不覆盖。</p>
+ * <p><b>玩法当前未开放：</b>现有图像模型适配器只支持文生图（images/generations），
+ * 没有 reference image / image edit 输入，无法把多张授权源图真正融合为新图。
+ * 在支持多图参考输入且通过供应商能力验证的适配器就绪前，{@code generate} 一律明确
+ * 失败：不调用图像模型、不预占/结算额度、不生成误导性血缘。任务的创建/保存/预览
+ * API 保留以便适配器就绪后恢复闭环；原图永不覆盖。</p>
  */
 @Service
 public class FusionImageService {
 
-    public static final String CAPABILITY_GENERATE = "IMAGE_FUSION_GENERATE";
+    public static final String NOT_OPEN_YET_MESSAGE =
+            "真实多图融合能力尚未开放：当前图像模型适配器不支持多图参考输入。"
+                    + "需要支持图片编辑/多参考图的适配器验证完成后才会开放。";
     public static final String CAPABILITY_SAVE = "IMAGE_FUSION_SAVE";
     public static final String PROMPT_TEMPLATE_VERSION = "fusion-v1";
     public static final int MIN_SOURCE_PICTURES = 2;
-    public static final String DEFAULT_SIZE = "1024x1024";
 
     private static final Logger log = LoggerFactory.getLogger(FusionImageService.class);
-    private static final String GENERATE_PROMPT_TEMPLATE =
-            "把用户选择的 %d 张图片融合成一张新图：构图自然和谐，主体完整，光线统一。%s";
 
     private final CreationTaskRepository taskRepository;
     private final CreationFusionImageRepository fusionImageRepository;
     private final CreationLineageRepository lineageRepository;
     private final CreationServiceSupport support;
-    private final ImageRouter imageRouter;
-    private final ImageModelInvoker imageInvoker;
     private final FusionArtworkSaver artworkSaver;
-    private final ModelUsageService usageService;
     private final ModelConnectionService connectionService;
     private final Clock clock;
 
@@ -60,20 +55,14 @@ public class FusionImageService {
                               CreationFusionImageRepository fusionImageRepository,
                               CreationLineageRepository lineageRepository,
                               CreationServiceSupport support,
-                              ImageRouter imageRouter,
-                              ImageModelInvoker imageInvoker,
                               FusionArtworkSaver artworkSaver,
-                              ModelUsageService usageService,
                               ModelConnectionService connectionService,
                               Clock clock) {
         this.taskRepository = taskRepository;
         this.fusionImageRepository = fusionImageRepository;
         this.lineageRepository = lineageRepository;
         this.support = support;
-        this.imageRouter = imageRouter;
-        this.imageInvoker = imageInvoker;
         this.artworkSaver = artworkSaver;
-        this.usageService = usageService;
         this.connectionService = connectionService;
         this.clock = clock;
     }
@@ -99,55 +88,18 @@ public class FusionImageService {
 
     public CreationTask generate(AuthorizationSubject subject, long taskId) {
         CreationTask task = requireFusionTask(subject, taskId);
+        // 玩法未开放：当前图像模型适配器只支持文生图（images/generations），没有
+        // reference image / image edit 输入，无法把多张授权源图真正融合成新图。
+        // 在支持多图参考输入的适配器完成供应商能力验证之前，generate 明确失败：
+        // 不调用图像模型、不预占/结算额度、不生成误导性血缘；任务进入安全失败终态。
         try {
-            task = support.transition(task, task.startOutlining(clock.instant()));
-        } catch (IllegalStateException wrongState) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
+            task = support.transition(task, task.fail(clock.instant()));
+        } catch (IllegalStateException alreadyTerminal) {
+            // 已终态则无需再写 FAILED。
         }
-        ModelRouteDecision route = null;
-        boolean modelInvoked = false;
-        try {
-            // 执行前重新校验：分享撤销/移动后不得让旧选择越过权限边界（规格 §5）。
-            support.reauthorizePictures(subject, task);
-            route = imageRouter.decide(subject.userId());
-            if (!route.isByok()) {
-                throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                        "平台图片创作尚未开放，请在控制中心为图像生成任务绑定用户连接");
-            }
-            String prompt = GENERATE_PROMPT_TEMPLATE.formatted(task.sourcePictureIds().size(),
-                    support.grounding(task.sourcePictureIds()));
-            ImageGenerationResult result = imageInvoker.invoke(route, prompt, DEFAULT_SIZE);
-            modelInvoked = true;
-            // 模型调用已成功消耗 BYOK 额度：后续暂存/转移失败不再记失败用量。
-            recordUsageSuccess(subject.userId(), route);
-            byte[] bytes;
-            String mimeType;
-            try {
-                bytes = decodeInlineImage(result);
-                mimeType = ImageFormatSniffer.detect(bytes);
-            } catch (IllegalArgumentException malformed) {
-                throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                        "融合生成失败：返回图片格式不受支持");
-            }
-            fusionImageRepository.insert(CreationFusionImage.create(
-                    task.id(), mimeType, bytes, clock.instant()));
-            // 关键：转移成功后把 task 推进到当前状态，后续失败必须基于最新状态写 FAILED。
-            task = support.transition(task, task.completeFusion(route.connection().id(),
-                    clock.instant()));
-            recordLineage(task, CAPABILITY_GENERATE, route.connection().modelCode(),
-                    CostSource.BYOK.name(), null);
-            return task;
-        } catch (RuntimeException failure) {
-            if (route != null && route.isByok() && !modelInvoked) {
-                recordUsageFailure(subject.userId(), route, safeErrorCode(failure));
-            }
-            try {
-                support.transition(task, task.fail(clock.instant()));
-            } catch (IllegalStateException alreadyTerminal) {
-                // 已终态则无需再写 FAILED。
-            }
-            throw failure;
-        }
+        log.warn("fusion_generate_unavailable subjectId={} taskId={} reason=NOT_OPEN_YET",
+                subject.userId(), task.id());
+        throw new BusinessException(ErrorCode.FORBIDDEN_ERROR, NOT_OPEN_YET_MESSAGE);
     }
 
     public CreationTask save(AuthorizationSubject subject, long taskId, Long spaceId, String name) {
@@ -213,19 +165,6 @@ public class FusionImageService {
         return support.requireOwnedOfKind(subject, taskId, CreationKind.IMAGE_FUSION);
     }
 
-    /** 融合暂存只接受内联 base64 图片；仅返回供应商临时 URL 的连接大声失败，不代为抓取（SSRF 风险）。 */
-    private byte[] decodeInlineImage(ImageGenerationResult result) {
-        if (result.base64Image() == null) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                    "当前连接的图像模型只返回图片链接，融合暂存需要内联图片（b64_json），请更换连接");
-        }
-        try {
-            return Base64.getDecoder().decode(result.base64Image());
-        } catch (IllegalArgumentException malformed) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "融合生成失败：返回图片不完整");
-        }
-    }
-
     private void recordLineage(CreationTask task, String capabilityId, String modelCode,
                                String costSource, Long resultPictureId) {
         for (Long pictureId : task.sourcePictureIds()) {
@@ -244,32 +183,5 @@ public class FusionImageService {
             log.warn("fusion_lineage_append_failed taskId={} capability={}",
                     task.id(), capabilityId);
         }
-    }
-
-    private void recordUsageSuccess(long subjectId, ModelRouteDecision route) {
-        try {
-            usageService.recordSuccess(subjectId, ModelTask.IMAGE_CREATION,
-                    route.connection().id(), route.connection().provider(),
-                    route.connection().modelCode(), CostSource.BYOK);
-        } catch (RuntimeException recordFailure) {
-            log.warn("fusion_usage_record_failed subjectId={}", subjectId);
-        }
-    }
-
-    private void recordUsageFailure(long subjectId, ModelRouteDecision route, String safeErrorCode) {
-        try {
-            usageService.recordFailure(subjectId, ModelTask.IMAGE_CREATION,
-                    route.connection().id(), route.connection().provider(),
-                    route.connection().modelCode(), CostSource.BYOK, safeErrorCode);
-        } catch (RuntimeException recordFailure) {
-            log.warn("fusion_usage_record_failed subjectId={} code={}", subjectId, safeErrorCode);
-        }
-    }
-
-    private String safeErrorCode(RuntimeException failure) {
-        if (failure instanceof ModelInvocationException invocation) {
-            return invocation.safeErrorCode();
-        }
-        return "INTERNAL";
     }
 }

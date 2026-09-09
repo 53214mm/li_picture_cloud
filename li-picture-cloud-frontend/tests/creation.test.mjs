@@ -49,35 +49,35 @@ test('story panel drives the state machine without exposing secrets', async () =
   assert.match(panel, /MAX_PICTURES = 12/)
 })
 
-test('emoji panel picks one picture and drives candidate selection', async () => {
+test('emoji panel shows the explicit not-open notice and no model driving UI', async () => {
   const panel = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionEmojiPanel.vue', import.meta.url)), 'utf8')
 
-  assert.match(panel, /生成候选/)
-  assert.match(panel, /选中保存/)
-  assert.match(panel, /保存作品/)
-  assert.match(panel, /role="radiogroup"/)
+  // 表情草稿暂未开放：面板明示需要视觉理解，且没有任何触发模型的动作/选择控件。
+  assert.match(panel, /data-testid="emoji-unavailable"/)
+  assert.match(panel, /文字表情草稿暂未开放/)
+  assert.match(panel, /视觉理解/)
+  assert.doesNotMatch(panel, /generateEmoji/)
+  assert.doesNotMatch(panel, /createEmoji/)
+  assert.doesNotMatch(panel, /type="radio" name="emoji-source"/)
+  assert.doesNotMatch(panel, /crypto\.randomUUID\(\)/)
+  // 历史任务仍以只读方式展示（含已保存结果）。
   assert.match(panel, /data-testid="emoji-result"/)
-  // 单选一张来源图片。
-  assert.match(panel, /type="radio" name="emoji-source"/)
-  // 候选单选组必须按任务独立命名（动态绑定，不能是字面量）。
-  assert.match(panel, /:name="`emoji-pick-\$\{task\.id\}`"/)
-  assert.match(panel, /crypto\.randomUUID\(\)/)
+  assert.match(panel, /creationStatusLabel\(task\.status\)/)
 })
 
-test('fusion panel requires two pictures and an explicit target space', async () => {
+test('fusion panel shows the explicit not-open notice and no model driving UI', async () => {
   const panel = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionFusionPanel.vue', import.meta.url)), 'utf8')
 
-  // 至少两张来源图片，多选。
-  assert.match(panel, /至少需要 2 张图片/)
-  assert.match(panel, /selectedIds\.length < 2/)
-  assert.match(panel, /生成融合图/)
-  assert.match(panel, /保存到图库/)
+  // 真实多图融合能力未开放：面板明示原因，且没有选图/生成/保存等引导动作。
+  assert.match(panel, /data-testid="fusion-unavailable"/)
+  assert.match(panel, /真实多图融合能力尚未开放/)
+  assert.doesNotMatch(panel, /开始融合创作/)
+  assert.doesNotMatch(panel, /生成融合图/)
+  assert.doesNotMatch(panel, /createFusion/)
+  assert.doesNotMatch(panel, /generateFusion/)
+  assert.doesNotMatch(panel, /保存到图库/)
+  assert.doesNotMatch(panel, /crypto\.randomUUID\(\)/)
+  // 历史任务仍以只读方式展示（含已保存结果与预览链接）。
   assert.match(panel, /data-testid="fusion-result"/)
-  // 目标空间必须显式选择（disabled 占位），作品名可选。
-  assert.match(panel, /选择目标空间/)
-  assert.match(panel, /!spaceSelections\[task\.id\]/)
-  // 预览只含安全信息：mime 字节地址 + 修订号，绝不回显幂等键。
   assert.match(panel, /fusionPreviewUrl\(task\.id\)/)
-  assert.doesNotMatch(panel, /\{\{ task\.idempotencyKey \}\}/)
-  assert.match(panel, /crypto\.randomUUID\(\)/)
 })

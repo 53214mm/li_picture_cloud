@@ -255,7 +255,7 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider,
      * @param generationResult 生成工具的初始返回文本
      * @return 最终结果（含图片 URL）或超时提示
      */
-    private String pollUntilComplete(String generationResult) {
+    String pollUntilComplete(String generationResult) {
         log.info(">>> generate_image 原始返回: {}", generationResult);
 
         // 1. 提取 taskId
@@ -265,10 +265,16 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider,
             return stripPollingInstruction(generationResult);
         }
 
+        // 2. 内部轮询同样属于工具调用：get_task_status 被停用/未审核时不得在后台绕过
+        // 白名单继续调用（逐工具启停、fail-closed）。首次检查不通过立即返回，不发起轮询。
+        if (!statusPollingAllowed()) {
+            return buildStatusToolDisabledResult(taskId);
+        }
+
         log.info("开始等待 MCP 任务 {} 完成（先等 {}s，期间不保持连接）...",
                 taskId, INITIAL_WAIT_MS / 1000);
 
-        // 2. 先等足够长时间（图片生成至少 1 分钟，不保持 MCP 连接）
+        // 3. 先等足够长时间（图片生成至少 1 分钟，不保持 MCP 连接）
         try {
             Thread.sleep(INITIAL_WAIT_MS);
         } catch (InterruptedException e) {
@@ -276,11 +282,15 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider,
             return buildTimeoutResult(taskId);
         }
 
-        // 3. 指数退避轮询（每次新建连接）
+        // 4. 指数退避轮询（每次新建连接）
         long startTime = System.currentTimeMillis();
         int pollCount = 0;
 
         while (System.currentTimeMillis() - startTime < MAX_POLL_TOTAL_MS) {
+            if (!statusPollingAllowed()) {
+                // 轮询期间管理员停用 get_task_status：立即停止，不再空耗等待窗口。
+                return buildStatusToolDisabledResult(taskId);
+            }
             long waitMs;
             if (pollCount < POLL_BACKOFF_MS.length) {
                 waitMs = POLL_BACKOFF_MS[pollCount];
@@ -321,12 +331,30 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider,
         return buildTimeoutResult(taskId);
     }
 
+    /** 状态查询工具是否仍被允许：null 裁决器与停用一律拒绝（fail-closed）。 */
+    boolean statusPollingAllowed() {
+        return mcpToolAccessDecider != null
+                && mcpToolAccessDecider.isToolAllowed(REVIEWED_SERVICE_CODE, "get_task_status");
+    }
+
+    private static String buildStatusToolDisabledResult(String taskId) {
+        return String.format(
+                "图片生成任务已提交（任务 ID: %s），但状态查询工具 get_task_status 已停用或未通过平台审核，"
+                        + "系统不会在后台调用它。请先在控制中心启用该工具，或联系管理员处理。", taskId);
+    }
+
     /**
      * 每次新建独立 MCP 连接调用 get_task_status。
      * <p>
      * 不复用连接——MCP SSE 有空闲超时(~30s)，长时间等待后旧连接已不可用。
+     * 调用前仍过一次白名单裁决：即使轮询入口检查被绕过，也不能在后台调用停用工具。
      */
-    private String callMcpGetTaskStatus(String taskId) {
+    String callMcpGetTaskStatus(String taskId) {
+        if (!statusPollingAllowed()) {
+            log.warn("mcp_status_polling_blocked service={} tool=get_task_status",
+                    REVIEWED_SERVICE_CODE);
+            return null;
+        }
         McpSyncClient client = null;
         try {
             var transportBuilder = new HttpClientSseClientTransport.Builder(mcpUrl)

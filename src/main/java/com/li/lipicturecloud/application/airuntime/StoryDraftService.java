@@ -6,9 +6,13 @@ import com.li.lipicturecloud.domain.airuntime.CreationLineageRepository;
 import com.li.lipicturecloud.domain.airuntime.CreationStatus;
 import com.li.lipicturecloud.domain.airuntime.CreationTask;
 import com.li.lipicturecloud.domain.airuntime.CreationTaskRepository;
+import com.li.lipicturecloud.domain.airuntime.ModelTask;
+import com.li.lipicturecloud.domain.airuntime.ModelUsageSnapshot;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.ObjectProvider;
@@ -28,6 +32,8 @@ import java.util.stream.Collectors;
  */
 @Service
 public class StoryDraftService {
+
+    private static final Logger log = LoggerFactory.getLogger(StoryDraftService.class);
 
     public static final String CAPABILITY_OUTLINE = "STORY_DRAFT_OUTLINE";
     public static final String CAPABILITY_DRAFT = "STORY_DRAFT_DRAFT";
@@ -49,6 +55,7 @@ public class StoryDraftService {
     private final LanguageModelInvoker languageInvoker;
     private final ObjectProvider<ChatModel> chatModelProvider;
     private final PlatformTrialLedgerService trialLedger;
+    private final ModelUsageService usageService;
     private final Clock clock;
 
     public StoryDraftService(CreationTaskRepository taskRepository,
@@ -58,6 +65,7 @@ public class StoryDraftService {
                              LanguageModelInvoker languageInvoker,
                              ObjectProvider<ChatModel> chatModelProvider,
                              PlatformTrialLedgerService trialLedger,
+                             ModelUsageService usageService,
                              Clock clock) {
         this.taskRepository = taskRepository;
         this.lineageRepository = lineageRepository;
@@ -66,6 +74,7 @@ public class StoryDraftService {
         this.languageInvoker = languageInvoker;
         this.chatModelProvider = chatModelProvider;
         this.trialLedger = trialLedger;
+        this.usageService = usageService;
         this.clock = clock;
     }
 
@@ -92,20 +101,29 @@ public class StoryDraftService {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
         }
         boolean platform = false;
+        boolean modelReturned = false;
+        ModelRouteDecision route = null;
         try {
             // 执行前重新校验：分享撤销/移动后不得让旧选择越过权限边界（规格 §5）。
             support.reauthorizePictures(subject, task);
-            ModelRouteDecision route = languageRouter.decide(subject.userId());
+            route = languageRouter.decide(subject.userId());
             platform = !route.isByok();
             if (platform) {
                 trialLedger.reserve(subject.userId(), OUTLINE_TRIAL_COST);
             }
-            String text = invoke(route, OUTLINE_PROMPT_TEMPLATE.formatted(
-                    task.sourcePictureIds().size(), support.grounding(task.sourcePictureIds())));
-            // 关键：转移成功后把 task 推进到当前状态，后续失败必须基于最新状态写 FAILED。
+            CreationServiceSupport.LanguageInvocation invocation = invoke(route,
+                    OUTLINE_PROMPT_TEMPLATE.formatted(task.sourcePictureIds().size(),
+                            support.grounding(task.sourcePictureIds())));
+            // 模型已成功返回：供应商成本已经产生，随后的任何后处理失败都不再释放预占。
+            modelReturned = true;
+            // 使用记录紧跟模型调用结果（成功即记，独立于后续任务状态转移）。
+            recordUsage(subject.userId(), route, true, invocation.usage(), null);
+            if (invocation.text() == null || invocation.text().isBlank()) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "故事大纲生成失败：模型返回为空");
+            }
             try {
                 task = support.transition(task,
-                        task.completeOutline(text, route.isByok() ? route.connection().id() : null,
+                        task.completeOutline(invocation.text(), route.isByok() ? route.connection().id() : null,
                                 clock.instant()));
             } catch (IllegalArgumentException unsafeText) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR,
@@ -118,8 +136,21 @@ public class StoryDraftService {
             }
             return task;
         } catch (RuntimeException failure) {
+            // 模型调用失败（未成功返回）：补记失败用量（带安全错误码）。
+            if (route != null && !modelReturned) {
+                recordUsage(subject.userId(), route, false, ModelUsageSnapshot.none(),
+                        CreationServiceSupport.safeErrorCode(failure));
+            }
             if (platform) {
-                support.releaseTrial(trialLedger, subject.userId(), OUTLINE_TRIAL_COST);
+                if (modelReturned) {
+                    // 模型已成功返回：即使持久化/校验失败也结算预占，业务失败单独记录，
+                    // 绝不把已产生的平台成本退给用户。
+                    settleTrialQuietly(subject.userId(), OUTLINE_TRIAL_COST, "outline");
+                    log.warn("story_outline_post_model_failed subjectId={} taskId={} exceptionType={}",
+                            subject.userId(), task.id(), failure.getClass().getName());
+                } else {
+                    support.releaseTrial(trialLedger, subject.userId(), OUTLINE_TRIAL_COST);
+                }
             }
             try {
                 support.transition(task, task.fail(clock.instant()));
@@ -147,18 +178,27 @@ public class StoryDraftService {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
         }
         boolean platform = false;
+        boolean modelReturned = false;
+        ModelRouteDecision route = null;
         try {
             // 执行前重新校验：分享撤销/移动后不得让旧选择越过权限边界（规格 §5）。
             support.reauthorizePictures(subject, task);
-            ModelRouteDecision route = languageRouter.decide(subject.userId());
+            route = languageRouter.decide(subject.userId());
             platform = !route.isByok();
             if (platform) {
                 trialLedger.reserve(subject.userId(), DRAFT_TRIAL_COST);
             }
-            String text = invoke(route, DRAFT_PROMPT_TEMPLATE.formatted(task.outlineText()));
+            CreationServiceSupport.LanguageInvocation invocation = invoke(route,
+                    DRAFT_PROMPT_TEMPLATE.formatted(task.outlineText()));
+            // 模型已成功返回：供应商成本已经产生，随后的任何后处理失败都不再释放预占。
+            modelReturned = true;
+            recordUsage(subject.userId(), route, true, invocation.usage(), null);
+            if (invocation.text() == null || invocation.text().isBlank()) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "故事草稿生成失败：模型返回为空");
+            }
             // 关键：转移成功后把 task 推进到当前状态，后续失败必须基于最新状态写 FAILED。
             try {
-                task = support.transition(task, task.completeDraft(text, clock.instant()));
+                task = support.transition(task, task.completeDraft(invocation.text(), clock.instant()));
             } catch (IllegalArgumentException unsafeText) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR,
                         "故事草稿生成内容不符合安全文本要求，请重试");
@@ -170,8 +210,19 @@ public class StoryDraftService {
             }
             return task;
         } catch (RuntimeException failure) {
+            // 模型调用失败（未成功返回）：补记失败用量（带安全错误码）。
+            if (route != null && !modelReturned) {
+                recordUsage(subject.userId(), route, false, ModelUsageSnapshot.none(),
+                        CreationServiceSupport.safeErrorCode(failure));
+            }
             if (platform) {
-                support.releaseTrial(trialLedger, subject.userId(), DRAFT_TRIAL_COST);
+                if (modelReturned) {
+                    settleTrialQuietly(subject.userId(), DRAFT_TRIAL_COST, "draft");
+                    log.warn("story_draft_post_model_failed subjectId={} taskId={} exceptionType={}",
+                            subject.userId(), task.id(), failure.getClass().getName());
+                } else {
+                    support.releaseTrial(trialLedger, subject.userId(), DRAFT_TRIAL_COST);
+                }
             }
             try {
                 support.transition(task, task.fail(clock.instant()));
@@ -198,35 +249,65 @@ public class StoryDraftService {
                 limit).stream().map(support::applyExpiry).toList();
     }
 
-    private String invoke(ModelRouteDecision route, String userPrompt) {
+    private CreationServiceSupport.LanguageInvocation invoke(ModelRouteDecision route, String userPrompt) {
         List<ChatTurn> turns = List.of(ChatTurn.system(SYSTEM_PROMPT), ChatTurn.user(userPrompt));
-        String text;
         if (route.isByok()) {
-            text = languageInvoker.stream(route, turns).collectList().block().stream()
+            String text = languageInvoker.stream(route, turns).collectList().block().stream()
                     .collect(Collectors.joining());
-        } else {
-            // 平台路径与伙伴对话一致：走 Spring AI DashScope ChatModel。
-            ChatModel chatModel = chatModelProvider.getIfAvailable();
-            if (chatModel == null) {
-                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "故事生成模型暂不可用");
-            }
-            java.util.List<org.springframework.ai.chat.messages.Message> messages =
-                    new java.util.ArrayList<>();
-            for (ChatTurn turn : turns) {
-                messages.add(switch (turn.role()) {
-                    case ChatTurn.ROLE_SYSTEM ->
-                            new org.springframework.ai.chat.messages.SystemMessage(turn.content());
-                    case ChatTurn.ROLE_ASSISTANT ->
-                            new org.springframework.ai.chat.messages.AssistantMessage(turn.content());
-                    default -> new org.springframework.ai.chat.messages.UserMessage(turn.content());
-                });
-            }
-            text = chatModel.call(new Prompt(messages)).getResult().getOutput().getText();
+            return new CreationServiceSupport.LanguageInvocation(text, ModelUsageSnapshot.none());
         }
-        if (text == null || text.isBlank()) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "故事生成失败：模型返回为空");
+        // 平台路径与伙伴对话一致：走 Spring AI DashScope ChatModel；用量取自响应元数据。
+        ChatModel chatModel = chatModelProvider.getIfAvailable();
+        if (chatModel == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "故事生成模型暂不可用");
         }
-        return text;
+        java.util.List<org.springframework.ai.chat.messages.Message> messages =
+                new java.util.ArrayList<>();
+        for (ChatTurn turn : turns) {
+            messages.add(switch (turn.role()) {
+                case ChatTurn.ROLE_SYSTEM ->
+                        new org.springframework.ai.chat.messages.SystemMessage(turn.content());
+                case ChatTurn.ROLE_ASSISTANT ->
+                        new org.springframework.ai.chat.messages.AssistantMessage(turn.content());
+                default -> new org.springframework.ai.chat.messages.UserMessage(turn.content());
+            });
+        }
+        org.springframework.ai.chat.model.ChatResponse response =
+                chatModel.call(new Prompt(messages));
+        String text = response.getResult() == null || response.getResult().getOutput() == null
+                ? null : response.getResult().getOutput().getText();
+        return new CreationServiceSupport.LanguageInvocation(text,
+                CreationServiceSupport.usageOf(response));
+    }
+
+    /** 平台语言模型调用成功/失败的追加式使用记录；记录失败只告警不掩盖主流程。 */
+    private void recordUsage(long subjectId, ModelRouteDecision route, boolean success,
+                             ModelUsageSnapshot usage, String safeErrorCode) {
+        try {
+            if (success) {
+                usageService.recordSuccess(subjectId, ModelTask.LANGUAGE_AGENT,
+                        route.isByok() ? route.connection().id() : null,
+                        support.providerOf(route), support.modelCode(route),
+                        support.costSourceOf(route), usage);
+            } else {
+                usageService.recordFailure(subjectId, ModelTask.LANGUAGE_AGENT,
+                        route.isByok() ? route.connection().id() : null,
+                        support.providerOf(route), support.modelCode(route),
+                        support.costSourceOf(route), usage, safeErrorCode);
+            }
+        } catch (RuntimeException recordFailure) {
+            log.warn("story_usage_record_failed subjectId={} task={}",
+                    subjectId, ModelTask.LANGUAGE_AGENT.name());
+        }
+    }
+
+    private void settleTrialQuietly(long subjectId, long amount, String step) {
+        try {
+            trialLedger.settle(subjectId, amount);
+        } catch (RuntimeException settleFailure) {
+            log.warn("story_trial_settle_failed subjectId={} amount={} step={}",
+                    subjectId, amount, step);
+        }
     }
 
     private void recordLineage(CreationTask task, String capabilityId, String modelCode,
