@@ -131,4 +131,36 @@ CREATE INDEX idx_recipe_execution_recipe ON recipe_execution (recipeId, createdT
             <dropIndex indexName="idx_recipe_execution_recipe" tableName="recipe_execution"/>
         </rollback>
     </changeSet>
+
+    <!--
+        执行记录新增列同样逐列独立 changeSet：DDL 在 MySQL 不可回滚，若多列同处一个
+        changeSet，中途失败会留下"部分列已建 + changeSet 未记账"，重跑时前置条件命中
+        MARK_RAN，其余列永远不会被创建。
+    -->
+    <changeSet id="20260815-27" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><columnExists tableName="recipe_execution"
+                               columnName="sourcePictureIdsJson"/></not>
+        </preConditions>
+        <addColumn tableName="recipe_execution">
+            <column name="sourcePictureIdsJson" type="VARCHAR(512)"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="recipe_execution" columnName="sourcePictureIdsJson"/>
+        </rollback>
+    </changeSet>
+
+    <!-- 机会触发的去重键：同一机会窗口内同一配方只产生一条待确认执行记录。 -->
+    <changeSet id="20260815-28" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><columnExists tableName="recipe_execution"
+                               columnName="opportunityKey"/></not>
+        </preConditions>
+        <addColumn tableName="recipe_execution">
+            <column name="opportunityKey" type="VARCHAR(128)"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="recipe_execution" columnName="opportunityKey"/>
+        </rollback>
+    </changeSet>
 </databaseChangeLog>

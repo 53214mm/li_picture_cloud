@@ -50,6 +50,7 @@ class RecipeServiceTest {
         executionRepository = mock(RecipeExecutionRepository.class);
         service = new RecipeService(recipeRepository, versionRepository, executionRepository,
                 new RecipeDefinitionCodec(new ObjectMapper()),
+                new com.li.lipicturecloud.application.airuntime.LocalCapabilityCatalog(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         when(recipeRepository.save(any(Recipe.class), anyLong())).thenReturn(true);
     }
@@ -119,7 +120,7 @@ class RecipeServiceTest {
 
         service.publishDefinition(SUBJECT, 9L, new ObjectMapper().readTree("""
                 {"when": {"type": "SIMILAR_STORY"}, "conditions": [],
-                 "then": {"capability": "IMAGE_FUSION"}}
+                 "then": {"capability": "STORY_DRAFT"}}
                 """));
 
         org.mockito.ArgumentCaptor<RecipeVersion> appended =
@@ -143,7 +144,7 @@ class RecipeServiceTest {
 
         service.publishDefinition(SUBJECT, 9L, new ObjectMapper().readTree("""
                 {"when": {"type": "WEEKLY_REVIEW"}, "conditions": [],
-                 "then": {"capability": "EMOJI_DRAFT"}}
+                 "then": {"capability": "STORY_DRAFT"}}
                 """));
 
         org.mockito.ArgumentCaptor<RecipeVersion> appended =
@@ -197,7 +198,7 @@ class RecipeServiceTest {
     }
 
     @Test
-    void templatesExposeAllFourOfficialRecipes() {
+    void templatesExposeAllFourOfficialRecipesWithAvailability() {
         List<RecipeTemplateView> templates = service.templates();
 
         assertThat(templates).hasSize(4);
@@ -210,5 +211,68 @@ class RecipeServiceTest {
             assertThat(template.name()).isNotBlank();
             assertThat(template.thenJson()).isNotBlank();
         });
+        // 依赖未开放能力的模板必须显式标记不可用，并给出可展示的原因。
+        assertThat(templates).filteredOn(RecipeTemplateView::available)
+                .extracting(RecipeTemplateView::code)
+                .containsExactlyInAnyOrder(OfficialRecipeTemplates.TRAVEL_REVIEW,
+                        OfficialRecipeTemplates.BIRTHDAY_STORY);
+        assertThat(templates).filteredOn(template -> !template.available())
+                .extracting(RecipeTemplateView::code)
+                .containsExactlyInAnyOrder(OfficialRecipeTemplates.WEEKLY_EMOJI,
+                        OfficialRecipeTemplates.OLD_PHOTO_REMASTER);
+        assertThat(templates).filteredOn(template -> !template.available())
+                .allSatisfy(template -> assertThat(template.unavailableReason()).contains("未开放"));
+    }
+
+    @Test
+    void capabilitiesExposeAvailabilityForTheEditor() {
+        var capabilities = service.capabilities();
+
+        assertThat(capabilities).hasSize(3);
+        assertThat(capabilities).filteredOn(
+                        com.li.lipicturecloud.application.recipe.view.RecipeCapabilityView::open)
+                .extracting(
+                        com.li.lipicturecloud.application.recipe.view.RecipeCapabilityView::capability)
+                .containsExactly("STORY_DRAFT");
+        assertThat(capabilities).filteredOn(
+                        capability -> !capability.open())
+                .extracting(
+                        com.li.lipicturecloud.application.recipe.view.RecipeCapabilityView::capability)
+                .containsExactlyInAnyOrder("EMOJI_DRAFT", "IMAGE_FUSION");
+    }
+
+    /** 未开放能力的官方模板不能作为配方起点：否则用户会得到一个注定执行不了的配方。 */
+    @Test
+    void createFromTemplateRejectsTemplatesWhoseCapabilityIsNotOpen() {
+        when(recipeRepository.insert(any(Recipe.class))).thenAnswer(invocation ->
+                invocation.<Recipe>getArgument(0).withId(9L));
+
+        assertThatThrownBy(() -> service.createFromTemplate(SUBJECT,
+                OfficialRecipeTemplates.WEEKLY_EMOJI, "每周表情副本"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("尚未开放");
+        assertThatThrownBy(() -> service.createFromTemplate(SUBJECT,
+                OfficialRecipeTemplates.OLD_PHOTO_REMASTER, "旧照重制副本"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("尚未开放");
+        verify(versionRepository, never()).append(any(RecipeVersion.class));
+        // 拒绝必须发生在插入配方行之前：不能留下一条没有任何版本的空配方。
+        verify(recipeRepository, never()).insert(any(Recipe.class));
+    }
+
+    /** 发布定义同样守门：未开放能力不能被发布成"可用配方"。 */
+    @Test
+    void publishDefinitionRejectsCapabilitiesThatAreNotOpen() throws Exception {
+        when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.DRAFT, 0L)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.publishDefinition(SUBJECT, 9L,
+                new ObjectMapper().readTree("""
+                        {"when": {"type": "WEEKLY_REVIEW"}, "conditions": [],
+                         "then": {"capability": "EMOJI_DRAFT"}}
+                        """)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("尚未开放");
+        verify(versionRepository, never()).append(any(RecipeVersion.class));
     }
 }

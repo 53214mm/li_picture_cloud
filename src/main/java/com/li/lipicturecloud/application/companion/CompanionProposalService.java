@@ -58,6 +58,7 @@ public class CompanionProposalService {
     private final CompanionProposalRepository proposalRepository;
     private final CompanionProposalReactionRepository reactionRepository;
     private final List<CompanionOpportunitySource> opportunitySources;
+    private final List<CompanionOpportunityListener> opportunityListeners;
     private final ProposalOpportunityEvaluator evaluator;
     private final CompanionBalance balance;
     private final Clock clock;
@@ -67,6 +68,7 @@ public class CompanionProposalService {
                                     CompanionProposalRepository proposalRepository,
                                     CompanionProposalReactionRepository reactionRepository,
                                     List<CompanionOpportunitySource> opportunitySources,
+                                    List<CompanionOpportunityListener> opportunityListeners,
                                     ProposalOpportunityEvaluator evaluator,
                                     CompanionBalance balance,
                                     Clock clock) {
@@ -77,6 +79,8 @@ public class CompanionProposalService {
         // 机会源按 @Order 优先级短路尝试（每周回顾 → 纪念日 → 相似图片），
         // 第一个"有候选且冲动得分达标"的产生提案；低于阈值的候选记拦截后继续下一个源。
         this.opportunitySources = List.copyOf(opportunitySources);
+        // 机会监听者（阶段 5 配方 WHEN 等）：守门通过后复用同一机会，不产生任何自动执行。
+        this.opportunityListeners = List.copyOf(opportunityListeners);
         this.evaluator = evaluator;
         this.balance = balance;
         this.clock = clock;
@@ -210,6 +214,9 @@ public class CompanionProposalService {
                         subject.userId(), observation.type().name(), gate.reasonCode());
                 return null;
             }
+            // 守门通过且机会真实存在：把同一机会交给机会监听者（阶段 5 配方 WHEN），
+            // 只产生"待用户确认"的结果，绝不在这里触发任何模型调用或自动执行。
+            notifyOpportunity(subject.userId(), companion.id(), observation, now);
             Optional<ProposalOpportunity> materialized = source.materialize(
                     observation, companion.id(), subject.userId(), now);
             if (materialized.isEmpty()) {
@@ -237,6 +244,24 @@ public class CompanionProposalService {
     private static String sourceTypeName(CompanionOpportunitySource source) {
         ProposalOpportunityType type = source.type();
         return type == null ? "UNKNOWN" : type.name();
+    }
+
+    /**
+     * 通知机会监听者。监听者失败只告警：配方 WHEN 触发出问题绝不能影响伙伴提案主链路
+     * （机会本身仍会在下一次观察时被重新投递）。
+     */
+    private void notifyOpportunity(long subjectId, long companionId,
+                                   OpportunityObservation observation, Instant now) {
+        for (CompanionOpportunityListener listener : opportunityListeners) {
+            try {
+                listener.onOpportunity(subjectId, companionId, observation.type().name(),
+                        observation.pictureId(), now);
+            } catch (RuntimeException listenerFailure) {
+                log.warn("companion_opportunity_listener_failed subjectId={} type={} listener={}",
+                        subjectId, observation.type().name(),
+                        listener.getClass().getSimpleName());
+            }
+        }
     }
 
     private void applyCuriosityPenalty(AuthorizationSubject subject) {

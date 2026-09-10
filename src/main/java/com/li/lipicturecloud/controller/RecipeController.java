@@ -55,6 +55,14 @@ public class RecipeController {
         return ResultUtils.success(recipeService.templates());
     }
 
+    /** 编辑器能力选项的可用性：未开放能力由服务端标记为不可用，前端必须禁用。 */
+    @GetMapping("/capabilities")
+    @AuthCheck
+    public BaseResponse<List<com.li.lipicturecloud.application.recipe.view.RecipeCapabilityView>>
+    capabilities() {
+        return ResultUtils.success(recipeService.capabilities());
+    }
+
     @PostMapping
     @AuthCheck
     public BaseResponse<RecipeView> create(@RequestBody RecipeCreateRequest body,

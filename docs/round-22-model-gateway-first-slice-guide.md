@@ -101,7 +101,12 @@
 3. **执行引擎**（4516247）：`RecipeExecutionService.dryRun`（ENABLED/DRAFT 可用，DISABLED 拒绝；IF 求值 fail-closed：空间缺失/分类不符一律不命中；报价按能力 = 故事 5/表情 1/融合 0-BYOK）；`execute`（要求 ENABLED + DRY_RUN 记录归属匹配 + 按记录版本重解码 + 执行前 PICTURE_VIEW 复核 + 条件不符 REJECTED + 调故事/表情/融合服务的 create 公开方法 + EXECUTED/FAILED 只携带安全错误码）。
 4. **前端与 E2E**（49e1d58/fe5a27c）：`/recipes` 配方工坊页（模板起点、我的配方、定义展示、图片多选试运行、执行回放）；E2E 全离线跑通「模板创建 → 试运行命中/报价 → 启用 → 确认执行（创建表情任务，不污染故事列表断言）→ 停用 → 级联删除」。
 
-已知边界：WHEN 触发目前由用户手动试运行/确认驱动，机会源调度接入留作后续切片；报价是上限承诺，实际结算由创作服务试用账本硬上限守护。
+已知边界（2026-09 阶段 5 复审整改后更新）：WHEN 已经真实接入 Q2/Q3 机会源——阶段 3 的
+`CompanionProposalService` 在机会观察成功且契约/频率/安静时段守门通过后，通过
+`CompanionOpportunityListener` 端口把该机会投递给 `RecipeExecutionService`，为 WHEN 匹配的
+ENABLED 配方生成 `PENDING_CONFIRM`（待确认）执行记录；**自动执行仍不开放**：THEN 只在该记录
+被用户确认后调用。一次评估只投递"当次被观察到的机会"（沿用机会源 @Order 优先级短路），
+因此不同 WHEN 的机会可能落在不同次评估上。报价是上限承诺，实际结算由创作服务试用账本硬上限守护。
 
 ## 独立审查与修复（第十一轮审查）
 

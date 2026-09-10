@@ -1,6 +1,7 @@
 package com.li.lipicturecloud.application.recipe;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.li.lipicturecloud.application.recipe.view.RecipeCapabilityView;
 import com.li.lipicturecloud.application.recipe.view.RecipeDetailView;
 import com.li.lipicturecloud.application.recipe.view.RecipeTemplateView;
 import com.li.lipicturecloud.application.recipe.view.RecipeVersionView;
@@ -34,17 +35,20 @@ public class RecipeService {
     private final RecipeVersionRepository versionRepository;
     private final RecipeExecutionRepository executionRepository;
     private final RecipeDefinitionCodec codec;
+    private final com.li.lipicturecloud.application.airuntime.LocalCapabilityCatalog capabilityCatalog;
     private final Clock clock;
 
     public RecipeService(RecipeRepository recipeRepository,
                          RecipeVersionRepository versionRepository,
                          RecipeExecutionRepository executionRepository,
                          RecipeDefinitionCodec codec,
+                         com.li.lipicturecloud.application.airuntime.LocalCapabilityCatalog capabilityCatalog,
                          Clock clock) {
         this.recipeRepository = recipeRepository;
         this.versionRepository = versionRepository;
         this.executionRepository = executionRepository;
         this.codec = codec;
+        this.capabilityCatalog = capabilityCatalog;
         this.clock = clock;
     }
 
@@ -54,10 +58,13 @@ public class RecipeService {
 
     public RecipeDetailView createFromTemplate(AuthorizationSubject subject, String templateCode,
                                                String name) {
-        Recipe recipe = insertRecipe(subject, name);
-        RecipeDefinition definition = OfficialRecipeTemplates.definition(
-                        Objects.requireNonNull(templateCode, "templateCode"))
+        String code = Objects.requireNonNull(templateCode, "templateCode");
+        RecipeDefinition definition = OfficialRecipeTemplates.definition(code)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PARAMS_ERROR, "未知的官方模板"));
+        // 未开放能力的模板不能作为起点：创建出来的配方注定执行不了，属于误导。
+        // 必须在插入配方行之前拒绝，否则会留下一条没有任何版本的空配方。
+        requireTemplateAvailable(code, definition);
+        Recipe recipe = insertRecipe(subject, name);
         appendDefinition(recipe, definition);
         return detail(subject, recipe.id());
     }
@@ -116,12 +123,30 @@ public class RecipeService {
                     RecipeDefinition definition = OfficialRecipeTemplates.definition(code)
                             .orElseThrow();
                     RecipeDefinitionCodec.RecipeDefinitionJson json = codec.encode(definition);
+                    var availability = capabilityCatalog.of(definition.then().capability());
                     return new RecipeTemplateView(code,
                             OfficialRecipeTemplates.name(code).orElse(code),
                             OfficialRecipeTemplates.description(code).orElse(""),
-                            json.whenJson(), json.ifJson(), json.thenJson());
+                            json.whenJson(), json.ifJson(), json.thenJson(),
+                            availability.open(), availability.unavailableReason());
                 })
                 .toList();
+    }
+
+    /** 编辑器能力选项的可用性：未开放能力必须被前端禁用，服务端也不接受。 */
+    public List<RecipeCapabilityView> capabilities() {
+        return capabilityCatalog.all().stream()
+                .map(availability -> new RecipeCapabilityView(availability.capability().name(),
+                        availability.open(), availability.unavailableReason()))
+                .toList();
+    }
+
+    private void requireTemplateAvailable(String templateCode, RecipeDefinition definition) {
+        if (!capabilityCatalog.isOpen(definition.then().capability())) {
+            String templateName = OfficialRecipeTemplates.name(templateCode).orElse(templateCode);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR,
+                    "官方模板「" + templateName + "」依赖的能力尚未开放，暂时不能作为配方起点");
+        }
     }
 
     private Recipe insertRecipe(AuthorizationSubject subject, String name) {
@@ -132,6 +157,8 @@ public class RecipeService {
     }
 
     private void appendDefinition(Recipe recipe, RecipeDefinition definition) {
+        // 发布前统一守门：未开放能力（表情草稿、多图融合）不能被发布成"可用配方"。
+        capabilityCatalog.requireOpen(definition.then().capability());
         int nextVersion = versionRepository.findLatest(recipe.id())
                 .map(latest -> latest.version() + 1)
                 .orElse(1);

@@ -20,6 +20,8 @@ public class RecipeExecutionEntity {
     private Date triggeredTime;
     private String matchedJson;
     private String quoteJson;
+    private String sourcePictureIdsJson;
+    private String opportunityKey;
     private Long creationTaskId;
     private String safeErrorCode;
     private Date createdTime;

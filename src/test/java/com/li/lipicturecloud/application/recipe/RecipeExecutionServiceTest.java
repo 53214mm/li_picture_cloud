@@ -3,9 +3,11 @@ package com.li.lipicturecloud.application.recipe;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.li.lipicturecloud.application.airuntime.EmojiDraftService;
 import com.li.lipicturecloud.application.airuntime.FusionImageService;
+import com.li.lipicturecloud.application.airuntime.LocalCapabilityCatalog;
 import com.li.lipicturecloud.application.airuntime.StoryDraftService;
 import com.li.lipicturecloud.domain.airuntime.CreationKind;
 import com.li.lipicturecloud.domain.airuntime.CreationTask;
+import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
 import com.li.lipicturecloud.domain.recipe.Recipe;
 import com.li.lipicturecloud.domain.recipe.RecipeExecution;
 import com.li.lipicturecloud.domain.recipe.RecipeExecutionRepository;
@@ -14,6 +16,7 @@ import com.li.lipicturecloud.domain.recipe.RecipeRepository;
 import com.li.lipicturecloud.domain.recipe.RecipeStatus;
 import com.li.lipicturecloud.domain.recipe.RecipeVersion;
 import com.li.lipicturecloud.domain.recipe.RecipeVersionRepository;
+import com.li.lipicturecloud.domain.recipe.RecipeWhenType;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
@@ -33,6 +36,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,8 +48,10 @@ class RecipeExecutionServiceTest {
     private static final AuthorizationSubject SUBJECT = AuthorizationSubject.user(7L);
     private static final String KEY = "fef53056-2d9f-467d-9b1d-1afe9a6638fe";
     private static final String WHEN_WEEKLY = "{\"type\":\"WEEKLY_REVIEW\"}";
+    private static final String WHEN_ANNIVERSARY = "{\"type\":\"ANNIVERSARY\"}";
     private static final String IF_NONE = "[]";
     private static final String THEN_EMOJI = "{\"capability\":\"EMOJI_DRAFT\"}";
+    private static final String THEN_FUSION = "{\"capability\":\"IMAGE_FUSION\"}";
     private static final String THEN_STORY = "{\"capability\":\"STORY_DRAFT\"}";
 
     private RecipeRepository recipeRepository;
@@ -57,6 +63,7 @@ class RecipeExecutionServiceTest {
     private SpaceAuthorizationAccessService authorization;
     private PictureRepository pictureRepository;
     private SpaceService spaceService;
+    private GrowthRecordRepository growthRepository;
     private RecipeExecutionService service;
 
     @BeforeEach
@@ -70,13 +77,17 @@ class RecipeExecutionServiceTest {
         authorization = mock(SpaceAuthorizationAccessService.class);
         pictureRepository = mock(PictureRepository.class);
         spaceService = mock(SpaceService.class);
+        growthRepository = mock(GrowthRecordRepository.class);
         service = new RecipeExecutionService(recipeRepository, versionRepository,
                 executionRepository, new RecipeDefinitionCodec(new ObjectMapper()),
-                new ObjectMapper(), storyDraftService, emojiDraftService, fusionImageService,
-                authorization, pictureRepository, spaceService,
+                new ObjectMapper(), new LocalCapabilityCatalog(), storyDraftService,
+                emojiDraftService, fusionImageService,
+                authorization, pictureRepository, spaceService, growthRepository,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         when(executionRepository.transition(any(RecipeExecution.class),
                 any(RecipeExecutionStatus.class))).thenReturn(true);
+        when(executionRepository.insert(any(RecipeExecution.class))).thenAnswer(invocation ->
+                invocation.<RecipeExecution>getArgument(0).withId(5L));
         Picture picture = new Picture();
         picture.setId(102L);
         picture.setCategory("旅行");
@@ -85,30 +96,55 @@ class RecipeExecutionServiceTest {
     }
 
     private Recipe recipe(RecipeStatus status) {
-        return Recipe.restore(9L, 7L, "每周表情", status, 1L, NOW, NOW);
+        return Recipe.restore(9L, 7L, "旅行回顾", status, 1L, NOW, NOW);
     }
 
     private RecipeVersion version(int version, String thenJson) {
-        return RecipeVersion.restore(1L, 9L, version, WHEN_WEEKLY, IF_NONE, thenJson, NOW);
+        return version(version, WHEN_WEEKLY, IF_NONE, thenJson);
     }
 
+    private RecipeVersion version(int version, String whenJson, String ifJson, String thenJson) {
+        return RecipeVersion.restore(1L, 9L, version, whenJson, ifJson, thenJson, NOW);
+    }
+
+    /** 试运行/待确认记录都带来源图片快照（[102]），确认执行只认这份快照。 */
     private RecipeExecution dryRunRecord() {
         return RecipeExecution.dryRun(9L, 1, 7L, NOW, "{\"when\":\"WEEKLY_REVIEW\"}",
-                "{\"platformUnits\":1}", NOW).withId(5L);
+                "{\"platformUnits\":5}", RecipeExecution.snapshotJson(List.of(102L)), NOW)
+                .withId(5L);
+    }
+
+    private RecipeExecution pendingRecord() {
+        return RecipeExecution.pending(9L, 1, 7L, NOW, "{\"when\":\"WEEKLY_REVIEW\"}",
+                "{\"platformUnits\":5}", RecipeExecution.snapshotJson(List.of(102L)),
+                "WEEKLY_REVIEW-2026-W33", NOW).withId(5L);
+    }
+
+    private CreationTask createdTask() {
+        return new CreationTask(9L, 7L, CreationKind.STORY_DRAFT, List.of(102L),
+                com.li.lipicturecloud.domain.airuntime.CreationStatus.PENDING,
+                null, null, null, null, KEY, 0L, NOW, NOW);
+    }
+
+    private static String executionKey(long executionId) {
+        return java.util.UUID.nameUUIDFromBytes(
+                        ("recipe-execution-" + executionId).getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .toString();
     }
 
     @Test
-    void dryRunRecordsQuoteAndMatchedSnapshot() {
+    void dryRunRecordsQuoteMatchedSnapshotAndPictureSnapshot() {
         when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
-        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1, THEN_EMOJI)));
-        when(executionRepository.insert(any(RecipeExecution.class))).thenAnswer(invocation ->
-                invocation.<RecipeExecution>getArgument(0).withId(5L));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1, THEN_STORY)));
 
         RecipeExecution result = service.dryRun(SUBJECT, 9L, List.of(102L));
 
         assertThat(result.status()).isEqualTo(RecipeExecutionStatus.DRY_RUN);
-        assertThat(result.quoteJson()).contains("EMOJI_DRAFT").contains("1");
+        assertThat(result.quoteJson()).contains("STORY_DRAFT").contains("5");
         assertThat(result.matchedJson()).contains("WEEKLY_REVIEW");
+        // 预览绑定的图片集合必须落库，确认执行时才不会被换掉。
+        assertThat(result.sourcePictureIds()).containsExactly(102L);
+        assertThat(result.opportunityKey()).isNull();
         verify(authorization).checkForUser("picture:view", 102L, 7L);
     }
 
@@ -131,24 +167,27 @@ class RecipeExecutionServiceTest {
         String ifCategory = "[{\"type\":\"SOURCE_CATEGORY\",\"category\":\"花园\"}]";
         when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
         when(versionRepository.findLatest(9L)).thenReturn(Optional.of(
-                RecipeVersion.restore(1L, 9L, 1, WHEN_WEEKLY, ifCategory, THEN_EMOJI, NOW)));
-        when(executionRepository.insert(any(RecipeExecution.class))).thenAnswer(invocation ->
-                invocation.<RecipeExecution>getArgument(0).withId(5L));
+                version(1, WHEN_WEEKLY, ifCategory, THEN_STORY)));
 
         RecipeExecution result = service.dryRun(SUBJECT, 9L, List.of(102L));
 
         assertThat(result.matchedJson()).contains("SOURCE_CATEGORY").contains("false");
     }
 
+    /** 未开放能力：试运行必须在读取图片、报价之前就被拒绝，绝不产生"看似可用"的记录。 */
     @Test
-    void dryRunRequiresTwoPicturesForFusion() {
+    void dryRunRejectsCapabilitiesThatAreNotOpen() {
         when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
-        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1,
-                "{\"capability\":\"IMAGE_FUSION\"}")));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1, THEN_FUSION)));
 
+        assertThatThrownBy(() -> service.dryRun(SUBJECT, 9L, List.of(102L, 103L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("尚未开放");
         assertThatThrownBy(() -> service.dryRun(SUBJECT, 9L, List.of(102L)))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("至少需要 2 张");
+                .hasMessageContaining("尚未开放");
+        verify(executionRepository, never()).insert(any(RecipeExecution.class));
+        verify(authorization, never()).checkForUser(any(), anyLong(), anyLong());
     }
 
     @Test
@@ -156,19 +195,59 @@ class RecipeExecutionServiceTest {
         when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
         when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
         when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
-        CreationTask task = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
-                List.of(102L), com.li.lipicturecloud.domain.airuntime.CreationStatus.PENDING,
-                null, null, null, null, KEY, 0L, NOW, NOW);
-        String expectedKey = java.util.UUID.nameUUIDFromBytes(
-                        "recipe-execution-5".getBytes(java.nio.charset.StandardCharsets.UTF_8))
-                .toString();
-        when(storyDraftService.create(SUBJECT, List.of(102L), expectedKey)).thenReturn(task);
+        when(storyDraftService.create(SUBJECT, List.of(102L), executionKey(5L)))
+                .thenReturn(createdTask());
 
         RecipeExecution result = service.execute(SUBJECT, 9L, 5L, List.of(102L));
 
         assertThat(result.status()).isEqualTo(RecipeExecutionStatus.EXECUTED);
         assertThat(result.creationTaskId()).isEqualTo(9L);
-        verify(storyDraftService).create(SUBJECT, List.of(102L), expectedKey);
+        verify(storyDraftService).create(SUBJECT, List.of(102L), executionKey(5L));
+    }
+
+    /** P2：确认执行只认记录里的快照；不传图片时直接用快照。 */
+    @Test
+    void executeUsesTheStoredPictureSnapshotWhenNoPicturesAreSent() {
+        when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
+        when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
+        when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
+        when(storyDraftService.create(SUBJECT, List.of(102L), executionKey(5L)))
+                .thenReturn(createdTask());
+
+        RecipeExecution result = service.execute(SUBJECT, 9L, 5L, null);
+
+        assertThat(result.status()).isEqualTo(RecipeExecutionStatus.EXECUTED);
+        verify(storyDraftService).create(SUBJECT, List.of(102L), executionKey(5L));
+    }
+
+    /** P2：改选图片后必须重新试运行，不能拿旧预览确认另一组图片。 */
+    @Test
+    void executeRejectsAPictureSetDifferentFromTheSnapshot() {
+        when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
+        when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
+        when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
+
+        assertThatThrownBy(() -> service.execute(SUBJECT, 9L, 5L, List.of(103L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("重新试运行");
+        // 记录仍可确认：只有把图片换成试运行时那一组才允许执行。
+        verify(storyDraftService, never()).create(any(), any(), any());
+        verify(authorization, never()).checkForUser(any(), anyLong(), anyLong());
+    }
+
+    @Test
+    void executeRejectsRecordsWithoutAPictureSnapshot() {
+        RecipeExecution legacy = RecipeExecution.dryRun(9L, 1, 7L, NOW,
+                "{\"when\":\"WEEKLY_REVIEW\"}", "{\"platformUnits\":5}", null, NOW).withId(5L);
+        when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
+        when(executionRepository.findById(5L)).thenReturn(Optional.of(legacy));
+        when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
+
+        RecipeExecution result = service.execute(SUBJECT, 9L, 5L, null);
+
+        assertThat(result.status()).isEqualTo(RecipeExecutionStatus.REJECTED);
+        assertThat(result.safeErrorCode()).isEqualTo(RecipeExecutionService.PICTURE_SET_MISSING);
+        verify(storyDraftService, never()).create(any(), any(), any());
     }
 
     @Test
@@ -176,13 +255,8 @@ class RecipeExecutionServiceTest {
         when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
         when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
         when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
-        CreationTask task = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
-                List.of(102L), com.li.lipicturecloud.domain.airuntime.CreationStatus.PENDING,
-                null, null, null, null, KEY, 0L, NOW, NOW);
-        String expectedKey = java.util.UUID.nameUUIDFromBytes(
-                        "recipe-execution-5".getBytes(java.nio.charset.StandardCharsets.UTF_8))
-                .toString();
-        when(storyDraftService.create(SUBJECT, List.of(102L), expectedKey)).thenReturn(task);
+        when(storyDraftService.create(SUBJECT, List.of(102L), executionKey(5L)))
+                .thenReturn(createdTask());
         // 第一次：任务已创建但执行记录转移冲突（complete 与 fail 的转移都落败）。
         when(executionRepository.transition(any(RecipeExecution.class),
                 any(RecipeExecutionStatus.class))).thenReturn(false, false, true);
@@ -195,7 +269,7 @@ class RecipeExecutionServiceTest {
         RecipeExecution retried = service.execute(SUBJECT, 9L, 5L, List.of(102L));
         assertThat(retried.status()).isEqualTo(RecipeExecutionStatus.EXECUTED);
         verify(storyDraftService, org.mockito.Mockito.times(2))
-                .create(SUBJECT, List.of(102L), expectedKey);
+                .create(SUBJECT, List.of(102L), executionKey(5L));
     }
 
     @Test
@@ -204,7 +278,7 @@ class RecipeExecutionServiceTest {
         when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
         when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
         when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(
-                RecipeVersion.restore(1L, 9L, 1, WHEN_WEEKLY, ifPrivate, THEN_STORY, NOW)));
+                version(1, WHEN_WEEKLY, ifPrivate, THEN_STORY)));
         when(spaceService.getById(10L)).thenReturn(null);
 
         RecipeExecution result = service.execute(SUBJECT, 9L, 5L, List.of(102L));
@@ -216,11 +290,17 @@ class RecipeExecutionServiceTest {
         verify(storyDraftService, never()).create(any(), any(), any());
     }
 
+    /**
+     * P1：图片撤权时只记安全错误码——不得先读分类/空间并把条件求值结果写进回放，
+     * 也不得把基于未授权图片算出的任何东西落库。
+     */
     @Test
-    void executeRejectsWhenPictureAuthorizationIsRevoked() {
+    void executeRejectsRevokedPicturesBeforeReadingAnyPictureData() {
+        String ifCategory = "[{\"type\":\"SOURCE_CATEGORY\",\"category\":\"旅行\"}]";
         when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
         when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
-        when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
+        when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(
+                version(1, WHEN_WEEKLY, ifCategory, THEN_STORY)));
         org.mockito.Mockito.doThrow(new BusinessException(
                         com.li.lipicturecloud.exception.ErrorCode.FORBIDDEN_ERROR, "无权查看该图片"))
                 .when(authorization).checkForUser("picture:view", 102L, 7L);
@@ -228,9 +308,29 @@ class RecipeExecutionServiceTest {
         RecipeExecution result = service.execute(SUBJECT, 9L, 5L, List.of(102L));
 
         assertThat(result.status()).isEqualTo(RecipeExecutionStatus.REJECTED);
-        assertThat(result.safeErrorCode()).isEqualTo("PICTURE_UNAVAILABLE");
-        verify(storyDraftService, never()).create(any(), any(),
-                org.mockito.ArgumentMatchers.anyString());
+        assertThat(result.safeErrorCode()).isEqualTo(RecipeExecutionService.PICTURE_UNAVAILABLE);
+        assertThat(result.matchedJson()).contains("SKIPPED_UNAUTHORIZED");
+        assertThat(result.matchedJson()).doesNotContain("SOURCE_CATEGORY");
+        // 撤权后绝不读取图片分类或空间信息。
+        verify(pictureRepository, never()).findById(anyLong());
+        verify(spaceService, never()).getById(anyLong());
+        verify(storyDraftService, never()).create(any(), any(), any());
+    }
+
+    /** 未开放能力：确认执行同样被拒绝，绝不创建注定无法完成的任务。 */
+    @Test
+    void executeRejectsCapabilitiesThatAreNotOpen() {
+        when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
+        when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
+        when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_EMOJI)));
+
+        assertThatThrownBy(() -> service.execute(SUBJECT, 9L, 5L, List.of(102L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("尚未开放");
+        verify(emojiDraftService, never()).create(any(), any(), any());
+        verify(storyDraftService, never()).create(any(), any(), any());
+        verify(executionRepository, never()).transition(any(RecipeExecution.class),
+                any(RecipeExecutionStatus.class));
     }
 
     @Test
@@ -238,13 +338,7 @@ class RecipeExecutionServiceTest {
         when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
         when(executionRepository.findById(5L)).thenReturn(Optional.of(dryRunRecord()));
         when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
-        CreationTask task = new CreationTask(9L, 7L, CreationKind.STORY_DRAFT,
-                List.of(102L), com.li.lipicturecloud.domain.airuntime.CreationStatus.PENDING,
-                null, null, null, null, KEY, 0L, NOW, NOW);
-        String expectedKey = java.util.UUID.nameUUIDFromBytes(
-                        "recipe-execution-5".getBytes(java.nio.charset.StandardCharsets.UTF_8))
-                .toString();
-        when(storyDraftService.create(SUBJECT, List.of(102L), expectedKey)).thenReturn(task);
+        when(storyDraftService.create(any(), any(), any())).thenReturn(createdTask());
 
         RecipeExecution result = service.execute(SUBJECT, 9L, 5L, List.of(102L));
 
@@ -291,5 +385,132 @@ class RecipeExecutionServiceTest {
         when(executionRepository.findRecentByRecipeId(9L, 20)).thenReturn(List.of(dryRunRecord()));
 
         assertThat(service.recentByRecipe(SUBJECT, 9L, 20)).hasSize(1);
+    }
+
+    // ===== 机会触发（阶段 5 的 WHEN 闭环）=====
+
+    /** 机会触发待确认记录：只求值与报价，绝不创建创作任务。 */
+    @Test
+    void proposeFromOpportunityCreatesAPendingExecutionWithoutCreatingTasks() {
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1, THEN_STORY)));
+        when(growthRepository.findRecentFedPictureIds(3L, 12)).thenReturn(List.of(102L));
+
+        List<RecipeExecution> proposed = service.proposeFromOpportunity(7L, 3L,
+                RecipeWhenType.WEEKLY_REVIEW, null, NOW);
+
+        assertThat(proposed).hasSize(1);
+        RecipeExecution execution = proposed.get(0);
+        assertThat(execution.status()).isEqualTo(RecipeExecutionStatus.PENDING_CONFIRM);
+        assertThat(execution.sourcePictureIds()).containsExactly(102L);
+        assertThat(execution.opportunityKey()).startsWith("WEEKLY_REVIEW-");
+        assertThat(execution.quoteJson()).contains("STORY_DRAFT");
+        verify(storyDraftService, never()).create(any(), any(), any());
+    }
+
+    /** 相似图片机会自带图片：候选集合就是那张图片，且必须先授权。 */
+    @Test
+    void proposeFromOpportunityUsesTheObservedPictureAndChecksAuthorization() {
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1,
+                "{\"type\":\"SIMILAR_STORY\"}", IF_NONE, THEN_STORY)));
+
+        List<RecipeExecution> proposed = service.proposeFromOpportunity(7L, 3L,
+                RecipeWhenType.SIMILAR_STORY, 102L, NOW);
+
+        assertThat(proposed).hasSize(1);
+        assertThat(proposed.get(0).sourcePictureIds()).containsExactly(102L);
+        assertThat(proposed.get(0).opportunityKey()).isEqualTo("SIMILAR_STORY-102");
+        verify(authorization).checkForUser("picture:view", 102L, 7L);
+        verify(growthRepository, never()).findRecentFedPictureIds(anyLong(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    /** 未开放能力不得被机会触发成"等待确认"的假机会。 */
+    @Test
+    void proposeFromOpportunitySkipsCapabilitiesThatAreNotOpen() {
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1, THEN_EMOJI)));
+
+        List<RecipeExecution> proposed = service.proposeFromOpportunity(7L, 3L,
+                RecipeWhenType.WEEKLY_REVIEW, 102L, NOW);
+
+        assertThat(proposed).isEmpty();
+        verify(executionRepository, never()).insert(any(RecipeExecution.class));
+    }
+
+    @Test
+    void proposeFromOpportunitySkipsRecipesWithADifferentWhen() {
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(
+                version(1, WHEN_ANNIVERSARY, IF_NONE, THEN_STORY)));
+
+        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, 102L, NOW))
+                .isEmpty();
+        verify(executionRepository, never()).insert(any(RecipeExecution.class));
+    }
+
+    /** 同一机会窗口只产生一条待确认记录；已有待确认记录时不再叠加。 */
+    @Test
+    void proposeFromOpportunityDeduplicatesWithinTheSameOpportunityWindow() {
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1, THEN_STORY)));
+        when(growthRepository.findRecentFedPictureIds(3L, 12)).thenReturn(List.of(102L));
+        when(executionRepository.findRecentByRecipeId(9L, 20)).thenReturn(List.of(pendingRecord()));
+
+        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, null, NOW))
+                .isEmpty();
+
+        when(executionRepository.findRecentByRecipeId(9L, 20)).thenReturn(List.of());
+        when(executionRepository.findAwaitingConfirm(9L)).thenReturn(Optional.of(dryRunRecord()));
+        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, null, NOW))
+                .isEmpty();
+        verify(executionRepository, never()).insert(any(RecipeExecution.class));
+    }
+
+    /** 候选图片全部撤权：不产生待确认记录（也不读取分类/空间）。 */
+    @Test
+    void proposeFromOpportunitySkipsWhenNoCandidatePictureIsAuthorized() {
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1, THEN_STORY)));
+        when(growthRepository.findRecentFedPictureIds(3L, 12)).thenReturn(List.of(102L));
+        org.mockito.Mockito.doThrow(new BusinessException(
+                        com.li.lipicturecloud.exception.ErrorCode.FORBIDDEN_ERROR, "无权查看该图片"))
+                .when(authorization).checkForUser("picture:view", 102L, 7L);
+
+        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, null, NOW))
+                .isEmpty();
+        verify(pictureRepository, never()).findById(anyLong());
+        verify(executionRepository, never()).insert(any(RecipeExecution.class));
+    }
+
+    /** 机会触发的待确认记录走同一条确认路径（PENDING_CONFIRM → EXECUTED）。 */
+    @Test
+    void executeConfirmsAnOpportunityProposedRecord() {
+        when(recipeRepository.findById(9L)).thenReturn(Optional.of(recipe(RecipeStatus.ENABLED)));
+        when(executionRepository.findById(5L)).thenReturn(Optional.of(pendingRecord()));
+        when(versionRepository.findByRecipeId(9L)).thenReturn(List.of(version(1, THEN_STORY)));
+        when(storyDraftService.create(SUBJECT, List.of(102L), executionKey(5L)))
+                .thenReturn(createdTask());
+
+        RecipeExecution result = service.execute(SUBJECT, 9L, 5L, List.of());
+
+        assertThat(result.status()).isEqualTo(RecipeExecutionStatus.EXECUTED);
+        verify(executionRepository).transition(any(RecipeExecution.class),
+                org.mockito.ArgumentMatchers.eq(RecipeExecutionStatus.PENDING_CONFIRM));
+    }
+
+    /** 机会类型名与 RecipeWhenType 同名映射；未知类型只忽略，不打断任何链路。 */
+    @Test
+    void onOpportunityMapsTheStageThreeTypeNameAndIgnoresUnknownTypes() {
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1, THEN_STORY)));
+        when(growthRepository.findRecentFedPictureIds(3L, 12)).thenReturn(List.of(102L));
+
+        service.onOpportunity(7L, 3L, "WEEKLY_REVIEW", null, NOW);
+
+        service.onOpportunity(7L, 3L, "FUTURE_SOURCE", null, NOW);
+        service.onOpportunity(7L, 3L, null, null, NOW);
+        verify(executionRepository, org.mockito.Mockito.times(1))
+                .insert(any(RecipeExecution.class));
     }
 }

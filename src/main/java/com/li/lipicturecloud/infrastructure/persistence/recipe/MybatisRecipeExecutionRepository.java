@@ -90,6 +90,22 @@ public class MybatisRecipeExecutionRepository implements RecipeExecutionReposito
     }
 
     @Override
+    public Optional<RecipeExecution> findAwaitingConfirm(long recipeId) {
+        if (recipeId <= 0) {
+            return Optional.empty();
+        }
+        return executionMapper.selectList(new LambdaQueryWrapper<RecipeExecutionEntity>()
+                        .eq(RecipeExecutionEntity::getRecipeId, recipeId)
+                        .in(RecipeExecutionEntity::getStatus,
+                                RecipeExecutionStatus.DRY_RUN.name(),
+                                RecipeExecutionStatus.PENDING_CONFIRM.name())
+                        .orderByDesc(RecipeExecutionEntity::getCreatedTime)
+                        .orderByDesc(RecipeExecutionEntity::getId)
+                        .last("LIMIT 1"))
+                .stream().map(this::fromRow).findFirst();
+    }
+
+    @Override
     public int deleteByRecipeId(long recipeId) {
         if (recipeId <= 0) {
             return 0;
@@ -102,7 +118,8 @@ public class MybatisRecipeExecutionRepository implements RecipeExecutionReposito
         return RecipeExecution.restore(row.getId(), row.getRecipeId(), row.getRecipeVersion(),
                 row.getSubjectId(), RecipeExecutionStatus.valueOf(row.getStatus()),
                 Objects.requireNonNull(row.getTriggeredTime(), "triggeredTime").toInstant(),
-                row.getMatchedJson(), row.getQuoteJson(), row.getCreationTaskId(),
+                row.getMatchedJson(), row.getQuoteJson(), row.getSourcePictureIdsJson(),
+                row.getOpportunityKey(), row.getCreationTaskId(),
                 row.getSafeErrorCode(),
                 Objects.requireNonNull(row.getCreatedTime(), "createdTime").toInstant());
     }
@@ -117,6 +134,8 @@ public class MybatisRecipeExecutionRepository implements RecipeExecutionReposito
         row.setTriggeredTime(Date.from(execution.triggeredTime()));
         row.setMatchedJson(execution.matchedJson());
         row.setQuoteJson(execution.quoteJson());
+        row.setSourcePictureIdsJson(execution.sourcePictureIdsJson());
+        row.setOpportunityKey(execution.opportunityKey());
         row.setCreationTaskId(execution.creationTaskId());
         row.setSafeErrorCode(execution.safeErrorCode());
         row.setCreatedTime(Date.from(execution.createdTime()));

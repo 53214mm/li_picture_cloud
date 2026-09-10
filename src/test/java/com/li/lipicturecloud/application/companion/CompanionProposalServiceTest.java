@@ -85,8 +85,7 @@ class CompanionProposalServiceTest {
         when(contractRepository.save(any(), anyLong())).thenReturn(true);
         when(proposalRepository.save(any(), anyLong())).thenReturn(true);
         service = new CompanionProposalService(companionRepository, contractRepository,
-                proposalRepository, reactionRepository, List.of(opportunitySource),
-                evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
+                proposalRepository, reactionRepository, List.of(opportunitySource), List.of(), evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -157,8 +156,7 @@ class CompanionProposalServiceTest {
         when(growth.countSince(11L, NOW.minus(java.time.Duration.ofDays(7)))).thenReturn(3L);
         WeeklyReviewOpportunitySource realSource = new WeeklyReviewOpportunitySource(growth, evaluator);
         CompanionProposalService localService = new CompanionProposalService(companionRepository,
-                contractRepository, proposalRepository, reactionRepository, List.of(realSource),
-                evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
+                contractRepository, proposalRepository, reactionRepository, List.of(realSource), List.of(), evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
         when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
         ListAppender<ILoggingEvent> logs = captureProposalServiceLogs();
         try {
@@ -195,8 +193,7 @@ class CompanionProposalServiceTest {
         SimilarStoryOpportunitySource similar = new SimilarStoryOpportunitySource(
                 growth, pictures, authorization, evaluator);
         CompanionProposalService localService = new CompanionProposalService(companionRepository,
-                contractRepository, proposalRepository, reactionRepository, List.of(similar),
-                evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
+                contractRepository, proposalRepository, reactionRepository, List.of(similar), List.of(), evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
         ListAppender<ILoggingEvent> logs = captureProposalServiceLogs();
         try {
             CompanionProposalView view = localService.active(subject);
@@ -227,8 +224,7 @@ class CompanionProposalServiceTest {
         SimilarStoryOpportunitySource similar = new SimilarStoryOpportunitySource(
                 growth, pictures, authorization, evaluator);
         CompanionProposalService localService = new CompanionProposalService(companionRepository,
-                contractRepository, proposalRepository, reactionRepository, List.of(similar),
-                evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
+                contractRepository, proposalRepository, reactionRepository, List.of(similar), List.of(), evaluator, CompanionBalance.v1(), Clock.fixed(NOW, ZoneOffset.UTC));
         ListAppender<ILoggingEvent> logs = captureProposalServiceLogs();
         try {
             CompanionProposalView view = localService.active(subject);
@@ -285,7 +281,7 @@ class CompanionProposalServiceTest {
         CompanionOpportunitySource thirdSource = mock(CompanionOpportunitySource.class);
         CompanionProposalService localService = new CompanionProposalService(companionRepository,
                 contractRepository, proposalRepository, reactionRepository,
-                List.of(emptySource, hitSource, thirdSource), evaluator, CompanionBalance.v1(),
+                List.of(emptySource, hitSource, thirdSource), List.of(), evaluator, CompanionBalance.v1(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
         when(contractRepository.createIfAbsent(companion.id(), 7L))
@@ -317,7 +313,7 @@ class CompanionProposalServiceTest {
         CompanionOpportunitySource nextSource = mock(CompanionOpportunitySource.class);
         CompanionProposalService localService = new CompanionProposalService(companionRepository,
                 contractRepository, proposalRepository, reactionRepository,
-                List.of(zeroSource, nextSource), evaluator, CompanionBalance.v1(),
+                List.of(zeroSource, nextSource), List.of(), evaluator, CompanionBalance.v1(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
         when(contractRepository.createIfAbsent(companion.id(), 7L))
@@ -406,6 +402,75 @@ class CompanionProposalServiceTest {
         assertThatThrownBy(() -> service.accept(subject, 61L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("提案不存在");
+    }
+
+    /** 契约关闭（守门未通过）时不得把机会投递给机会监听者（阶段 5 配方 WHEN）。 */
+    @Test
+    void opportunityListenersAreNotNotifiedWhenTheGateBlocks() {
+        Companion companion = persistedCompanion();
+        CompanionOpportunityListener listener = mock(CompanionOpportunityListener.class);
+        CompanionProposalService localService = new CompanionProposalService(companionRepository,
+                contractRepository, proposalRepository, reactionRepository,
+                List.of(opportunitySource), List.of(listener), evaluator, CompanionBalance.v1(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        when(opportunitySource.observe(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new OpportunityObservation(ProposalOpportunityType.WEEKLY_REVIEW)));
+
+        // 契约默认关闭 → CONTRACT_DISABLED，机会不得外泄给监听者。
+        assertThat(localService.active(subject)).isNull();
+        verify(listener, never()).onOpportunity(anyLong(), anyLong(), any(), any(), any());
+    }
+
+    /** 守门通过后机会被投递给监听者：带真实机会类型与图片事实，且不产生任何自动执行。 */
+    @Test
+    void opportunityListenersReceiveTheObservedOpportunityAfterTheGatePasses() {
+        Companion companion = persistedCompanion();
+        CompanionOpportunityListener listener = mock(CompanionOpportunityListener.class);
+        CompanionProposalService localService = new CompanionProposalService(companionRepository,
+                contractRepository, proposalRepository, reactionRepository,
+                List.of(opportunitySource), List.of(listener), evaluator, CompanionBalance.v1(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        when(contractRepository.createIfAbsent(companion.id(), 7L))
+                .thenAnswer(invocation -> CompanionAutonomyContract.initial(
+                        invocation.getArgument(0), invocation.getArgument(1)).updated(
+                        true, LocalTime.of(23, 0), LocalTime.of(8, 0), 72));
+        when(opportunitySource.observe(companion.id(), 7L, NOW)).thenReturn(Optional.of(
+                new OpportunityObservation(ProposalOpportunityType.SIMILAR_STORY, 102L, 10L, 3L)));
+        when(opportunitySource.materialize(any(), anyLong(), anyLong(), any()))
+                .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.SIMILAR_STORY,
+                        new BigDecimal("30.00"), "这两张照片很像。")));
+
+        assertThat(localService.active(subject)).isNotNull();
+
+        verify(listener).onOpportunity(7L, companion.id(), "SIMILAR_STORY", 102L, NOW);
+    }
+
+    /** 监听者失败不得影响伙伴提案主链路（配方 WHEN 出问题不能拖垮对话体验）。 */
+    @Test
+    void listenerFailuresDoNotBreakTheProposalFlow() {
+        Companion companion = persistedCompanion();
+        CompanionOpportunityListener listener = mock(CompanionOpportunityListener.class);
+        org.mockito.Mockito.doThrow(new RuntimeException("recipe trigger down"))
+                .when(listener).onOpportunity(anyLong(), anyLong(), any(), any(), any());
+        CompanionProposalService localService = new CompanionProposalService(companionRepository,
+                contractRepository, proposalRepository, reactionRepository,
+                List.of(opportunitySource), List.of(listener), evaluator, CompanionBalance.v1(),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        when(companionRepository.findByOwnerIdForUpdate(7L)).thenReturn(Optional.of(companion));
+        when(contractRepository.createIfAbsent(companion.id(), 7L))
+                .thenAnswer(invocation -> CompanionAutonomyContract.initial(
+                        invocation.getArgument(0), invocation.getArgument(1)).updated(
+                        true, LocalTime.of(23, 0), LocalTime.of(8, 0), 72));
+        when(opportunitySource.observe(companion.id(), 7L, NOW))
+                .thenReturn(Optional.of(new OpportunityObservation(ProposalOpportunityType.WEEKLY_REVIEW)));
+        when(opportunitySource.materialize(any(), anyLong(), anyLong(), any()))
+                .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.WEEKLY_REVIEW,
+                        new BigDecimal("30.00"), "这周你喂了我 3 次。")));
+
+        assertThat(localService.active(subject)).isNotNull();
+        verify(proposalRepository).append(any());
     }
 
     private Companion persistedCompanion() {
