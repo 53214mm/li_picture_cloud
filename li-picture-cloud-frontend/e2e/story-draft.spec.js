@@ -15,6 +15,10 @@ test('creates a story draft from an authorized picture through outline draft and
   await page.goto('/companion')
   await expect(page).toHaveURL(/\/companion$/)
   // 故事面板随伙伴存在而出现；必要时先唤醒。
+  // 伙伴状态由异步接口返回：先等首页渲染完成（与 companion.spec.js 相同的确定性锚点）
+  // 再决定是否唤醒。用非重试的 isVisible() 直接判断会与首帧渲染竞态——一旦误判为
+  // "已唤醒"，故事面板（v-if 伙伴存在）就永远不会出现，测试随后必然超时。
+  await expect(page.getByText('实际来源会逐条写入成长档案')).toBeVisible()
   const awaken = page.getByRole('button', { name: '唤醒我的伙伴' })
   if (await awaken.isVisible()) {
     await awaken.click()
