@@ -154,7 +154,11 @@ public class CreationServiceSupport {
         return "INTERNAL";
     }
 
-    /** 从平台语言模型响应元数据提取最小用量快照（供应商未返回时为 none）。 */
+    /**
+     * 从平台语言模型响应元数据提取最小用量快照（供应商未返回时为 none）。
+     * 只取标准计量字段；供应商原始计量文本（nativeUsage）不落库，
+     * 避免把任意供应商文本写进用量表（白名单字段待后续单独排期）。
+     */
     public static ModelUsageSnapshot usageOf(org.springframework.ai.chat.model.ChatResponse response) {
         if (response == null || response.getMetadata() == null || response.getMetadata().getUsage() == null) {
             return ModelUsageSnapshot.none();
@@ -164,23 +168,7 @@ public class CreationServiceSupport {
                 usage.getPromptTokens() == null ? null : usage.getPromptTokens().longValue(),
                 usage.getCompletionTokens() == null ? null : usage.getCompletionTokens().longValue(),
                 null,
-                sanitizeRawUsage(usage.getNativeUsage()));
-    }
-
-    /** 供应商原始计量只保留安全摘要文本（去控制字符，超长截断）。 */
-    private static String sanitizeRawUsage(Object nativeUsage) {
-        if (nativeUsage == null) {
-            return null;
-        }
-        String raw = String.valueOf(nativeUsage);
-        if (raw.isBlank()) {
-            return null;
-        }
-        String safe = raw.codePoints()
-                .filter(codePoint -> !Character.isISOControl(codePoint))
-                .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
-                .toString();
-        return safe.isBlank() ? null : safe;
+                null);
     }
 
     /**

@@ -2,6 +2,7 @@ package com.li.lipicturecloud.application.airuntime;
 
 import com.li.lipicturecloud.domain.airuntime.CostSource;
 import com.li.lipicturecloud.domain.airuntime.ModelTask;
+import com.li.lipicturecloud.domain.airuntime.ModelUsageSnapshot;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import org.slf4j.Logger;
@@ -59,7 +60,9 @@ public class ImageCreationService {
         try {
             usageService.recordSuccess(subjectId, ModelTask.IMAGE_CREATION,
                     route.connection().id(), route.connection().provider(),
-                    route.connection().modelCode(), CostSource.BYOK);
+                    route.connection().modelCode(), CostSource.BYOK,
+                    // 图片生成的最小用量：成功即记录生成张数（一次请求一张）。
+                    ModelUsageSnapshot.images(1));
         } catch (RuntimeException recordFailure) {
             log.warn("image_creation_usage_record_failed subjectId={}", subjectId);
         }
@@ -67,9 +70,11 @@ public class ImageCreationService {
 
     private void recordFailure(long subjectId, ModelRouteDecision route, String safeErrorCode) {
         try {
+            // 失败即没有产出图片，显式记入空用量，不依赖"无用量重载"的隐式语义。
             usageService.recordFailure(subjectId, ModelTask.IMAGE_CREATION,
                     route.connection().id(), route.connection().provider(),
-                    route.connection().modelCode(), CostSource.BYOK, safeErrorCode);
+                    route.connection().modelCode(), CostSource.BYOK,
+                    ModelUsageSnapshot.none(), safeErrorCode);
         } catch (RuntimeException recordFailure) {
             log.warn("image_creation_usage_record_failed subjectId={} code={}",
                     subjectId, safeErrorCode);

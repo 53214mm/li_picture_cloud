@@ -4,6 +4,7 @@ import com.li.lipicturecloud.domain.airuntime.CostSource;
 import com.li.lipicturecloud.domain.airuntime.ModelConnection;
 import com.li.lipicturecloud.domain.airuntime.ModelProvider;
 import com.li.lipicturecloud.domain.airuntime.ModelTask;
+import com.li.lipicturecloud.domain.airuntime.ModelUsageSnapshot;
 import com.li.lipicturecloud.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,8 +51,10 @@ class ImageCreationServiceTest {
                 .thenReturn(result);
 
         assertThat(service.generate(7L, "一只安静的猫", "1024x1024")).isEqualTo(result);
+        // 成功即记录最小用量：一次请求生成一张图（不再走无用量重载）。
         verify(usageService).recordSuccess(7L, ModelTask.IMAGE_CREATION, 9L,
-                ModelProvider.OPENAI, "gpt-image-2", CostSource.BYOK);
+                ModelProvider.OPENAI, "gpt-image-2", CostSource.BYOK,
+                ModelUsageSnapshot.images(1));
     }
 
     @Test
@@ -65,7 +68,7 @@ class ImageCreationServiceTest {
                 .isInstanceOf(ModelInvocationException.class);
         verify(usageService).recordFailure(7L, ModelTask.IMAGE_CREATION, 9L,
                 ModelProvider.OPENAI, "gpt-image-2", CostSource.BYOK,
-                ConnectivityResult.CREDENTIAL_REJECTED);
+                ModelUsageSnapshot.none(), ConnectivityResult.CREDENTIAL_REJECTED);
     }
 
     @Test
@@ -77,6 +80,10 @@ class ImageCreationServiceTest {
                 .hasMessageContaining("平台图片创作尚未开放");
         verify(imageInvoker, never()).invoke(any(), anyString(), anyString());
         verify(usageService, never()).recordSuccess(anyLong(), any(), any(), any(), anyString(), any());
+        verify(usageService, never()).recordSuccess(anyLong(), any(), any(), any(), anyString(), any(),
+                any(ModelUsageSnapshot.class));
+        verify(usageService, never()).recordFailure(anyLong(), any(), any(), any(), anyString(), any(),
+                any(ModelUsageSnapshot.class), anyString());
     }
 
     @Test

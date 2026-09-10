@@ -160,36 +160,49 @@ CREATE INDEX idx_model_usage_subject
         </rollback>
     </changeSet>
 
+    <!--
+        用量列按列拆分：DDL 在 MySQL 里不可回滚，若四条 ALTER 同处一个 changeSet，
+        中途失败会留下“部分列已建 + changeSet 未记账”的状态，重跑时前置条件命中
+        （inputTokens 已存在）直接 MARK_RAN，其余列永远不会被创建。
+        因此每列独立 changeSet，各自带 columnExists 前置条件与独立回滚。
+    -->
     <changeSet id="20260814-36" author="li-picture-cloud">
         <preConditions onFail="MARK_RAN" onError="HALT">
             <not><columnExists tableName="model_usage_record" columnName="inputTokens"/></not>
         </preConditions>
-        <!-- H2 与 MySQL 都要求每个 ALTER TABLE 只加一列；逐条执行保证两库兼容。 -->
-        <sql splitStatements="false" stripComments="true"><![CDATA[
-ALTER TABLE model_usage_record ADD COLUMN inputTokens BIGINT NULL;
-        ]]></sql>
-        <sql splitStatements="false" stripComments="true"><![CDATA[
-ALTER TABLE model_usage_record ADD COLUMN outputTokens BIGINT NULL;
-        ]]></sql>
-        <sql splitStatements="false" stripComments="true"><![CDATA[
-ALTER TABLE model_usage_record ADD COLUMN imageCount INT NULL;
-        ]]></sql>
-        <sql splitStatements="false" stripComments="true"><![CDATA[
-ALTER TABLE model_usage_record ADD COLUMN rawUsage VARCHAR(200) NULL;
-        ]]></sql>
-        <rollback>
-            <sql splitStatements="false" stripComments="true"><![CDATA[
-ALTER TABLE model_usage_record DROP COLUMN inputTokens;
-            ]]></sql>
-            <sql splitStatements="false" stripComments="true"><![CDATA[
-ALTER TABLE model_usage_record DROP COLUMN outputTokens;
-            ]]></sql>
-            <sql splitStatements="false" stripComments="true"><![CDATA[
-ALTER TABLE model_usage_record DROP COLUMN imageCount;
-            ]]></sql>
-            <sql splitStatements="false" stripComments="true"><![CDATA[
-ALTER TABLE model_usage_record DROP COLUMN rawUsage;
-            ]]></sql>
-        </rollback>
+        <addColumn tableName="model_usage_record">
+            <column name="inputTokens" type="BIGINT"/>
+        </addColumn>
+        <rollback><dropColumn tableName="model_usage_record" columnName="inputTokens"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260814-37" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><columnExists tableName="model_usage_record" columnName="outputTokens"/></not>
+        </preConditions>
+        <addColumn tableName="model_usage_record">
+            <column name="outputTokens" type="BIGINT"/>
+        </addColumn>
+        <rollback><dropColumn tableName="model_usage_record" columnName="outputTokens"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260814-38" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><columnExists tableName="model_usage_record" columnName="imageCount"/></not>
+        </preConditions>
+        <addColumn tableName="model_usage_record">
+            <column name="imageCount" type="INT"/>
+        </addColumn>
+        <rollback><dropColumn tableName="model_usage_record" columnName="imageCount"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260814-39" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><columnExists tableName="model_usage_record" columnName="rawUsage"/></not>
+        </preConditions>
+        <addColumn tableName="model_usage_record">
+            <column name="rawUsage" type="VARCHAR(200)"/>
+        </addColumn>
+        <rollback><dropColumn tableName="model_usage_record" columnName="rawUsage"/></rollback>
     </changeSet>
 </databaseChangeLog>

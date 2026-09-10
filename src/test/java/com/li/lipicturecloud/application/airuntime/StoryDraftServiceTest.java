@@ -182,6 +182,66 @@ class StoryDraftServiceTest {
                 t.status() == CreationStatus.FAILED), anyLong());
     }
 
+    /**
+     * 预占失败路径的账本安全回归（大纲）：另一个并发请求已经持有预占，本次 reserve 因额度不足
+     * 失败。本次请求从未持有预占，异常路径必须不 release——否则会释放并发请求的预占。
+     * 同时预占失败发生在任何模型调用之前，不得记成一次"模型调用失败"。
+     */
+    @Test
+    void outlineReserveFailureDoesNotReleaseAnotherRequestsReservation() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.PENDING, 0L, null, null)));
+        // 账本中已有别的并发请求的预占：outstanding 不为 0，误 release 会让它归零。
+        java.util.concurrent.atomic.AtomicLong outstanding =
+                new java.util.concurrent.atomic.AtomicLong(1L);
+        when(trialLedger.reserve(7L, StoryDraftService.OUTLINE_TRIAL_COST))
+                .thenThrow(new BusinessException(ErrorCode.OPERATION_ERROR, "平台试用额度不足"));
+        org.mockito.Mockito.doAnswer(invocation -> {
+            outstanding.addAndGet(-(long) invocation.getArgument(1));
+            return null;
+        }).when(trialLedger).release(anyLong(), anyLong());
+
+        assertThatThrownBy(() -> service.outline(SUBJECT, 9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("试用额度不足");
+
+        assertThat(outstanding.get()).isEqualTo(1L);
+        verify(trialLedger, never()).release(anyLong(), anyLong());
+        verify(trialLedger, never()).settle(anyLong(), anyLong());
+        // 预占失败：没有出站调用，不得写任何用量记录（成功或失败）。
+        org.mockito.Mockito.verifyNoInteractions(usageService);
+        verify(chatModel, never()).call(any(org.springframework.ai.chat.prompt.Prompt.class));
+        verify(taskRepository).save(org.mockito.ArgumentMatchers.argThat(t ->
+                t.status() == CreationStatus.FAILED), anyLong());
+    }
+
+    /** 同上，草稿路径：draft 的 reserve 失败同样不得释放并发请求的预占。 */
+    @Test
+    void draftReserveFailureDoesNotReleaseAnotherRequestsReservation() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.AWAITING_CONFIRM, 2L, "大纲", null)));
+        java.util.concurrent.atomic.AtomicLong outstanding =
+                new java.util.concurrent.atomic.AtomicLong(1L);
+        when(trialLedger.reserve(7L, StoryDraftService.DRAFT_TRIAL_COST))
+                .thenThrow(new BusinessException(ErrorCode.OPERATION_ERROR, "平台试用额度不足"));
+        org.mockito.Mockito.doAnswer(invocation -> {
+            outstanding.addAndGet(-(long) invocation.getArgument(1));
+            return null;
+        }).when(trialLedger).release(anyLong(), anyLong());
+
+        assertThatThrownBy(() -> service.draft(SUBJECT, 9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("试用额度不足");
+
+        assertThat(outstanding.get()).isEqualTo(1L);
+        verify(trialLedger, never()).release(anyLong(), anyLong());
+        verify(trialLedger, never()).settle(anyLong(), anyLong());
+        org.mockito.Mockito.verifyNoInteractions(usageService);
+        verify(chatModel, never()).call(any(org.springframework.ai.chat.prompt.Prompt.class));
+        verify(taskRepository).save(org.mockito.ArgumentMatchers.argThat(t ->
+                t.status() == CreationStatus.FAILED), anyLong());
+    }
+
     @Test
     void storyOperationsRejectCrossKindTasks() {
         CreationTask emojiTask = new CreationTask(9L, 7L, CreationKind.EMOJI_DRAFT,

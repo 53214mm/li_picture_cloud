@@ -100,65 +100,12 @@ public class StoryDraftService {
         } catch (IllegalStateException wrongState) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
         }
-        boolean platform = false;
-        boolean modelReturned = false;
-        ModelRouteDecision route = null;
-        try {
-            // 执行前重新校验：分享撤销/移动后不得让旧选择越过权限边界（规格 §5）。
-            support.reauthorizePictures(subject, task);
-            route = languageRouter.decide(subject.userId());
-            platform = !route.isByok();
-            if (platform) {
-                trialLedger.reserve(subject.userId(), OUTLINE_TRIAL_COST);
-            }
-            CreationServiceSupport.LanguageInvocation invocation = invoke(route,
-                    OUTLINE_PROMPT_TEMPLATE.formatted(task.sourcePictureIds().size(),
-                            support.grounding(task.sourcePictureIds())));
-            // 模型已成功返回：供应商成本已经产生，随后的任何后处理失败都不再释放预占。
-            modelReturned = true;
-            // 使用记录紧跟模型调用结果（成功即记，独立于后续任务状态转移）。
-            recordUsage(subject.userId(), route, true, invocation.usage(), null);
-            if (invocation.text() == null || invocation.text().isBlank()) {
-                throw new BusinessException(ErrorCode.OPERATION_ERROR, "故事大纲生成失败：模型返回为空");
-            }
-            try {
-                task = support.transition(task,
-                        task.completeOutline(invocation.text(), route.isByok() ? route.connection().id() : null,
-                                clock.instant()));
-            } catch (IllegalArgumentException unsafeText) {
-                throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                        "故事大纲生成内容不符合安全文本要求，请重试");
-            }
-            recordLineage(task, CAPABILITY_OUTLINE, support.modelCode(route),
-                    support.costSource(route));
-            if (platform) {
-                trialLedger.settle(subject.userId(), OUTLINE_TRIAL_COST);
-            }
-            return task;
-        } catch (RuntimeException failure) {
-            // 模型调用失败（未成功返回）：补记失败用量（带安全错误码）。
-            if (route != null && !modelReturned) {
-                recordUsage(subject.userId(), route, false, ModelUsageSnapshot.none(),
-                        CreationServiceSupport.safeErrorCode(failure));
-            }
-            if (platform) {
-                if (modelReturned) {
-                    // 模型已成功返回：即使持久化/校验失败也结算预占，业务失败单独记录，
-                    // 绝不把已产生的平台成本退给用户。
-                    settleTrialQuietly(subject.userId(), OUTLINE_TRIAL_COST, "outline");
-                    log.warn("story_outline_post_model_failed subjectId={} taskId={} exceptionType={}",
-                            subject.userId(), task.id(), failure.getClass().getName());
-                } else {
-                    support.releaseTrial(trialLedger, subject.userId(), OUTLINE_TRIAL_COST);
-                }
-            }
-            try {
-                support.transition(task, task.fail(clock.instant()));
-            } catch (RuntimeException alreadyTerminal) {
-                // 已终态则无需再写 FAILED。
-            }
-            throw failure;
-        }
+        return generateWithLedger(subject, task, OUTLINE_TRIAL_COST, "outline",
+                source -> OUTLINE_PROMPT_TEMPLATE.formatted(source.sourcePictureIds().size(),
+                        support.grounding(source.sourcePictureIds())),
+                (current, text, route) -> current.completeOutline(text,
+                        route.isByok() ? route.connection().id() : null, clock.instant()),
+                CAPABILITY_OUTLINE);
     }
 
     public CreationTask confirmOutline(AuthorizationSubject subject, long taskId) {
@@ -177,51 +124,81 @@ public class StoryDraftService {
         } catch (IllegalStateException wrongState) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "任务状态已变化，请刷新后重试");
         }
-        boolean platform = false;
+        return generateWithLedger(subject, task, DRAFT_TRIAL_COST, "draft",
+                source -> DRAFT_PROMPT_TEMPLATE.formatted(source.outlineText()),
+                (current, text, route) -> current.completeDraft(text, clock.instant()),
+                CAPABILITY_DRAFT);
+    }
+
+    /** 把生成文本应用到任务的策略（大纲与草稿的差异只在这里）。 */
+    @FunctionalInterface
+    private interface TextApplier {
+        CreationTask apply(CreationTask task, String text, ModelRouteDecision route);
+    }
+
+    /**
+     * 大纲与草稿共享的"路由 → 预占 → 调用 → 记录 → 结算/释放 → 失败转移"执行模板。
+     *
+     * <p>账本状态显式区分：{@code reservationHeld} 只在 {@code reserve()} 成功返回后为真
+     * （预占失败绝不能释放其他并发请求的预占）；{@code modelInvocationStarted} 之后的失败
+     * 才记模型失败用量（预占/授权失败时模型根本没有被调用）；{@code modelReturned} 为真
+     * 表示供应商成本已经产生，后续任何后处理失败都只结算并记录业务失败，绝不释放预占。</p>
+     */
+    private CreationTask generateWithLedger(AuthorizationSubject subject, CreationTask task,
+                                            long trialCost, String step,
+                                            java.util.function.Function<CreationTask, String> promptFactory,
+                                            TextApplier textApplier, String capabilityId) {
+        boolean reservationHeld = false;
+        boolean modelInvocationStarted = false;
         boolean modelReturned = false;
         ModelRouteDecision route = null;
         try {
             // 执行前重新校验：分享撤销/移动后不得让旧选择越过权限边界（规格 §5）。
             support.reauthorizePictures(subject, task);
             route = languageRouter.decide(subject.userId());
-            platform = !route.isByok();
-            if (platform) {
-                trialLedger.reserve(subject.userId(), DRAFT_TRIAL_COST);
+            if (!route.isByok()) {
+                trialLedger.reserve(subject.userId(), trialCost);
+                // 预占成功才持有：reserve 抛错（余额不足等）时本次请求没有预占，
+                // 异常路径不得 release，否则会释放其他并发请求的预占。
+                reservationHeld = true;
             }
-            CreationServiceSupport.LanguageInvocation invocation = invoke(route,
-                    DRAFT_PROMPT_TEMPLATE.formatted(task.outlineText()));
+            modelInvocationStarted = true;
+            CreationServiceSupport.LanguageInvocation invocation = invoke(route, promptFactory.apply(task));
             // 模型已成功返回：供应商成本已经产生，随后的任何后处理失败都不再释放预占。
             modelReturned = true;
+            // 使用记录紧跟模型调用结果（成功即记，独立于后续任务状态转移）。
             recordUsage(subject.userId(), route, true, invocation.usage(), null);
             if (invocation.text() == null || invocation.text().isBlank()) {
-                throw new BusinessException(ErrorCode.OPERATION_ERROR, "故事草稿生成失败：模型返回为空");
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "故事生成失败：模型返回为空");
             }
-            // 关键：转移成功后把 task 推进到当前状态，后续失败必须基于最新状态写 FAILED。
+            CreationTask updated;
             try {
-                task = support.transition(task, task.completeDraft(invocation.text(), clock.instant()));
+                updated = support.transition(task, textApplier.apply(task, invocation.text(), route));
             } catch (IllegalArgumentException unsafeText) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR,
-                        "故事草稿生成内容不符合安全文本要求，请重试");
+                        "故事生成内容不符合安全文本要求，请重试");
             }
-            recordLineage(task, CAPABILITY_DRAFT, support.modelCode(route),
-                    support.costSource(route));
-            if (platform) {
-                trialLedger.settle(subject.userId(), DRAFT_TRIAL_COST);
+            recordLineage(updated, capabilityId, support.modelCode(route), support.costSource(route));
+            if (reservationHeld) {
+                trialLedger.settle(subject.userId(), trialCost);
             }
-            return task;
+            return updated;
         } catch (RuntimeException failure) {
-            // 模型调用失败（未成功返回）：补记失败用量（带安全错误码）。
-            if (route != null && !modelReturned) {
+            // 只有模型调用确实开始过且未成功返回才补记失败用量；预占失败、授权失败等
+            // 没有出站的错误不得记成一次"模型调用失败"。
+            if (modelInvocationStarted && !modelReturned && route != null) {
                 recordUsage(subject.userId(), route, false, ModelUsageSnapshot.none(),
                         CreationServiceSupport.safeErrorCode(failure));
             }
-            if (platform) {
+            if (reservationHeld) {
                 if (modelReturned) {
-                    settleTrialQuietly(subject.userId(), DRAFT_TRIAL_COST, "draft");
-                    log.warn("story_draft_post_model_failed subjectId={} taskId={} exceptionType={}",
+                    // 模型已成功返回：即使持久化/校验失败也结算预占，业务失败单独记录，
+                    // 绝不把已产生的平台成本退给用户。
+                    settleTrialQuietly(subject.userId(), trialCost, step);
+                    log.warn("story_" + step + "_post_model_failed subjectId={} taskId={} exceptionType={}",
                             subject.userId(), task.id(), failure.getClass().getName());
                 } else {
-                    support.releaseTrial(trialLedger, subject.userId(), DRAFT_TRIAL_COST);
+                    support.releaseTrial(trialLedger, subject.userId(), trialCost);
                 }
             }
             try {
