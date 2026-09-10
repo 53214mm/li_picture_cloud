@@ -140,9 +140,14 @@ public class StoryDraftService {
      * 大纲与草稿共享的"路由 → 预占 → 调用 → 记录 → 结算/释放 → 失败转移"执行模板。
      *
      * <p>账本状态显式区分：{@code reservationHeld} 只在 {@code reserve()} 成功返回后为真
-     * （预占失败绝不能释放其他并发请求的预占）；{@code modelInvocationStarted} 之后的失败
-     * 才记模型失败用量（预占/授权失败时模型根本没有被调用）；{@code modelReturned} 为真
-     * 表示供应商成本已经产生，后续任何后处理失败都只结算并记录业务失败，绝不释放预占。</p>
+     * （预占失败绝不能释放其他并发请求的预占）；{@code modelInvocationStarted} 只在提示词
+     * 构造完成、真正发起出站调用前置真，之后的失败才记模型失败用量（预占/授权/提示词构造
+     * 失败时模型根本没有被调用）；{@code modelReturned} 为真表示供应商成本已经产生，
+     * 后续任何后处理失败都只结算并记录业务失败，绝不释放预占。</p>
+     *
+     * <p>成功状态转移立即回写当前聚合（{@code task = transition(...)}），保证血缘写入或
+     * 结算失败时补偿路径用的是最新 revision——用旧 revision 写 FAILED 会 CAS 失败，
+     * 任务会停在"等待确认"且缺少完整血缘。</p>
      */
     private CreationTask generateWithLedger(AuthorizationSubject subject, CreationTask task,
                                             long trialCost, String step,
@@ -162,8 +167,11 @@ public class StoryDraftService {
                 // 异常路径不得 release，否则会释放其他并发请求的预占。
                 reservationHeld = true;
             }
+            // 提示词构造（含图片分类读取）在任何出站调用之前完成：这里失败说明模型没有被调用，
+            // 不能记成一次"模型调用失败"，也不该误判为供应商成本已产生。
+            String prompt = promptFactory.apply(task);
             modelInvocationStarted = true;
-            CreationServiceSupport.LanguageInvocation invocation = invoke(route, promptFactory.apply(task));
+            CreationServiceSupport.LanguageInvocation invocation = invoke(route, prompt);
             // 模型已成功返回：供应商成本已经产生，随后的任何后处理失败都不再释放预占。
             modelReturned = true;
             // 使用记录紧跟模型调用结果（成功即记，独立于后续任务状态转移）。
@@ -171,18 +179,19 @@ public class StoryDraftService {
             if (invocation.text() == null || invocation.text().isBlank()) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR, "故事生成失败：模型返回为空");
             }
-            CreationTask updated;
             try {
-                updated = support.transition(task, textApplier.apply(task, invocation.text(), route));
+                // 成功转移必须回写当前聚合：随后的血缘写入/结算失败要用新 revision 才能落 FAILED，
+                // 否则补偿路径拿旧 revision 写库必然 CAS 失败，任务会留在"等待确认"却缺少血缘。
+                task = support.transition(task, textApplier.apply(task, invocation.text(), route));
             } catch (IllegalArgumentException unsafeText) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR,
                         "故事生成内容不符合安全文本要求，请重试");
             }
-            recordLineage(updated, capabilityId, support.modelCode(route), support.costSource(route));
+            recordLineage(task, capabilityId, support.modelCode(route), support.costSource(route));
             if (reservationHeld) {
                 trialLedger.settle(subject.userId(), trialCost);
             }
-            return updated;
+            return task;
         } catch (RuntimeException failure) {
             // 只有模型调用确实开始过且未成功返回才补记失败用量；预占失败、授权失败等
             // 没有出站的错误不得记成一次"模型调用失败"。

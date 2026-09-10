@@ -242,6 +242,73 @@ class StoryDraftServiceTest {
                 t.status() == CreationStatus.FAILED), anyLong());
     }
 
+    /**
+     * 后置失败必须用最新 revision 落 FAILED：任务已成功转移到 AWAITING_CONFIRM（revision 1），
+     * 随后血缘写入失败。补偿路径若仍拿旧 revision（0）写库必然 CAS 失败并被吞掉，
+     * 结果是"接口报错 + 已结算 + 任务仍停在等待确认且缺少完整血缘"。
+     */
+    @Test
+    void lineageFailureAfterTransitionMarksTaskFailedWithFreshRevision() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.PENDING, 0L, null, null)));
+        org.mockito.Mockito.doThrow(new RuntimeException("lineage append failed"))
+                .when(lineageRepository).append(org.mockito.ArgumentMatchers.any(
+                        CreationLineage.class));
+
+        assertThatThrownBy(() -> service.outline(SUBJECT, 9L))
+                .isInstanceOf(RuntimeException.class);
+
+        // 状态机 revision：startOutlining 用 0 落库(→1)，completeOutline 用 1 落库(→2)，
+        // 失败补偿必须用最新 revision 2；若仍用旧 revision 1，真实库会 CAS 失败。
+        verify(taskRepository).save(org.mockito.ArgumentMatchers.argThat(t ->
+                t.status() == CreationStatus.FAILED), eq(2L));
+        // 模型已成功返回：预占必须结算，绝不释放。
+        verify(trialLedger).settle(7L, StoryDraftService.OUTLINE_TRIAL_COST);
+        verify(trialLedger, never()).release(anyLong(), anyLong());
+    }
+
+    /** 首次结算失败后必须补偿结算（模型成本已产生），任务同样要用最新 revision 落 FAILED。 */
+    @Test
+    void firstSettleFailureIsCompensatedAndTaskStillFailsWithFreshRevision() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.PENDING, 0L, null, null)));
+        when(trialLedger.settle(7L, StoryDraftService.OUTLINE_TRIAL_COST))
+                .thenThrow(new RuntimeException("ledger down"))
+                .thenReturn(null);
+
+        assertThatThrownBy(() -> service.outline(SUBJECT, 9L))
+                .isInstanceOf(RuntimeException.class);
+
+        // 首次结算 + 补偿结算共两次，绝不 release。
+        verify(trialLedger, times(2)).settle(7L, StoryDraftService.OUTLINE_TRIAL_COST);
+        verify(trialLedger, never()).release(anyLong(), anyLong());
+        verify(taskRepository).save(org.mockito.ArgumentMatchers.argThat(t ->
+                t.status() == CreationStatus.FAILED), eq(2L));
+    }
+
+    /**
+     * 提示词构造失败（大纲要读图片分类）发生在任何出站调用之前：不得记成一次"模型调用失败"，
+     * 也不得被当成供应商成本已产生——本次预占要释放。
+     */
+    @Test
+    void groundingFailureDoesNotRecordModelUsageAndReleasesTrial() {
+        when(taskRepository.findById(9L)).thenReturn(Optional.of(
+                task(CreationStatus.PENDING, 0L, null, null)));
+        when(pictureRepository.findById(102L)).thenThrow(new RuntimeException("picture read failed"));
+
+        assertThatThrownBy(() -> service.outline(SUBJECT, 9L))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(chatModel, never()).call(any(org.springframework.ai.chat.prompt.Prompt.class));
+        // 没有任何出站调用：不写成功也不写失败用量。
+        org.mockito.Mockito.verifyNoInteractions(usageService);
+        verify(trialLedger).release(7L, StoryDraftService.OUTLINE_TRIAL_COST);
+        verify(trialLedger, never()).settle(anyLong(), anyLong());
+        // 没有成功转移过：startOutlining 后当前 revision 为 1，FAILED 用 1 落库。
+        verify(taskRepository).save(org.mockito.ArgumentMatchers.argThat(t ->
+                t.status() == CreationStatus.FAILED), eq(1L));
+    }
+
     @Test
     void storyOperationsRejectCrossKindTasks() {
         CreationTask emojiTask = new CreationTask(9L, 7L, CreationKind.EMOJI_DRAFT,
