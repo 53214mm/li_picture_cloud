@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.Date;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -42,6 +43,26 @@ public class MybatisPictureRepository implements PictureRepository, PictureAsset
                 .eq(Picture::getSpaceId, spaceId)
                 .eq(Picture::getReviewStatus, 1)
                 .ge(Picture::getCreateTime, Date.from(Objects.requireNonNull(since, "since"))));
+    }
+
+    @Override
+    public List<Long> findRecentIdsInSpace(long spaceId, Instant since, int limit) {
+        if (spaceId <= 0) {
+            return List.of();
+        }
+        // 与计数同口径（只含已通过审核的图片、同一时间窗），并且只投影 ID 列。
+        return pictureMapper.selectList(new LambdaQueryWrapper<Picture>()
+                        .select(Picture::getId)
+                        .eq(Picture::getSpaceId, spaceId)
+                        .eq(Picture::getReviewStatus, 1)
+                        .ge(Picture::getCreateTime, Date.from(Objects.requireNonNull(since, "since")))
+                        .orderByDesc(Picture::getCreateTime)
+                        .orderByDesc(Picture::getId)
+                        .last("LIMIT " + Math.max(1, Math.min(limit, 50))))
+                .stream()
+                .map(Picture::getId)
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     @Override

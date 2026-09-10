@@ -163,4 +163,24 @@ CREATE INDEX idx_recipe_execution_recipe ON recipe_execution (recipeId, createdT
             <dropColumn tableName="recipe_execution" columnName="opportunityKey"/>
         </rollback>
     </changeSet>
+
+    <!--
+        机会去重的原子约束：应用层的"先查再插"在并发下会双插（proposeFromOpportunity 是公开入口，
+        未来调度器可能绕过伙伴行锁直接调用）。手工试运行/历史记录的 opportunityKey 为 NULL，
+        H2 与 MySQL 的唯一索引都把 NULL 视为互不相同，因此不会互相冲突。
+    -->
+    <changeSet id="20260815-29" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="uk_recipe_execution_opportunity"
+                              tableName="recipe_execution"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE UNIQUE INDEX uk_recipe_execution_opportunity
+    ON recipe_execution (recipeId, opportunityKey);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="uk_recipe_execution_opportunity"
+                       tableName="recipe_execution"/>
+        </rollback>
+    </changeSet>
 </databaseChangeLog>

@@ -5,9 +5,11 @@ import com.li.lipicturecloud.application.airuntime.EmojiDraftService;
 import com.li.lipicturecloud.application.airuntime.FusionImageService;
 import com.li.lipicturecloud.application.airuntime.LocalCapabilityCatalog;
 import com.li.lipicturecloud.application.airuntime.StoryDraftService;
+import com.li.lipicturecloud.application.companion.OpportunityContext;
 import com.li.lipicturecloud.domain.airuntime.CreationKind;
 import com.li.lipicturecloud.domain.airuntime.CreationTask;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
+import com.li.lipicturecloud.domain.companion.ProposalOpportunityType;
 import com.li.lipicturecloud.domain.recipe.Recipe;
 import com.li.lipicturecloud.domain.recipe.RecipeExecution;
 import com.li.lipicturecloud.domain.recipe.RecipeExecutionRepository;
@@ -408,21 +410,75 @@ class RecipeExecutionServiceTest {
         verify(storyDraftService, never()).create(any(), any(), any());
     }
 
-    /** 相似图片机会自带图片：候选集合就是那张图片，且必须先授权。 */
+    /** 相似图片机会携带目标图片：候选集合就是那组新图片，且必须先授权。 */
     @Test
-    void proposeFromOpportunityUsesTheObservedPictureAndChecksAuthorization() {
+    void proposeFromOpportunityUsesTheOpportunityTargetPictures() {
         when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
         when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1,
                 "{\"type\":\"SIMILAR_STORY\"}", IF_NONE, THEN_STORY)));
 
         List<RecipeExecution> proposed = service.proposeFromOpportunity(7L, 3L,
-                RecipeWhenType.SIMILAR_STORY, 102L, NOW);
+                RecipeWhenType.SIMILAR_STORY, List.of(103L), NOW);
 
         assertThat(proposed).hasSize(1);
+        assertThat(proposed.get(0).sourcePictureIds()).containsExactly(103L);
+        assertThat(proposed.get(0).opportunityKey()).isEqualTo("SIMILAR_STORY-103");
+        verify(authorization).checkForUser("picture:view", 103L, 7L);
+        verify(growthRepository, never()).findRecentFedPictureIds(anyLong(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    /**
+     * P1 回归：机会锚点是旧喂养图（旅行），空间里新出现的是花园图。
+     * "旅行回顾"必须不命中——IF 条件针对的是本次新图片，而不是那张旧参照图。
+     */
+    @Test
+    void similarOpportunityDoesNotMatchWhenTheNewPictureHasAnotherCategory() {
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1,
+                "{\"type\":\"SIMILAR_STORY\"}",
+                "[{\"type\":\"SOURCE_CATEGORY\",\"category\":\"旅行\"}]", THEN_STORY)));
+        // 新图片 105 是花园；旧锚点 102 仍然是旅行，但锚点不该参与求值。
+        Picture garden = new Picture();
+        garden.setId(105L);
+        garden.setCategory("花园");
+        garden.setSpaceId(10L);
+        when(pictureRepository.findById(105L)).thenReturn(Optional.of(garden));
+
+        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.SIMILAR_STORY,
+                List.of(105L), NOW)).isEmpty();
+        verify(executionRepository, never()).insert(any(RecipeExecution.class));
+    }
+
+    /** P1 回归：旧喂养图是花园，新出现的是旅行图 → 命中，且任务快照记录的是新旅行图。 */
+    @Test
+    void similarOpportunityMatchesTheNewPictureAndSnapshotsIt() {
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1,
+                "{\"type\":\"SIMILAR_STORY\"}",
+                "[{\"type\":\"SOURCE_CATEGORY\",\"category\":\"旅行\"}]", THEN_STORY)));
+
+        List<RecipeExecution> proposed = service.proposeFromOpportunity(7L, 3L,
+                RecipeWhenType.SIMILAR_STORY, List.of(102L), NOW);
+
+        assertThat(proposed).hasSize(1);
+        // 新旅行图（102）进入快照；旧喂养图若不同则绝不出现。
         assertThat(proposed.get(0).sourcePictureIds()).containsExactly(102L);
         assertThat(proposed.get(0).opportunityKey()).isEqualTo("SIMILAR_STORY-102");
-        verify(authorization).checkForUser("picture:view", 102L, 7L);
-        verify(growthRepository, never()).findRecentFedPictureIds(anyLong(), org.mockito.ArgumentMatchers.anyInt());
+        assertThat(proposed.get(0).matchedJson()).contains("SOURCE_CATEGORY").contains("true");
+    }
+
+    /** 相似图片机会没有目标图片时直接跳过：绝不用旧锚点兜底执行。 */
+    @Test
+    void similarOpportunityWithoutTargetPicturesIsSkipped() {
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1,
+                "{\"type\":\"SIMILAR_STORY\"}", IF_NONE, THEN_STORY)));
+
+        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.SIMILAR_STORY,
+                List.of(), NOW)).isEmpty();
+        verify(growthRepository, never()).findRecentFedPictureIds(anyLong(),
+                org.mockito.ArgumentMatchers.anyInt());
+        verify(executionRepository, never()).insert(any(RecipeExecution.class));
     }
 
     /** 未开放能力不得被机会触发成"等待确认"的假机会。 */
@@ -432,7 +488,7 @@ class RecipeExecutionServiceTest {
         when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1, THEN_EMOJI)));
 
         List<RecipeExecution> proposed = service.proposeFromOpportunity(7L, 3L,
-                RecipeWhenType.WEEKLY_REVIEW, 102L, NOW);
+                RecipeWhenType.WEEKLY_REVIEW, List.of(102L), NOW);
 
         assertThat(proposed).isEmpty();
         verify(executionRepository, never()).insert(any(RecipeExecution.class));
@@ -444,8 +500,8 @@ class RecipeExecutionServiceTest {
         when(versionRepository.findLatest(9L)).thenReturn(Optional.of(
                 version(1, WHEN_ANNIVERSARY, IF_NONE, THEN_STORY)));
 
-        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, 102L, NOW))
-                .isEmpty();
+        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW,
+                List.of(102L), NOW)).isEmpty();
         verify(executionRepository, never()).insert(any(RecipeExecution.class));
     }
 
@@ -457,14 +513,27 @@ class RecipeExecutionServiceTest {
         when(growthRepository.findRecentFedPictureIds(3L, 12)).thenReturn(List.of(102L));
         when(executionRepository.findRecentByRecipeId(9L, 20)).thenReturn(List.of(pendingRecord()));
 
-        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, null, NOW))
-                .isEmpty();
+        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, List.of(),
+                NOW)).isEmpty();
 
         when(executionRepository.findRecentByRecipeId(9L, 20)).thenReturn(List.of());
         when(executionRepository.findAwaitingConfirm(9L)).thenReturn(Optional.of(dryRunRecord()));
-        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, null, NOW))
-                .isEmpty();
+        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, List.of(),
+                NOW)).isEmpty();
         verify(executionRepository, never()).insert(any(RecipeExecution.class));
+    }
+
+    /** 数据库唯一索引是最终仲裁：并发下输的一方插入冲突时直接跳过，不冒泡成 500。 */
+    @Test
+    void proposeFromOpportunitySkipsWhenTheUniqueIndexRejectsTheInsert() {
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1, THEN_STORY)));
+        when(growthRepository.findRecentFedPictureIds(3L, 12)).thenReturn(List.of(102L));
+        when(executionRepository.insert(any(RecipeExecution.class)))
+                .thenThrow(new org.springframework.dao.DuplicateKeyException("dup"));
+
+        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, List.of(),
+                NOW)).isEmpty();
     }
 
     /** 候选图片全部撤权：不产生待确认记录（也不读取分类/空间）。 */
@@ -477,8 +546,8 @@ class RecipeExecutionServiceTest {
                         com.li.lipicturecloud.exception.ErrorCode.FORBIDDEN_ERROR, "无权查看该图片"))
                 .when(authorization).checkForUser("picture:view", 102L, 7L);
 
-        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, null, NOW))
-                .isEmpty();
+        assertThat(service.proposeFromOpportunity(7L, 3L, RecipeWhenType.WEEKLY_REVIEW, List.of(),
+                NOW)).isEmpty();
         verify(pictureRepository, never()).findById(anyLong());
         verify(executionRepository, never()).insert(any(RecipeExecution.class));
     }
@@ -499,17 +568,21 @@ class RecipeExecutionServiceTest {
                 org.mockito.ArgumentMatchers.eq(RecipeExecutionStatus.PENDING_CONFIRM));
     }
 
-    /** 机会类型名与 RecipeWhenType 同名映射；未知类型只忽略，不打断任何链路。 */
+    /** 端口映射：强类型机会 + 目标图片进入候选；未知类型只忽略，不打断任何链路。 */
     @Test
-    void onOpportunityMapsTheStageThreeTypeNameAndIgnoresUnknownTypes() {
+    void onOpportunityMapsTheTypedContextAndIgnoresUnknownTypes() {
         when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
-        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1, THEN_STORY)));
-        when(growthRepository.findRecentFedPictureIds(3L, 12)).thenReturn(List.of(102L));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1,
+                "{\"type\":\"SIMILAR_STORY\"}", IF_NONE, THEN_STORY)));
 
-        service.onOpportunity(7L, 3L, "WEEKLY_REVIEW", null, NOW);
+        service.onOpportunity(7L, 3L, new OpportunityContext(
+                ProposalOpportunityType.SIMILAR_STORY, 999L, List.of(102L), 10L, 3L), NOW);
 
-        service.onOpportunity(7L, 3L, "FUTURE_SOURCE", null, NOW);
-        service.onOpportunity(7L, 3L, null, null, NOW);
+        verify(executionRepository, org.mockito.Mockito.times(1))
+                .insert(any(RecipeExecution.class));
+
+        // 未知机会类型（未来机会源）与 null 上下文都只忽略，不抛错。
+        service.onOpportunity(7L, 3L, null, NOW);
         verify(executionRepository, org.mockito.Mockito.times(1))
                 .insert(any(RecipeExecution.class));
     }

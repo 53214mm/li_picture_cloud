@@ -419,12 +419,15 @@ class CompanionProposalServiceTest {
 
         // 契约默认关闭 → CONTRACT_DISABLED，机会不得外泄给监听者。
         assertThat(localService.active(subject)).isNull();
-        verify(listener, never()).onOpportunity(anyLong(), anyLong(), any(), any(), any());
+        verify(listener, never()).onOpportunity(anyLong(), anyLong(), any(), any());
     }
 
-    /** 守门通过后机会被投递给监听者：带真实机会类型与图片事实，且不产生任何自动执行。 */
+    /**
+     * 守门通过后机会被投递给监听者：上下文是强类型机会，且携带"本次真实目标图片"
+     * （与机会锚点区分），下游才能对着新图片求值/执行，而不是拿旧喂养图。
+     */
     @Test
-    void opportunityListenersReceiveTheObservedOpportunityAfterTheGatePasses() {
+    void opportunityListenersReceiveTheTypedContextWithTargetPictures() {
         Companion companion = persistedCompanion();
         CompanionOpportunityListener listener = mock(CompanionOpportunityListener.class);
         CompanionProposalService localService = new CompanionProposalService(companionRepository,
@@ -437,14 +440,22 @@ class CompanionProposalServiceTest {
                         invocation.getArgument(0), invocation.getArgument(1)).updated(
                         true, LocalTime.of(23, 0), LocalTime.of(8, 0), 72));
         when(opportunitySource.observe(companion.id(), 7L, NOW)).thenReturn(Optional.of(
-                new OpportunityObservation(ProposalOpportunityType.SIMILAR_STORY, 102L, 10L, 3L)));
+                new OpportunityObservation(ProposalOpportunityType.SIMILAR_STORY, 102L, 10L, 3L,
+                        List.of(104L, 105L))));
         when(opportunitySource.materialize(any(), anyLong(), anyLong(), any()))
                 .thenReturn(Optional.of(new ProposalOpportunity(ProposalOpportunityType.SIMILAR_STORY,
                         new BigDecimal("30.00"), "这两张照片很像。")));
 
         assertThat(localService.active(subject)).isNotNull();
 
-        verify(listener).onOpportunity(7L, companion.id(), "SIMILAR_STORY", 102L, NOW);
+        verify(listener).onOpportunity(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq(companion.id()),
+                org.mockito.ArgumentMatchers.argThat(context ->
+                        context.type() == ProposalOpportunityType.SIMILAR_STORY
+                                && context.anchorPictureId().equals(102L)
+                                && context.targetPictureIds().equals(List.of(104L, 105L))
+                                && context.spaceId().equals(10L)),
+                org.mockito.ArgumentMatchers.eq(NOW));
     }
 
     /** 监听者失败不得影响伙伴提案主链路（配方 WHEN 出问题不能拖垮对话体验）。 */
@@ -453,7 +464,7 @@ class CompanionProposalServiceTest {
         Companion companion = persistedCompanion();
         CompanionOpportunityListener listener = mock(CompanionOpportunityListener.class);
         org.mockito.Mockito.doThrow(new RuntimeException("recipe trigger down"))
-                .when(listener).onOpportunity(anyLong(), anyLong(), any(), any(), any());
+                .when(listener).onOpportunity(anyLong(), anyLong(), any(), any());
         CompanionProposalService localService = new CompanionProposalService(companionRepository,
                 contractRepository, proposalRepository, reactionRepository,
                 List.of(opportunitySource), List.of(listener), evaluator, CompanionBalance.v1(),

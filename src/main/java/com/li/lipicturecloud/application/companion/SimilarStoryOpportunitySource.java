@@ -28,7 +28,8 @@ import static com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConsta
  *   <li>{@code observe}（守门之前，只读）验证"真实机会"——定位最近喂养图并确认它仍存在、
  *       属于某个空间、当前主体仍有查看权限（图片被删/撤权则跳过，授权基础设施异常按
  *       fail-closed 不产生观察）、且该空间近 7 天图片数 ≥ 2；把已确认的
- *       图片/空间/数量作为最小事实放进观察结果。不做评分、不写回情绪、不生成文案。</li>
+ *       锚点图片/空间/数量，以及<b>该空间近 7 天新增且仍授权的目标图片</b>作为最小事实放进
+ *       观察结果。不做评分、不写回情绪、不生成文案。</li>
  *   <li>{@code materialize}（守门通过后）基于观察事实做必要复验（图片仍存在且权限仍有效），
  *       再完成冲动评分与文案。</li>
  * </ul>
@@ -88,10 +89,38 @@ public class SimilarStoryOpportunitySource implements CompanionOpportunitySource
             if (recent < 2) {
                 continue;
             }
+            // 机会必须带上"本次真正要处理的新图片"：锚点（以前喂养过的那张）只是相似性参照，
+            // 下游绝不能拿它当目标图片，否则会对着旧图执行"新出现的旅行图片"这类动作。
+            List<Long> targets = authorizedRecentPictures(picture.spaceId(),
+                    now.minus(Duration.ofDays(7)), subjectId);
+            if (targets.isEmpty()) {
+                // 新增图片全部撤权/不可确认：没有可安全处理的目标，不算真实机会。
+                continue;
+            }
             return Optional.of(new OpportunityObservation(ProposalOpportunityType.SIMILAR_STORY,
-                    pictureId, picture.spaceId(), recent));
+                    pictureId, picture.spaceId(), recent, targets));
         }
         return Optional.empty();
+    }
+
+    /**
+     * 该空间近 7 天新增、且当前主体仍可查看的图片 ID（最新优先）。
+     * 逐张重新授权：撤权的图片直接丢弃；授权服务异常按 fail-closed 返回空集合。
+     */
+    private List<Long> authorizedRecentPictures(long spaceId, Instant since, long subjectId) {
+        List<Long> recentIds = pictureRepository.findRecentIdsInSpace(spaceId, since,
+                OpportunityObservation.MAX_TARGET_PICTURES);
+        List<Long> authorized = new java.util.ArrayList<>();
+        for (Long recentId : recentIds) {
+            PictureAccess access = checkPictureAccess(recentId, subjectId);
+            if (access == PictureAccess.UNVERIFIABLE) {
+                return List.of();
+            }
+            if (access == PictureAccess.AUTHORIZED) {
+                authorized.add(recentId);
+            }
+        }
+        return List.copyOf(authorized);
     }
 
     @Override

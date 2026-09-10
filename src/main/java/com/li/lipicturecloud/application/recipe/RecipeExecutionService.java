@@ -7,6 +7,7 @@ import com.li.lipicturecloud.application.airuntime.LocalCapabilityCatalog;
 import com.li.lipicturecloud.application.airuntime.ModelInvocationException;
 import com.li.lipicturecloud.application.airuntime.StoryDraftService;
 import com.li.lipicturecloud.application.companion.CompanionOpportunityListener;
+import com.li.lipicturecloud.application.companion.OpportunityContext;
 import com.li.lipicturecloud.application.recipe.view.RecipeExecutionView;
 import com.li.lipicturecloud.domain.airuntime.CreationKind;
 import com.li.lipicturecloud.domain.airuntime.CreationTask;
@@ -144,39 +145,43 @@ public class RecipeExecutionService implements CompanionOpportunityListener {
     }
 
     /**
-     * 机会触发端口实现（阶段 3 → 阶段 5）：机会类型名与 {@link RecipeWhenType} 一一对应，
-     * 未知类型只记录并忽略（机会源扩展时不会打断配方链路）。
+     * 机会触发端口实现（阶段 3 → 阶段 5）：用上下文里的强类型机会与<b>真实目标图片</b>
+     * 触发 WHEN 匹配的配方；未知类型只记录并忽略（机会源扩展时不会打断配方链路）。
      */
     @Override
-    public void onOpportunity(long subjectId, long companionId, String whenType, Long pictureId,
+    public void onOpportunity(long subjectId, long companionId, OpportunityContext context,
                               Instant now) {
         RecipeWhenType when;
         try {
-            when = RecipeWhenType.valueOf(whenType);
+            when = RecipeWhenType.valueOf(context.type().name());
         } catch (IllegalArgumentException | NullPointerException unknownType) {
             log.info("recipe_opportunity_skipped subjectId={} when={} reason=UNKNOWN_WHEN_TYPE",
-                    subjectId, whenType);
+                    subjectId, context == null || context.type() == null
+                            ? "null" : context.type().name());
             return;
         }
-        proposeFromOpportunity(subjectId, companionId, when, pictureId, now);
+        proposeFromOpportunity(subjectId, companionId, when,
+                context.targetPictureIds() == null ? List.of() : context.targetPictureIds(), now);
     }
 
     /**
      * 机会触发（阶段 5 的 WHEN 闭环）：阶段 3 机会源观察到真实机会、契约/频率/安静时段
      * 守门通过后调用，为 WHEN 匹配的 ENABLED 配方生成"待确认"执行记录。
      *
-     * <p>只求值与报价，不调用任何能力；用户确认后才创建创作任务。候选图片来自机会本身
-     * （相似图片机会）或伙伴最近完整喂养过的图片（每周回顾/纪念日），逐张重新授权，
-     * 未授权图片直接丢弃。</p>
+     * <p>只求值与报价，不调用任何能力；用户确认后才创建创作任务。来源图片使用机会携带的
+     * <b>目标图片</b>（相似图片机会 = 该空间近 7 天新增且已授权的图片），逐张重新授权；
+     * 目标图片为空时按 WHEN 语义取伙伴最近完整喂养过的图片（每周回顾/纪念日）；相似图片机会
+     * 没有目标图片时直接跳过——绝不用机会锚点（旧喂养图）兜底。</p>
      *
      * @return 本次新建的待确认执行记录（可能为空）
      */
     public List<RecipeExecution> proposeFromOpportunity(long subjectId, long companionId,
-                                                        RecipeWhenType when, Long pictureId,
+                                                        RecipeWhenType when,
+                                                        List<Long> targetPictureIds,
                                                         Instant now) {
         Objects.requireNonNull(when, "when");
         Objects.requireNonNull(now, "now");
-        List<Long> candidates = candidatePictures(subjectId, companionId, when, pictureId);
+        List<Long> candidates = candidatePictures(subjectId, companionId, when, targetPictureIds);
         if (candidates.isEmpty()) {
             log.info("recipe_opportunity_skipped subjectId={} when={} reason=NO_AUTHORIZED_PICTURE",
                     subjectId, when.name());
@@ -301,10 +306,19 @@ public class RecipeExecutionService implements CompanionOpportunityListener {
                     CONDITION_UNMATCHED);
             return null;
         }
-        RecipeExecution saved = executionRepository.insert(RecipeExecution.pending(recipe.id(),
-                version.version(), recipe.subjectId(), now, matchedJson(definition, evaluation),
-                quoteJson(definition.then().capability()), RecipeExecution.snapshotJson(candidates),
-                opportunityKey, now));
+        RecipeExecution saved;
+        try {
+            saved = executionRepository.insert(RecipeExecution.pending(recipe.id(),
+                    version.version(), recipe.subjectId(), now, matchedJson(definition, evaluation),
+                    quoteJson(definition.then().capability()),
+                    RecipeExecution.snapshotJson(candidates), opportunityKey, now));
+        } catch (org.springframework.dao.DuplicateKeyException lostRace) {
+            // (recipeId, opportunityKey) 唯一索引是最终仲裁：并发下输的一方直接跳过，
+            // 不产生第二条待确认记录、也不影响已有记录。
+            log.info("recipe_opportunity_skipped subjectId={} recipeId={} when={} reason=ALREADY_PENDING",
+                    recipe.subjectId(), recipe.id(), when.name());
+            return null;
+        }
         log.info("recipe_opportunity_proposed subjectId={} recipeId={} executionId={} when={} "
                         + "pictures={}", recipe.subjectId(), recipe.id(), saved.id(), when.name(),
                 candidates.size());
@@ -334,12 +348,28 @@ public class RecipeExecutionService implements CompanionOpportunityListener {
         };
     }
 
-    /** 候选图片：机会自带图片优先，否则用伙伴最近完整喂养过的图片；逐张重新授权。 */
+    /**
+     * 候选图片：机会携带的目标图片优先（相似图片机会 = 该空间近 7 天新增的已授权图片）；
+     * 目标图片为空时按 WHEN 语义取伙伴最近完整喂养过的图片（每周回顾/纪念日）。
+     * 相似图片机会缺目标图片时返回空——锚点（旧喂养图）不能替代"新出现的那几张图"。
+     * 逐张重新授权，未授权图片直接丢弃。
+     */
     private List<Long> candidatePictures(long subjectId, long companionId, RecipeWhenType when,
-                                         Long pictureId) {
-        List<Long> candidates = pictureId != null
-                ? List.of(pictureId)
-                : growthRepository.findRecentFedPictureIds(companionId, MAX_CANDIDATE_PICTURES);
+                                         List<Long> targetPictureIds) {
+        List<Long> targets = targetPictureIds == null
+                ? List.of()
+                : targetPictureIds.stream().filter(Objects::nonNull).distinct().toList();
+        List<Long> candidates;
+        if (!targets.isEmpty()) {
+            candidates = targets;
+        } else if (when == RecipeWhenType.SIMILAR_STORY) {
+            // 没有可安全处理的新图片：相似的只是那张旧喂养图，不能拿它当目标。
+            log.info("recipe_opportunity_skipped subjectId={} when={} reason=NO_TARGET_PICTURE",
+                    subjectId, when.name());
+            return List.of();
+        } else {
+            candidates = growthRepository.findRecentFedPictureIds(companionId, MAX_CANDIDATE_PICTURES);
+        }
         LinkedHashSet<Long> authorized = new LinkedHashSet<>();
         for (Long candidate : candidates) {
             if (candidate == null || candidate <= 0 || authorized.size() >= MAX_CANDIDATE_PICTURES) {

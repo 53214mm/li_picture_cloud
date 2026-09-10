@@ -248,14 +248,15 @@ public class CompanionProposalService {
 
     /**
      * 通知机会监听者。监听者失败只告警：配方 WHEN 触发出问题绝不能影响伙伴提案主链路
-     * （机会本身仍会在下一次观察时被重新投递）。
+     * （机会本身仍会在下一次观察时被重新投递）。上下文传递强类型机会与本次真实目标图片，
+     * 避免下游拿机会锚点（旧喂养图）当目标图片。
      */
     private void notifyOpportunity(long subjectId, long companionId,
                                    OpportunityObservation observation, Instant now) {
+        OpportunityContext context = OpportunityContext.from(observation);
         for (CompanionOpportunityListener listener : opportunityListeners) {
             try {
-                listener.onOpportunity(subjectId, companionId, observation.type().name(),
-                        observation.pictureId(), now);
+                listener.onOpportunity(subjectId, companionId, context, now);
             } catch (RuntimeException listenerFailure) {
                 log.warn("companion_opportunity_listener_failed subjectId={} type={} listener={}",
                         subjectId, observation.type().name(),

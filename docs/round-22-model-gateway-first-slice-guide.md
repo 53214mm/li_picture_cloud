@@ -103,10 +103,15 @@
 
 已知边界（2026-09 阶段 5 复审整改后更新）：WHEN 已经真实接入 Q2/Q3 机会源——阶段 3 的
 `CompanionProposalService` 在机会观察成功且契约/频率/安静时段守门通过后，通过
-`CompanionOpportunityListener` 端口把该机会投递给 `RecipeExecutionService`，为 WHEN 匹配的
-ENABLED 配方生成 `PENDING_CONFIRM`（待确认）执行记录；**自动执行仍不开放**：THEN 只在该记录
-被用户确认后调用。一次评估只投递"当次被观察到的机会"（沿用机会源 @Order 优先级短路），
-因此不同 WHEN 的机会可能落在不同次评估上。报价是上限承诺，实际结算由创作服务试用账本硬上限守护。
+`CompanionOpportunityListener` 端口把类型化的 `OpportunityContext` 投递给
+`RecipeExecutionService`，为 WHEN 匹配的 ENABLED 配方生成 `PENDING_CONFIRM`（待确认）执行记录；
+**自动执行仍不开放**：THEN 只在该记录被用户确认后调用。上下文里的
+`targetPictureIds` 是本次机会真正要处理的已授权图片（相似图片机会 = 该空间近 7 天新增的图片），
+机会锚点 `anchorPictureId`（以前喂养过的那张参照图）绝不参与 IF 求值，也不会进入执行快照——
+相似图片机会缺目标图片时直接跳过而不是拿旧图兜底。一次评估只投递"当次被观察到的机会"
+（沿用机会源 @Order 优先级短路），因此不同 WHEN 的机会可能落在不同次评估上。
+机会去重由数据库唯一索引 `(recipeId, opportunityKey)` 兜底，并发双插时输的一方直接跳过。
+报价是上限承诺，实际结算由创作服务试用账本硬上限守护。
 
 ## 独立审查与修复（第十一轮审查）
 
