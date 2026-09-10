@@ -6,9 +6,17 @@ export const RECIPE_STATUS = {
 
 export const RECIPE_EXECUTION_STATUS = {
   DRY_RUN: '试运行',
+  PENDING_CONFIRM: '待确认（机会触发）',
   EXECUTED: '已执行',
   FAILED: '执行失败',
   REJECTED: '条件未命中'
+}
+
+/** 等待用户确认的状态：只有这些状态的记录能触发"确认执行"。 */
+export const RECIPE_AWAITING_STATUS = ['DRY_RUN', 'PENDING_CONFIRM']
+
+export function recipeExecutionIsAwaiting(status) {
+  return RECIPE_AWAITING_STATUS.includes(status)
 }
 
 export const RECIPE_WHEN_LABEL = {

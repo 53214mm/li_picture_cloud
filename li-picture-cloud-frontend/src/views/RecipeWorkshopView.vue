@@ -11,13 +11,18 @@
       <h2 id="templates-title">官方模板</h2>
       <ul v-if="templates.length" class="template-list">
         <li v-for="template in templates" :key="template.code" class="template-card"
+            :class="{ unavailable: !template.available }"
             :data-template="template.code">
           <strong>{{ template.name }}</strong>
           <p>{{ template.description }}</p>
           <p class="template-summary">
             {{ summaryText(template) }}
           </p>
-          <button class="btn btn-sm" type="button" :disabled="busy"
+          <p v-if="!template.available" class="template-unavailable"
+             data-testid="template-unavailable">
+            该模板依赖的能力尚未开放：{{ template.unavailableReason }}
+          </p>
+          <button class="btn btn-sm" type="button" :disabled="busy || !template.available"
                   @click="createFromTemplate(template)">
             用这个模板创建
           </button>
@@ -116,10 +121,16 @@
           </fieldset>
           <label class="editor-field">动作（白名单能力）
             <select v-model="editor.then" aria-label="动作">
-              <option v-for="(label, capability) in RECIPE_CAPABILITY_LABEL" :key="capability"
-                      :value="capability">{{ label }}</option>
+              <option v-for="option in capabilityOptions" :key="option.value"
+                      :value="option.value" :disabled="!option.open">
+                {{ option.label }}{{ option.open ? '' : '（未开放）' }}
+              </option>
             </select>
           </label>
+          <p v-if="selectedCapability && !selectedCapability.open" class="capability-unavailable"
+             data-testid="capability-unavailable">
+            该能力尚未开放，服务端会拒绝发布与执行：{{ selectedCapability.unavailableReason }}
+          </p>
           <button class="btn" type="submit" :disabled="busy || !editorValid">发布新版本</button>
           <p class="dry-run-hint">新版本发布后，试运行与执行都会按最新版本重新评估。</p>
         </form>
@@ -139,7 +150,7 @@
         </div>
         <button class="btn" type="button" :disabled="busy || selectedIds.length === 0"
                 @click="dryRun">试运行</button>
-        <p class="dry-run-hint">试运行会按当前定义评估条件并给出费用报价，确认后才产生真实创作任务。</p>
+        <p class="dry-run-hint">试运行会按当前定义评估条件并给出费用报价，并把这次选中的图片绑定到执行记录上；确认执行只会用这组图片。</p>
       </div>
       <p v-else class="empty-state">私有图库里暂时没有可用图片，试运行需要先有授权图片。</p>
 
@@ -150,6 +161,13 @@
               :data-execution-status="execution.status">
             <span class="execution-status">{{ recipeExecutionStatusLabel(execution.status) }}</span>
             <span class="execution-meta">v{{ execution.recipeVersion }} · {{ execution.triggeredTime }}</span>
+            <span v-if="execution.opportunityKey" class="execution-opportunity"
+                  data-testid="execution-opportunity">
+              机会触发 {{ execution.opportunityKey }}
+            </span>
+            <span class="execution-pictures">
+              来源图片 {{ (execution.sourcePictureIds || []).length }} 张
+            </span>
             <span v-if="execution.creationTaskId" class="execution-task">
               创作任务 #{{ execution.creationTaskId }}
             </span>
@@ -162,11 +180,20 @@
             <p class="execution-matched" v-if="execution.matchedJson">
               命中：{{ matchedText(execution.matchedJson) }}
             </p>
-            <button v-if="execution.status === 'DRY_RUN' && selected.recipe.status === 'ENABLED'"
-                    class="btn btn-sm" type="button" :disabled="busy || selectedIds.length === 0"
+            <button v-if="recipeExecutionIsAwaiting(execution.status) && selected.recipe.status === 'ENABLED'"
+                    class="btn btn-sm" type="button"
+                    :disabled="busy || !snapshotReady(execution) || !snapshotMatchesSelection(execution)"
                     @click="execute(execution)">
-              确认执行（使用当前所选图片）
+              确认执行（使用试运行的 {{ (execution.sourcePictureIds || []).length }} 张图片）
             </button>
+            <p v-if="recipeExecutionIsAwaiting(execution.status) && !snapshotReady(execution)"
+               class="snapshot-warning" data-testid="snapshot-missing">
+              这条记录没有来源图片快照，请重新试运行。
+            </p>
+            <p v-else-if="recipeExecutionIsAwaiting(execution.status) && !snapshotMatchesSelection(execution)"
+               class="snapshot-warning" data-testid="snapshot-changed">
+              所选图片与试运行时不一致，请重新试运行后再确认执行。
+            </p>
           </li>
         </ul>
       </div>
@@ -184,6 +211,7 @@ import {
   enableRecipe,
   executeRecipe,
   getRecipeDetail,
+  listRecipeCapabilities,
   listRecipeExecutions,
   listRecipes,
   listRecipeTemplates,
@@ -194,6 +222,7 @@ import {
   RECIPE_WHEN_LABEL,
   recipeCapabilityLabel,
   recipeConditionLabel,
+  recipeExecutionIsAwaiting,
   recipeExecutionStatusLabel,
   recipeStatusLabel,
   recipeWhenLabel
@@ -205,6 +234,7 @@ import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const templates = ref([])
+const capabilities = ref([])
 const recipes = ref([])
 const selected = ref(null)
 const executions = ref([])
@@ -212,6 +242,20 @@ const pictures = ref([])
 const selectedIds = ref([])
 const busy = ref(false)
 const error = ref('')
+
+/** 能力选项来自服务端：未开放能力一律禁用（服务端也会拒绝发布与执行）。 */
+const capabilityOptions = computed(() => Object.keys(RECIPE_CAPABILITY_LABEL).map(capability => {
+  const availability = capabilities.value.find(item => item.capability === capability)
+  return {
+    value: capability,
+    label: RECIPE_CAPABILITY_LABEL[capability],
+    open: availability ? availability.open : false,
+    unavailableReason: availability?.unavailableReason || ''
+  }
+}))
+
+const selectedCapability = computed(() =>
+  capabilityOptions.value.find(option => option.value === editor.then) || null)
 
 const editor = reactive({
   when: 'WEEKLY_REVIEW',
@@ -235,7 +279,7 @@ const editorValid = computed(() => {
 })
 
 onMounted(async () => {
-  await Promise.all([loadTemplates(), loadRecipes(), loadPictures()])
+  await Promise.all([loadTemplates(), loadCapabilities(), loadRecipes(), loadPictures()])
 })
 
 async function loadTemplates() {
@@ -243,6 +287,14 @@ async function loadTemplates() {
     templates.value = (await listRecipeTemplates()) ?? []
   } catch (failure) {
     error.value = extractMessage(failure, '模板加载失败')
+  }
+}
+
+async function loadCapabilities() {
+  try {
+    capabilities.value = (await listRecipeCapabilities()) ?? []
+  } catch (failure) {
+    error.value = extractMessage(failure, '能力可用性加载失败')
   }
 }
 
@@ -419,7 +471,8 @@ async function dryRun() {
 async function execute(execution) {
   busy.value = true
   try {
-    await executeRecipe(selected.value.recipe.id, execution.id, { pictureIds: selectedIds.value })
+    // 确认执行不带图片：服务端只认执行记录里的来源图片快照，改选图片必须重新试运行。
+    await executeRecipe(selected.value.recipe.id, execution.id, {})
     executions.value = (await listRecipeExecutions(selected.value.recipe.id)) ?? []
     error.value = ''
   } catch (failure) {
@@ -428,6 +481,25 @@ async function execute(execution) {
   } finally {
     busy.value = false
   }
+}
+
+function snapshotReady(execution) {
+  return (execution.sourcePictureIds || []).length > 0
+}
+
+/**
+ * 当前所选图片是否与记录的来源图片快照一致。
+ * 没有勾选任何图片时直接用快照（机会触发的待确认记录本来就没有"当前所选"）。
+ */
+function snapshotMatchesSelection(execution) {
+  const current = new Set(selectedIds.value.map(String))
+  if (current.size === 0) return true
+  const snapshot = new Set((execution.sourcePictureIds || []).map(String))
+  if (snapshot.size !== current.size) return false
+  for (const id of current) {
+    if (!snapshot.has(id)) return false
+  }
+  return true
 }
 
 function summaryText(template) {
@@ -462,6 +534,9 @@ function quoteText(quoteJson) {
 function matchedText(matchedJson) {
   const matched = parseJson(matchedJson)
   if (!matched) return ''
+  if (matched.conditionResults === 'SKIPPED_UNAUTHORIZED') {
+    return `${recipeWhenLabel(matched.when)} · 图片已撤权，未评估任何条件`
+  }
   const conditions = matched.conditions ?? []
   if (!conditions.length) return `${recipeWhenLabel(matched.when)} · 无条件`
   return conditions.map(condition => `${recipeConditionLabel(condition.type)}${condition.matched ? '✓' : '✗'}`).join('，')
@@ -489,6 +564,10 @@ function extractMessage(failure, fallback) {
 .recipe-templates > h2, .recipe-mine > h2, .recipe-detail > h2 { margin: 0; padding: 1rem 1.25rem; border-bottom: 2px solid var(--black); font-size: 1.1rem; }
 .template-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: .8rem; padding: 1rem 1.25rem; }
 .template-card { display: grid; gap: .4rem; padding: .9rem; border: 1px solid var(--gray-400); }
+.template-card.unavailable { border-style: dashed; background: var(--gray-100); }
+.template-card.unavailable .btn { cursor: not-allowed; opacity: .6; }
+.template-unavailable { padding: .4rem .5rem; border-left: 3px solid #8a6d1a; background: #fdf6e3; color: #8a6d1a; font-size: .74rem; }
+.capability-unavailable { padding: .4rem .5rem; border-left: 3px solid #8a6d1a; background: #fdf6e3; color: #8a6d1a; font-size: .74rem; }
 .template-card p { font-size: .8rem; color: var(--gray-600); }
 .template-summary { font-weight: 700; color: #075d2a; }
 .recipe-list, .execution-list { list-style: none; }
@@ -515,6 +594,9 @@ function extractMessage(failure, fallback) {
 .execution-status { justify-self: start; padding: .1rem .45rem; background: var(--gray-100); border: 1px solid var(--gray-400); font-size: .72rem; font-weight: 700; }
 .execution-meta { font-size: .72rem; color: var(--gray-600); }
 .execution-task { font-size: .8rem; font-weight: 700; color: #075d2a; }
+.execution-opportunity { font-size: .75rem; font-weight: 700; color: #075d2a; }
+.execution-pictures { font-size: .75rem; color: var(--gray-600); }
+.snapshot-warning { font-size: .78rem; color: #8a6d1a; }
 .execution-error { font-size: .8rem; font-weight: 700; color: var(--red); }
 .execution-quote, .execution-matched { font-size: .8rem; }
 .empty-state { padding: 1rem 1.25rem; color: var(--gray-600); font-size: .9rem; }

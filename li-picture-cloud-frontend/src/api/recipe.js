@@ -1,6 +1,7 @@
 import request from './request'
 
 export const listRecipeTemplates = () => request.get('/recipe/templates')
+export const listRecipeCapabilities = () => request.get('/recipe/capabilities')
 export const createRecipe = data => request.post('/recipe', data)
 export const createRecipeFromTemplate = data => request.post('/recipe/from-template', data)
 export const listRecipes = (limit = 20) => request.get('/recipe', { params: { limit } })
