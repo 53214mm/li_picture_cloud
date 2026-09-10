@@ -46,20 +46,25 @@ public class MybatisPictureRepository implements PictureRepository, PictureAsset
     }
 
     @Override
-    public List<Long> findRecentIdsInSpace(long spaceId, Instant since, int limit) {
+    public List<Long> findRecentIdsInSpace(long spaceId, Instant since, int limit,
+                                           Long excludePictureId) {
         if (spaceId <= 0) {
             return List.of();
         }
         // 与计数同口径（只含已通过审核的图片、同一时间窗），并且只投影 ID 列。
-        return pictureMapper.selectList(new LambdaQueryWrapper<Picture>()
-                        .select(Picture::getId)
-                        .eq(Picture::getSpaceId, spaceId)
-                        .eq(Picture::getReviewStatus, 1)
-                        .ge(Picture::getCreateTime, Date.from(Objects.requireNonNull(since, "since")))
-                        .orderByDesc(Picture::getCreateTime)
-                        .orderByDesc(Picture::getId)
-                        .last("LIMIT " + Math.max(1, Math.min(limit, 50))))
-                .stream()
+        // 锚点图在查询层排除：拿满 limit 张"除锚点之外"的新图片，而不是先取满再丢弃。
+        LambdaQueryWrapper<Picture> query = new LambdaQueryWrapper<Picture>()
+                .select(Picture::getId)
+                .eq(Picture::getSpaceId, spaceId)
+                .eq(Picture::getReviewStatus, 1)
+                .ge(Picture::getCreateTime, Date.from(Objects.requireNonNull(since, "since")))
+                .orderByDesc(Picture::getCreateTime)
+                .orderByDesc(Picture::getId)
+                .last("LIMIT " + Math.max(1, Math.min(limit, 50)));
+        if (excludePictureId != null) {
+            query.ne(Picture::getId, excludePictureId);
+        }
+        return pictureMapper.selectList(query).stream()
                 .map(Picture::getId)
                 .filter(Objects::nonNull)
                 .toList();

@@ -64,7 +64,7 @@ class SimilarStoryOpportunitySourceTest {
         when(pictureRepository.countRecentInSpace(30L, NOW.minus(java.time.Duration.ofDays(7))))
                 .thenReturn(4L);
         when(pictureRepository.findRecentIdsInSpace(30L,
-                NOW.minus(java.time.Duration.ofDays(7)), 12)).thenReturn(List.of(103L));
+                NOW.minus(java.time.Duration.ofDays(7)), 12, 102L)).thenReturn(List.of(103L));
 
         Optional<OpportunityObservation> observation = source.observe(11L, 7L, NOW);
 
@@ -93,7 +93,7 @@ class SimilarStoryOpportunitySourceTest {
         when(pictureRepository.countRecentInSpace(30L, NOW.minus(java.time.Duration.ofDays(7))))
                 .thenReturn(3L);
         when(pictureRepository.findRecentIdsInSpace(30L,
-                NOW.minus(java.time.Duration.ofDays(7)), 12)).thenReturn(List.of(103L, 104L));
+                NOW.minus(java.time.Duration.ofDays(7)), 12, 102L)).thenReturn(List.of(103L, 104L));
         doThrow(new BusinessException(ErrorCode.NO_AUTH_ERROR, "缺少权限"))
                 .when(authorization).checkForUser(PICTURE_VIEW, 104L, 7L);
 
@@ -104,7 +104,46 @@ class SimilarStoryOpportunitySourceTest {
 
         // 目标图片全部撤权 → 没有可安全处理的目标，不算真实机会。
         when(pictureRepository.findRecentIdsInSpace(30L,
-                NOW.minus(java.time.Duration.ofDays(7)), 12)).thenReturn(List.of(104L));
+                NOW.minus(java.time.Duration.ofDays(7)), 12, 102L)).thenReturn(List.of(104L));
+        assertThat(source.observe(11L, 7L, NOW)).isEmpty();
+    }
+
+    /**
+     * 锚点绝不允许进入目标集合：即使仓储（或未来实现）把锚点也返回了，
+     * 目标图片也必须只剩"新图片"，并且查询层本身要带上排除参数。
+     * 真实形状：仓储返回 [102 锚点花园, 103 新旅行] → 目标只能是 [103]。
+     */
+    @Test
+    void observeNeverTreatsTheAnchorAsATargetPicture() {
+        when(growthRepository.findRecentFedPictureIds(11L, 5)).thenReturn(List.of(102L));
+        when(pictureRepository.findAssetById(102L))
+                .thenReturn(Optional.of(new PictureAsset(102L, 7L, 30L)));
+        when(pictureRepository.countRecentInSpace(30L, NOW.minus(java.time.Duration.ofDays(7))))
+                .thenReturn(2L);
+        when(pictureRepository.findRecentIdsInSpace(30L,
+                NOW.minus(java.time.Duration.ofDays(7)), 12, 102L)).thenReturn(List.of(102L, 103L));
+
+        Optional<OpportunityObservation> observation = source.observe(11L, 7L, NOW);
+
+        assertThat(observation).isPresent();
+        assertThat(observation.get().pictureId()).isEqualTo(102L);
+        assertThat(observation.get().targetPictureIds()).containsExactly(103L);
+        // 查询层必须显式排除锚点（拿满"除锚点之外"的图片）。
+        verify(pictureRepository).findRecentIdsInSpace(30L,
+                NOW.minus(java.time.Duration.ofDays(7)), 12, 102L);
+    }
+
+    /** 锚点是该空间近期唯一图片时不算真实机会：绝不把锚点自己当成目标。 */
+    @Test
+    void observeStaysQuietWhenOnlyTheAnchorIsRecent() {
+        when(growthRepository.findRecentFedPictureIds(11L, 5)).thenReturn(List.of(102L));
+        when(pictureRepository.findAssetById(102L))
+                .thenReturn(Optional.of(new PictureAsset(102L, 7L, 30L)));
+        when(pictureRepository.countRecentInSpace(30L, NOW.minus(java.time.Duration.ofDays(7))))
+                .thenReturn(2L);
+        when(pictureRepository.findRecentIdsInSpace(30L,
+                NOW.minus(java.time.Duration.ofDays(7)), 12, 102L)).thenReturn(List.of(102L));
+
         assertThat(source.observe(11L, 7L, NOW)).isEmpty();
     }
 
@@ -117,7 +156,7 @@ class SimilarStoryOpportunitySourceTest {
         when(pictureRepository.countRecentInSpace(30L, NOW.minus(java.time.Duration.ofDays(7))))
                 .thenReturn(3L);
         when(pictureRepository.findRecentIdsInSpace(30L,
-                NOW.minus(java.time.Duration.ofDays(7)), 12)).thenReturn(List.of(103L));
+                NOW.minus(java.time.Duration.ofDays(7)), 12, 102L)).thenReturn(List.of(103L));
         doThrow(new BusinessException(ErrorCode.SYSTEM_ERROR, "授权服务暂时不可用"))
                 .when(authorization).checkForUser(PICTURE_VIEW, 103L, 7L);
 
@@ -132,7 +171,7 @@ class SimilarStoryOpportunitySourceTest {
         when(pictureRepository.countRecentInSpace(30L, NOW.minus(java.time.Duration.ofDays(7))))
                 .thenReturn(4L);
         when(pictureRepository.findRecentIdsInSpace(30L,
-                NOW.minus(java.time.Duration.ofDays(7)), 12)).thenReturn(List.of(103L));
+                NOW.minus(java.time.Duration.ofDays(7)), 12, 102L)).thenReturn(List.of(103L));
 
         Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 
@@ -155,8 +194,7 @@ class SimilarStoryOpportunitySourceTest {
 
         assertThat(observation).isEmpty();
         verify(pictureRepository, never()).countRecentInSpace(anyLong(), any());
-        verify(pictureRepository, never()).findRecentIdsInSpace(anyLong(), any(),
-                org.mockito.ArgumentMatchers.anyInt());
+        verify(pictureRepository, never()).findRecentIdsInSpace(anyLong(), any(), org.mockito.ArgumentMatchers.anyInt(), any());
         verify(authorization, never()).checkForUser(any(), any(), any());
     }
 
@@ -170,8 +208,7 @@ class SimilarStoryOpportunitySourceTest {
 
         assertThat(source.observe(11L, 7L, NOW)).isEmpty();
         // 数量不满足也是"无真实机会"，不是候选；也不会去查目标图片。
-        verify(pictureRepository, never()).findRecentIdsInSpace(anyLong(), any(),
-                org.mockito.ArgumentMatchers.anyInt());
+        verify(pictureRepository, never()).findRecentIdsInSpace(anyLong(), any(), org.mockito.ArgumentMatchers.anyInt(), any());
         verify(moodRepository, never()).findByCompanionId(anyLong());
     }
 
@@ -196,7 +233,7 @@ class SimilarStoryOpportunitySourceTest {
         when(pictureRepository.countRecentInSpace(31L, NOW.minus(java.time.Duration.ofDays(7))))
                 .thenReturn(3L);
         when(pictureRepository.findRecentIdsInSpace(31L,
-                NOW.minus(java.time.Duration.ofDays(7)), 12)).thenReturn(List.of(103L));
+                NOW.minus(java.time.Duration.ofDays(7)), 12, 102L)).thenReturn(List.of(103L));
 
         Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 
@@ -230,7 +267,7 @@ class SimilarStoryOpportunitySourceTest {
         when(pictureRepository.countRecentInSpace(31L, NOW.minus(java.time.Duration.ofDays(7))))
                 .thenReturn(3L);
         when(pictureRepository.findRecentIdsInSpace(31L,
-                NOW.minus(java.time.Duration.ofDays(7)), 12)).thenReturn(List.of(103L));
+                NOW.minus(java.time.Duration.ofDays(7)), 12, 102L)).thenReturn(List.of(103L));
 
         Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 

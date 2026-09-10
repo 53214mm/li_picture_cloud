@@ -28,8 +28,8 @@ import static com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConsta
  *   <li>{@code observe}（守门之前，只读）验证"真实机会"——定位最近喂养图并确认它仍存在、
  *       属于某个空间、当前主体仍有查看权限（图片被删/撤权则跳过，授权基础设施异常按
  *       fail-closed 不产生观察）、且该空间近 7 天图片数 ≥ 2；把已确认的
- *       锚点图片/空间/数量，以及<b>该空间近 7 天新增且仍授权的目标图片</b>作为最小事实放进
- *       观察结果。不做评分、不写回情绪、不生成文案。</li>
+ *       锚点图片/空间/数量，以及<b>该空间近 7 天新增、仍授权、且不含锚点本身的目标图片</b>
+ *       作为最小事实放进观察结果。不做评分、不写回情绪、不生成文案。</li>
  *   <li>{@code materialize}（守门通过后）基于观察事实做必要复验（图片仍存在且权限仍有效），
  *       再完成冲动评分与文案。</li>
  * </ul>
@@ -92,9 +92,10 @@ public class SimilarStoryOpportunitySource implements CompanionOpportunitySource
             // 机会必须带上"本次真正要处理的新图片"：锚点（以前喂养过的那张）只是相似性参照，
             // 下游绝不能拿它当目标图片，否则会对着旧图执行"新出现的旅行图片"这类动作。
             List<Long> targets = authorizedRecentPictures(picture.spaceId(),
-                    now.minus(Duration.ofDays(7)), subjectId);
+                    now.minus(Duration.ofDays(7)), subjectId, pictureId);
             if (targets.isEmpty()) {
-                // 新增图片全部撤权/不可确认：没有可安全处理的目标，不算真实机会。
+                // 该空间近期只有锚点本身（或新增图片全部撤权）：没有可安全处理的目标，
+                // 不算真实机会——绝不把锚点当目标。
                 continue;
             }
             return Optional.of(new OpportunityObservation(ProposalOpportunityType.SIMILAR_STORY,
@@ -104,14 +105,24 @@ public class SimilarStoryOpportunitySource implements CompanionOpportunitySource
     }
 
     /**
-     * 该空间近 7 天新增、且当前主体仍可查看的图片 ID（最新优先）。
-     * 逐张重新授权：撤权的图片直接丢弃；授权服务异常按 fail-closed 返回空集合。
+     * 该空间近 7 天新增、当前主体仍可查看、且<b>不是锚点本身</b>的图片 ID（最新优先）。
+     * 锚点在查询层排除（拿满"除锚点之外"的 limit 张）；这里再按不变量过滤一次，
+     * 保证目标集合永远不含锚点。逐张重新授权：撤权的图片直接丢弃；
+     * 授权服务异常按 fail-closed 返回空集合。
      */
-    private List<Long> authorizedRecentPictures(long spaceId, Instant since, long subjectId) {
+    private List<Long> authorizedRecentPictures(long spaceId, Instant since, long subjectId,
+                                                long anchorPictureId) {
         List<Long> recentIds = pictureRepository.findRecentIdsInSpace(spaceId, since,
-                OpportunityObservation.MAX_TARGET_PICTURES);
+                OpportunityObservation.MAX_TARGET_PICTURES, anchorPictureId);
         List<Long> authorized = new java.util.ArrayList<>();
         for (Long recentId : recentIds) {
+            if (recentId == null) {
+                continue;
+            }
+            if (recentId == anchorPictureId) {
+                // 锚点不是目标：即使查询层漏了排除，也不允许它进入目标集合。
+                continue;
+            }
             PictureAccess access = checkPictureAccess(recentId, subjectId);
             if (access == PictureAccess.UNVERIFIABLE) {
                 return List.of();

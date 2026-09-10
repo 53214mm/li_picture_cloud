@@ -160,8 +160,22 @@ public class RecipeExecutionService implements CompanionOpportunityListener {
                             ? "null" : context.type().name());
             return;
         }
-        proposeFromOpportunity(subjectId, companionId, when,
-                context.targetPictureIds() == null ? List.of() : context.targetPictureIds(), now);
+        proposeFromOpportunity(subjectId, companionId, when, targetPictures(context), now);
+    }
+
+    /**
+     * 目标图片：机会上下文里的目标图片去掉锚点本身。锚点是"以前喂养过的那张参照图"，
+     * 绝不能进入 IF 求值或执行快照——否则旧花园图会污染"新旅行图"的命中判断。
+     */
+    private static List<Long> targetPictures(OpportunityContext context) {
+        List<Long> targets = context.targetPictureIds() == null
+                ? List.of()
+                : context.targetPictureIds();
+        Long anchor = context.anchorPictureId();
+        if (anchor == null) {
+            return List.copyOf(targets);
+        }
+        return targets.stream().filter(pictureId -> !anchor.equals(pictureId)).toList();
     }
 
     /**

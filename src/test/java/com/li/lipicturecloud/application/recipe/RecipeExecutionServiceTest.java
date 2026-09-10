@@ -568,6 +568,41 @@ class RecipeExecutionServiceTest {
                 org.mockito.ArgumentMatchers.eq(RecipeExecutionStatus.PENDING_CONFIRM));
     }
 
+    /**
+     * P1 端到端形状：机会上下文同时带锚点与目标（真实仓储可能返回 [锚点, 新图]），
+     * 配方必须丢弃锚点——旧花园锚点不得污染"新旅行图"的命中判断，也不能进入执行快照。
+     */
+    @Test
+    void onOpportunityDropsTheAnchorFromTheTargetPictures() {
+        Picture garden = new Picture();
+        garden.setId(102L);
+        garden.setCategory("花园");
+        garden.setSpaceId(10L);
+        when(pictureRepository.findById(102L)).thenReturn(Optional.of(garden));
+        Picture travel = new Picture();
+        travel.setId(103L);
+        travel.setCategory("旅行");
+        travel.setSpaceId(10L);
+        when(pictureRepository.findById(103L)).thenReturn(Optional.of(travel));
+        when(recipeRepository.findEnabledBySubjectId(7L)).thenReturn(List.of(recipe(RecipeStatus.ENABLED)));
+        when(versionRepository.findLatest(9L)).thenReturn(Optional.of(version(1,
+                "{\"type\":\"SIMILAR_STORY\"}",
+                "[{\"type\":\"SOURCE_CATEGORY\",\"category\":\"旅行\"}]", THEN_STORY)));
+
+        service.onOpportunity(7L, 3L, new OpportunityContext(
+                ProposalOpportunityType.SIMILAR_STORY, 102L, List.of(102L, 103L), 10L, 2L), NOW);
+
+        org.mockito.ArgumentCaptor<RecipeExecution> inserted =
+                org.mockito.ArgumentCaptor.forClass(RecipeExecution.class);
+        verify(executionRepository).insert(inserted.capture());
+        RecipeExecution proposed = inserted.getValue();
+        // 快照只有新旅行图（103）；锚点花园图（102）既不参与求值也不进任务。
+        assertThat(proposed.sourcePictureIds()).containsExactly(103L);
+        assertThat(proposed.opportunityKey()).isEqualTo("SIMILAR_STORY-103");
+        // 锚点分类没有被读取（它是参照图，不是目标）。
+        verify(pictureRepository, never()).findById(102L);
+    }
+
     /** 端口映射：强类型机会 + 目标图片进入候选；未知类型只忽略，不打断任何链路。 */
     @Test
     void onOpportunityMapsTheTypedContextAndIgnoresUnknownTypes() {
