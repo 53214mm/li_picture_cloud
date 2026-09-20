@@ -1,5 +1,6 @@
 package com.li.lipicturecloud.repository.mybatis;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.li.lipicturecloud.domain.picture.PictureAsset;
 import com.li.lipicturecloud.domain.picture.PictureAssetRepository;
 import com.li.lipicturecloud.mapper.PictureMapper;
@@ -7,6 +8,10 @@ import com.li.lipicturecloud.model.entity.Picture;
 import com.li.lipicturecloud.repository.PictureRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
+import java.util.Date;
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Repository
@@ -25,8 +30,44 @@ public class MybatisPictureRepository implements PictureRepository, PictureAsset
 
     @Override
     public Optional<PictureAsset> findAssetById(long pictureId) {
-        return findById(pictureId).map(picture ->
-                new PictureAsset(picture.getId(), picture.getUserId(), picture.getSpaceId()));
+        // 投影查询：只取归属三列，不加载 URL/名称/简介等字段。
+        return Optional.ofNullable(pictureMapper.selectAssetColumns(pictureId))
+                .map(picture -> new PictureAsset(picture.getId(), picture.getUserId(), picture.getSpaceId()));
+    }
+
+    @Override
+    public long countRecentInSpace(long spaceId, Instant since) {
+        // 逻辑删除由 @TableLogic 自动过滤；这里只统计已通过审核的图片，
+        // 避免把用户看不到的待审/驳回图片计入"新来了 N 张"。
+        return pictureMapper.selectCount(new LambdaQueryWrapper<Picture>()
+                .eq(Picture::getSpaceId, spaceId)
+                .eq(Picture::getReviewStatus, 1)
+                .ge(Picture::getCreateTime, Date.from(Objects.requireNonNull(since, "since"))));
+    }
+
+    @Override
+    public List<Long> findRecentIdsInSpace(long spaceId, Instant since, int limit,
+                                           Long excludePictureId) {
+        if (spaceId <= 0) {
+            return List.of();
+        }
+        // 与计数同口径（只含已通过审核的图片、同一时间窗），并且只投影 ID 列。
+        // 锚点图在查询层排除：拿满 limit 张"除锚点之外"的新图片，而不是先取满再丢弃。
+        LambdaQueryWrapper<Picture> query = new LambdaQueryWrapper<Picture>()
+                .select(Picture::getId)
+                .eq(Picture::getSpaceId, spaceId)
+                .eq(Picture::getReviewStatus, 1)
+                .ge(Picture::getCreateTime, Date.from(Objects.requireNonNull(since, "since")))
+                .orderByDesc(Picture::getCreateTime)
+                .orderByDesc(Picture::getId)
+                .last("LIMIT " + Math.max(1, Math.min(limit, 50)));
+        if (excludePictureId != null) {
+            query.ne(Picture::getId, excludePictureId);
+        }
+        return pictureMapper.selectList(query).stream()
+                .map(Picture::getId)
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     @Override

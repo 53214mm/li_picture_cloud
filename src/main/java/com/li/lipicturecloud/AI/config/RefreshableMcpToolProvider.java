@@ -35,7 +35,8 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Component
-public class RefreshableMcpToolProvider implements ToolCallbackProvider {
+public class RefreshableMcpToolProvider implements ToolCallbackProvider,
+        com.li.lipicturecloud.application.airuntime.McpToolCacheInvalidator {
 
     @Value("${mxai.api-key}")
     private String apiKey;
@@ -50,6 +51,11 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
     private McpSyncHttpClientRequestCustomizer mcpAuthCustomizer;
     @Resource
     private McpGeneratedImageHandler generatedImageHandler;
+    @Resource
+    private com.li.lipicturecloud.application.airuntime.McpToolAccessDecider mcpToolAccessDecider;
+
+    /** 平台审核服务代码：与 spring.ai.mcp.client.sse.connections 中的连接名对应。 */
+    private static final String REVIEWED_SERVICE_CODE = "mxai-mcp-server";
 
     /** 缓存 MCP 工具回调列表，避免每次请求都连接 MCP 列举工具 */
     private volatile ToolCallback[] cachedCallbacks = new ToolCallback[0];
@@ -110,6 +116,12 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
 
                 for (McpSchema.Tool tool : tools.tools()) {
                     String name = tool.name();
+                    // 白名单裁决（fail-closed）：裁决器缺失同样拒绝，绝不 fail-open。
+                    if (mcpToolAccessDecider == null
+                            || !mcpToolAccessDecider.isToolAllowed(REVIEWED_SERVICE_CODE, name)) {
+                        log.info("mcp_tool_filtered service={} tool={}", REVIEWED_SERVICE_CODE, name);
+                        continue;
+                    }
                     String desc = tool.description() != null ? tool.description() : "";
                     // ★ 从 MCP 服务端获取真实的 JSON Schema
                     String inputSchema = "{}";
@@ -130,7 +142,8 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
                         callbacks.stream().map(ToolCallback::getToolDefinition)
                                 .map(ToolDefinition::name).toList());
             } catch (Exception e) {
-                log.warn("MCP 工具列表获取失败: {}", e.getMessage());
+                log.warn("mcp_tool_list_refresh_failed service={} exceptionType={}",
+                        REVIEWED_SERVICE_CODE, e.getClass().getName());
             } finally {
                 if (client != null) { try { client.close(); } catch (Exception ignored) {} }
             }
@@ -139,6 +152,15 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
     }
 
     // ======================== ToolCallback 实现 ========================
+
+    /** 白名单/启停变更后立即使缓存失效，下一次列举重新裁决。 */
+    @Override
+    public void invalidateToolCache() {
+        synchronized (this) {
+            cachedCallbacks = new ToolCallback[0];
+            lastRefreshTime = 0;
+        }
+    }
 
     /**
      * 每次调用都新建 MCP 连接的自定义 ToolCallback。
@@ -169,6 +191,13 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
 
         @Override
         public String call(String toolInput) {
+            // 调用时再裁决一次（fail-closed）：白名单在列举后被停用的工具不得继续可调。
+            if (mcpToolAccessDecider == null
+                    || !mcpToolAccessDecider.isToolAllowed(REVIEWED_SERVICE_CODE, toolName)) {
+                log.warn("mcp_tool_invocation_blocked service={} tool={}",
+                        REVIEWED_SERVICE_CODE, toolName);
+                return "该工具已停用或未通过平台审核，暂不可用。";
+            }
             // ★ 在 call() 入口捕获 User（避免依赖 ThreadLocal 在 reactor 线程中为 null）
             User currentUser = UserContextHolder.get();
             log.info(">>> MCP ToolCallback.call() 被调用 | toolName={} | isGeneration={} | user={}",
@@ -206,7 +235,8 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
                 }
                 return text;
             } catch (Exception e) {
-                log.warn("MCP 工具 {} 调用失败: {}", toolName, e.getMessage());
+                log.warn("mcp_tool_invocation_failed service={} tool={} exceptionType={}",
+                        REVIEWED_SERVICE_CODE, toolName, e.getClass().getName());
                 return "调用失败，请稍后重试。";
             } finally {
                 if (client != null) { try { client.close(); } catch (Exception ignored) {} }
@@ -227,20 +257,27 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
      * @param generationResult 生成工具的初始返回文本
      * @return 最终结果（含图片 URL）或超时提示
      */
-    private String pollUntilComplete(String generationResult) {
-        log.info(">>> generate_image 原始返回: {}", generationResult);
-
+    String pollUntilComplete(String generationResult) {
         // 1. 提取 taskId
         String taskId = extractTaskId(generationResult);
         if (taskId == null) {
-            log.info("生成工具同步返回结果（无 taskId），直接返回");
+            log.info("mcp_generation_initial_response_received service={} mode=synchronous",
+                    REVIEWED_SERVICE_CODE);
             return stripPollingInstruction(generationResult);
+        }
+        log.info("mcp_generation_submitted service={} taskId={}",
+                REVIEWED_SERVICE_CODE, taskId);
+
+        // 2. 内部轮询同样属于工具调用：get_task_status 被停用/未审核时不得在后台绕过
+        // 白名单继续调用（逐工具启停、fail-closed）。首次检查不通过立即返回，不发起轮询。
+        if (!statusPollingAllowed()) {
+            return buildStatusToolDisabledResult(taskId);
         }
 
         log.info("开始等待 MCP 任务 {} 完成（先等 {}s，期间不保持连接）...",
                 taskId, INITIAL_WAIT_MS / 1000);
 
-        // 2. 先等足够长时间（图片生成至少 1 分钟，不保持 MCP 连接）
+        // 3. 先等足够长时间（图片生成至少 1 分钟，不保持 MCP 连接）
         try {
             Thread.sleep(INITIAL_WAIT_MS);
         } catch (InterruptedException e) {
@@ -248,11 +285,15 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
             return buildTimeoutResult(taskId);
         }
 
-        // 3. 指数退避轮询（每次新建连接）
+        // 4. 指数退避轮询（每次新建连接）
         long startTime = System.currentTimeMillis();
         int pollCount = 0;
 
         while (System.currentTimeMillis() - startTime < MAX_POLL_TOTAL_MS) {
+            if (!statusPollingAllowed()) {
+                // 轮询期间管理员停用 get_task_status：立即停止，不再空耗等待窗口。
+                return buildStatusToolDisabledResult(taskId);
+            }
             long waitMs;
             if (pollCount < POLL_BACKOFF_MS.length) {
                 waitMs = POLL_BACKOFF_MS[pollCount];
@@ -293,12 +334,30 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
         return buildTimeoutResult(taskId);
     }
 
+    /** 状态查询工具是否仍被允许：null 裁决器与停用一律拒绝（fail-closed）。 */
+    boolean statusPollingAllowed() {
+        return mcpToolAccessDecider != null
+                && mcpToolAccessDecider.isToolAllowed(REVIEWED_SERVICE_CODE, "get_task_status");
+    }
+
+    private static String buildStatusToolDisabledResult(String taskId) {
+        return String.format(
+                "图片生成任务已提交（任务 ID: %s），但状态查询工具 get_task_status 已停用或未通过平台审核，"
+                        + "系统不会在后台调用它。请先在控制中心启用该工具，或联系管理员处理。", taskId);
+    }
+
     /**
      * 每次新建独立 MCP 连接调用 get_task_status。
      * <p>
      * 不复用连接——MCP SSE 有空闲超时(~30s)，长时间等待后旧连接已不可用。
+     * 调用前仍过一次白名单裁决：即使轮询入口检查被绕过，也不能在后台调用停用工具。
      */
-    private String callMcpGetTaskStatus(String taskId) {
+    String callMcpGetTaskStatus(String taskId) {
+        if (!statusPollingAllowed()) {
+            log.warn("mcp_status_polling_blocked service={} tool=get_task_status",
+                    REVIEWED_SERVICE_CODE);
+            return null;
+        }
         McpSyncClient client = null;
         try {
             var transportBuilder = new HttpClientSseClientTransport.Builder(mcpUrl)
@@ -315,7 +374,8 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider {
                             Map.of("serial_no", taskId)));
             return extractText(result);
         } catch (Exception e) {
-            log.warn("callMcpGetTaskStatus 失败 (taskId={}): {}", taskId, e.getMessage());
+            log.warn("mcp_status_poll_failed service={} taskId={} exceptionType={}",
+                    REVIEWED_SERVICE_CODE, taskId, e.getClass().getName());
             return null;
         } finally {
             if (client != null) { try { client.close(); } catch (Exception ignored) {} }

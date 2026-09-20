@@ -1,10 +1,18 @@
 import { test, expect } from '@playwright/test'
 
-test('awakens a companion and recovers one private-picture feed without double growth', async ({ page }) => {
-  const login = await page.request.post('/api/user/login', {
+// 同一个后端进程内的串行故事线：测试 1 完成唤醒与喂养，
+// 测试 2 操作测试 1 留下的记忆候选，测试 3 开启契约并验证提案闭环。
+test.describe.configure({ mode: 'serial' })
+
+async function login(page) {
+  const response = await page.request.post('/api/user/login', {
     data: { userAccount: 'companion_e2e', userPassword: 'LocalUser123!' }
   })
-  expect(login.ok(), `login failed: ${login.status()} ${await login.text()}`).toBeTruthy()
+  expect(response.ok(), `login failed: ${response.status()} ${await response.text()}`).toBeTruthy()
+}
+
+test('awakens a companion and recovers one private-picture feed without double growth', async ({ page }) => {
+  await login(page)
 
   await page.goto('/companion')
   await expect(page).toHaveURL(/\/companion$/)
@@ -12,6 +20,9 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByText('未读取图片内容，也未调用视觉模型')).toBeVisible()
   await page.getByRole('button', { name: '唤醒我的伙伴' }).click()
   await expect(page.getByText('光点', { exact: true })).toBeVisible()
+  // 已唤醒但尚未喂养：主页返回服务端中性情绪视图（五轴为 0），关系面板保持空状态。
+  await expect(page.getByTestId('mood-value-energy')).toHaveText('0')
+  await expect(page.getByText('伙伴还没和你建立关系，先喂一张图片开始相处。')).toBeVisible()
 
   await page.getByRole('button', { name: /旅行样片/ }).click()
   const keys = []
@@ -42,16 +53,39 @@ test('awakens a companion and recovers one private-picture feed without double g
   expect(keys[1]).toBe(keys[0])
   await expect(page.getByText('42 / 100 生命经验')).toBeVisible()
   await expect(page.getByText('+42 生命经验')).toBeVisible()
-  await expect(page.getByRole('group', { name: '伙伴说' }).first())
-    .toContainText('演示营养让伙伴练习了观察与叙事。')
+  // 喂养故事、情绪摘要与记忆都统一使用"伙伴说"气泡；按文案过滤各自的展示。
+  await expect(page.getByRole('group', { name: '伙伴说' })
+    .filter({ hasText: '演示营养让伙伴练习了观察与叙事。' })).toBeVisible()
   await expect(page.getByTestId('growth-trait-curiosity').first()).toContainText('+0.60')
   await expect(page.getByTestId('skill-IMAGE_OBSERVATION')).toContainText('18 / 100')
   await expect(page.getByTestId('skill-STORY_CREATION')).toContainText('12 / 100')
-  await expect(page.getByRole('link', { name: '图片 #102' }).first())
+  await expect(page.locator('.timeline-list').getByRole('link', { name: '图片 #102', exact: true }).first())
     .toHaveAttribute('href', '/picture/102')
   await expect(page.getByTestId('growth-nutrition-label').first())
     .toContainText('演示营养（未读取图片内容）')
   await expect(page.getByText('未进行内容理解').first()).toBeVisible()
+  // Demo 喂养产生一条待确认记忆候选，情绪与关系面板也随喂养出现。
+  await expect(page.getByTestId('memory-status').first()).toHaveText('待确认')
+  await expect(page.getByText('伙伴记得一张让它练习了观察与叙事的演示图片，它把这次练习记进了档案。')).toBeVisible()
+  // 无需 reload：喂养成功后页面自动重取权威主页，情绪与关系面板立即出现最新值。
+  // Demo 档每次喂养五轴 +2；首次完整喂养关系为 熟悉 +5 / 信任 +2 / 亲密 +1 / 默契 +1 / 近期反馈 +5。
+  await expect(page.getByTestId('mood-value-energy')).toHaveText('2')
+  await expect(page.getByTestId('mood-value-joy')).toHaveText('2')
+  await expect(page.getByTestId('mood-value-loneliness')).toHaveText('2')
+  await expect(page.getByTestId('relationship-value-familiarity')).toHaveText('5')
+  await expect(page.getByTestId('relationship-value-trust')).toHaveText('2')
+  await expect(page.getByTestId('relationship-value-closeness')).toHaveText('1')
+  await expect(page.getByTestId('relationship-value-tacit')).toHaveText('1')
+  await expect(page.getByTestId('relationship-value-recentFeedback')).toHaveText('5')
+  // 站内对话与主动提案面板：Demo 档聊天不调模型，契约默认关闭所以没有主动提案。
+  await expect(page.getByText('和伙伴说说话')).toBeVisible()
+  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。')).toBeVisible()
+  // Demo 档对话：发送一条消息收到确定性回复，用户气泡与伙伴气泡都在。
+  await page.getByLabel('对伙伴说的话').fill('你好呀')
+  await page.getByRole('button', { name: '发送' }).click()
+  await expect(page.getByText('我在听。你可以和我聊聊图片，或者从图库里挑一张喂给我，我会慢慢记住我们的经历。'))
+    .toBeVisible()
+  await expect(page.getByText('你好呀')).toBeVisible()
 
   const homeResponse = await page.request.get('/api/companion/me')
   expect(homeResponse.ok()).toBeTruthy()
@@ -61,10 +95,12 @@ test('awakens a companion and recovers one private-picture feed without double g
   expect(homeBody.data.recentGrowth).toHaveLength(1)
 
   await page.reload()
+  // 先等主页稳定锚点再断言成长数据，避免 reload 渲染竞态。
+  await expect(page.getByText('实际来源会逐条写入成长档案')).toBeVisible()
   await expect(page.getByText('42 / 100 生命经验')).toBeVisible()
   await expect(page.getByText('+42 生命经验')).toBeVisible()
   await expect(page.getByTestId('skill-IMAGE_OBSERVATION')).toContainText('18 / 100')
-  await expect(page.getByRole('link', { name: '图片 #102' }).first())
+  await expect(page.locator('.timeline-list').getByRole('link', { name: '图片 #102', exact: true }).first())
     .toHaveAttribute('href', '/picture/102')
   await expect(page.getByTestId('growth-nutrition-label').first())
     .toContainText('演示营养（未读取图片内容）')
@@ -121,10 +157,80 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
   await expect(page.getByText('来源 dashscope / qwen3.6-flash')).toBeVisible()
   await expect(page.getByText('置信度 0.84')).toBeVisible()
-  await expect(page.getByRole('group', { name: '伙伴说' })).toHaveCount(2)
-  await expect(page.getByRole('link', { name: '图片 #102' })).toHaveCount(2)
+  // 成长档案内恰好两条喂养故事气泡（页面另有情绪/记忆气泡，不在档案区内计数）。
+  const archiveBubbles = page.locator('.timeline-list').getByRole('group', { name: '伙伴说' })
+  await expect(archiveBubbles).toHaveCount(2)
+  // 档案内两条来源图片链接（记忆面板使用"来源图片 #102"文案，精确匹配区分）。
+  await expect(page.locator('.timeline-list').getByRole('link', { name: '图片 #102', exact: true })).toHaveCount(2)
 
   await page.reload()
+  await expect(page.getByText('实际来源会逐条写入成长档案')).toBeVisible()
   await expect(labels.nth(0)).toHaveText('Qwen 视觉营养 · 已分析图片内容')
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
+})
+
+test('memory lifecycle supports confirm correct ignore and delete', async ({ page }) => {
+  await login(page)
+  await page.goto('/companion')
+  await expect(page).toHaveURL(/\/companion$/)
+
+  // 测试 1 留下了一条待确认记忆候选。
+  const status = page.getByTestId('memory-status').first()
+  await expect(status).toHaveText('待确认')
+
+  // 确认 → 已确认。
+  await page.locator('[data-action="confirm"]').first().click()
+  await expect(status).toHaveText('已确认')
+
+  // 纠正：改写文案，保留最初候选。
+  await page.locator('[data-action="correct"]').first().click()
+  await page.getByLabel('纠正这条记忆').fill('伙伴重新想起：那是安静的清晨。')
+  await page.getByRole('button', { name: '保存纠正' }).click()
+  await expect(page.getByText('伙伴重新想起：那是安静的清晨。')).toBeVisible()
+  await expect(status).toHaveText('已确认')
+
+  // 忽略 → 已忽略；再确认回来。
+  await page.locator('[data-action="dismiss"]').first().click()
+  await expect(status).toHaveText('已忽略')
+  await page.locator('[data-action="confirm"]').first().click()
+  await expect(status).toHaveText('已确认')
+
+  // 删除 → 从列表消失（删除是终态且不再展示）。
+  await page.locator('[data-action="delete"]').first().click()
+  await expect(page.getByTestId('memory-status')).toHaveCount(0)
+  await expect(page.getByText('伙伴重新想起：那是安静的清晨。')).toBeHidden()
+})
+
+test('enabling the contract produces a gated weekly review proposal', async ({ page }) => {
+  await login(page)
+  await page.goto('/companion')
+  await expect(page).toHaveURL(/\/companion$/)
+
+  // 默认契约关闭：没有主动提案。
+  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+    .toBeVisible()
+
+  // 开启契约：全天允许（起止相同 = 不设安静时段），频率保持 72 小时。
+  await page.getByRole('button', { name: '主动设置' }).click()
+  await page.getByRole('checkbox', { name: /允许伙伴主动提议/ }).check()
+  await page.locator('.contract-times input').nth(0).fill('00:00')
+  await page.locator('.contract-times input').nth(1).fill('00:00')
+  await page.getByRole('button', { name: '保存主动设置' }).click()
+
+  // 契约保存后立即重新评估：测试 1 的喂养产生每周回顾提案。
+  await expect(page.getByText('这周你喂了我 1 次。想听我讲一段我们的故事吗？')).toBeVisible()
+  await expect(page.getByText('类型 每周影像回顾')).toBeVisible()
+
+  // 接受提案 → 终态并给出正向反馈，提案消失。
+  await page.getByTestId('proposal-accept').click()
+  await expect(page.getByText('好呀，伙伴已经记下了。')).toBeVisible()
+  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+    .toBeVisible()
+
+  // 关闭契约后刷新，保持关闭。
+  await page.getByRole('button', { name: '主动设置' }).click()
+  await page.getByRole('checkbox', { name: /允许伙伴主动提议/ }).uncheck()
+  await page.getByRole('button', { name: '保存主动设置' }).click()
+  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+    .toBeVisible()
 })

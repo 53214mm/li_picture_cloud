@@ -68,10 +68,35 @@ public interface CompanionGrowthRecordMapper {
     long sumLifeExperienceSince(@Param("companionId") long companionId, @Param("since") Date since);
 
     @Select("""
+            SELECT COUNT(*) FROM companion_growth_record
+            WHERE companionId = #{companionId} AND createTime >= #{since}
+            """)
+    long countSince(@Param("companionId") long companionId, @Param("since") Date since);
+
+    @Select("""
+            SELECT COUNT(*) FROM companion_growth_record
+            WHERE companionId = #{companionId} AND eventType = 'PICTURE_FED'
+              AND MONTH(createTime) = #{month} AND DAY(createTime) = #{day}
+              AND YEAR(createTime) < YEAR(CURRENT_TIMESTAMP)
+            """)
+    long countAnniversaryFeeds(@Param("companionId") long companionId,
+                               @Param("month") int month, @Param("day") int day);
+
+    @Select("""
             SELECT COALESCE(SUM(lifeExperienceDelta), 0)
             FROM companion_growth_record
             WHERE companionId = #{companionId} AND pictureId = #{pictureId}
               AND eventType = 'PICTURE_REVISITED'
             """)
     long sumRevisitExperience(@Param("companionId") long companionId, @Param("pictureId") long pictureId);
+
+    @Select("""
+            SELECT pictureId FROM companion_growth_record
+            WHERE companionId = #{companionId} AND eventType = 'PICTURE_FED'
+            GROUP BY pictureId
+            ORDER BY MAX(createTime) DESC, MAX(id) DESC
+            LIMIT #{limit}
+            """)
+    List<Long> selectRecentFedPictureIds(@Param("companionId") long companionId,
+                                         @Param("limit") int limit);
 }

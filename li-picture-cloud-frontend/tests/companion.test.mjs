@@ -3,10 +3,12 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import {
+  adoptAuthoritativeHome,
   applyFeedResult,
   beginFeedAttempt,
   buildCompanionPictureQuery,
   describeTrait,
+  parseSse,
   selectOldestPrivateSpace,
   shouldRetrySameFeedKey,
   traitPosition
@@ -52,6 +54,49 @@ test('renders only the server-provided nutrition label and safe provenance field
   assert.match(timeline, /overflow-y:\s*auto/)
 })
 
+test('mood relationship and memory panels reuse the shared message bubble language', async () => {
+  const mood = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionMoodPanel.vue', import.meta.url)), 'utf8')
+  const relationship = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionRelationshipPanel.vue', import.meta.url)), 'utf8')
+  const memory = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionMemoryPanel.vue', import.meta.url)), 'utf8')
+  const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/CompanionView.vue', import.meta.url)), 'utf8')
+  const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/companion.js', import.meta.url)), 'utf8')
+  const constants = await readFile(fileURLToPath(new globalThis.URL('../src/constants/companion.js', import.meta.url)), 'utf8')
+
+  // 情绪面板展示服务端摘要，不自行解释数值。
+  assert.match(mood, /MOOD_AXES/)
+  assert.match(mood, /mood\.summary/)
+  assert.match(mood, /CompanionMessageBubble/)
+  assert.match(mood, /:message="mood\.summary"/)
+  assert.match(mood, /随时间自然回落/)
+  // 关系面板支持近期反馈的负向展示。
+  assert.match(relationship, /RELATIONSHIP_AXES/)
+  assert.match(relationship, /recentFeedback/)
+  assert.match(relationship, /negative/)
+  // 记忆面板：五个接口、状态机操作与失效隐藏内容。
+  assert.match(memory, /CompanionMessageBubble/)
+  assert.match(memory, /MEMORY_STATUS/)
+  assert.match(memory, /listCompanionMemories/)
+  assert.match(memory, /confirmCompanionMemory/)
+  assert.match(memory, /correctCompanionMemory/)
+  assert.match(memory, /dismissCompanionMemory/)
+  assert.match(memory, /deleteCompanionMemory/)
+  assert.match(memory, /availableActions/)
+  assert.match(memory, /来源图片已不可用/)
+  assert.match(memory, /memory\.content/)
+  // 主页集成三个面板，服务端 mood/relationship 驱动展示。
+  assert.match(page, /CompanionMoodPanel/)
+  assert.match(page, /CompanionRelationshipPanel/)
+  assert.match(page, /CompanionMemoryPanel/)
+  assert.match(page, /:mood="home\.mood"/)
+  assert.match(page, /:relationship="home\.relationship"/)
+  // API 与常量契约。
+  assert.match(api, /\/companion\/memories/)
+  assert.match(constants, /MOOD_AXES/)
+  assert.match(constants, /RELATIONSHIP_AXES/)
+  assert.match(constants, /MEMORY_STATUS/)
+  assert.match(constants, /INVALIDATED/)
+})
+
 test('applies the server result once and de-duplicates history', () => {
   const home = { companion: { revision: '0' }, recentGrowth: [] }
   const result = {
@@ -79,6 +124,57 @@ test('an old idempotent replay cannot roll back the visible companion or timelin
   assert.equal(merged.companion.revision, '2')
   assert.equal(merged.companion.lifeExperience, '43')
   assert.deepEqual(merged.recentGrowth.map(item => item.id), ['32', '31'])
+})
+
+test('after a successful feed the authoritative home snapshot refreshes mood and relationship without reload', () => {
+  // 喂养回执不含情绪/关系；喂养成功后前端重取 /companion/me，用权威快照整体替换本地视图。
+  const stale = {
+    companion: { revision: '1', lifeExperience: '42' },
+    mood: { energy: '0.00', joy: '0.00', summary: '它此刻很平静，正等着和你一起看看图片。', updatedAt: '2026-08-11T08:00:00Z' },
+    relationship: null,
+    recentGrowth: []
+  }
+  const authoritative = {
+    companion: { revision: '1', lifeExperience: '42' },
+    mood: { energy: '2.00', joy: '2.00', loneliness: '2.00', inspiration: '2.00', irritation: '2.00', summary: '它此刻很平静，正等着和你一起看看图片。', updatedAt: '2026-08-11T08:00:10Z' },
+    relationship: { familiarity: '5.00', trust: '2.00', closeness: '1.00', tacit: '1.00', recentFeedback: '5.00' },
+    recentGrowth: [{ id: '31', createdTime: '2026-08-11T08:00:00Z' }]
+  }
+  const adopted = adoptAuthoritativeHome(stale, authoritative)
+  assert.equal(adopted.mood.energy, '2.00')
+  assert.equal(adopted.mood.joy, '2.00')
+  assert.equal(adopted.relationship.familiarity, '5.00')
+  assert.equal(adopted.relationship.recentFeedback, '5.00')
+  assert.deepEqual(adopted.recentGrowth.map(item => item.id), ['31'])
+})
+
+test('an empty or missing authoritative snapshot keeps the current view instead of blanking panels', () => {
+  const current = {
+    companion: { revision: '2' },
+    mood: { energy: '2.00', summary: '它此刻很平静，正等着和你一起看看图片。' },
+    relationship: { familiarity: '5.00' }
+  }
+  assert.equal(adoptAuthoritativeHome(current, null), current)
+  assert.equal(adoptAuthoritativeHome(current, { companion: null, mood: null }), current)
+  assert.equal(adoptAuthoritativeHome(current, undefined), current)
+})
+
+test('feed success path refetches the authoritative home so mood and relationship panels update without reload', async () => {
+  const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/CompanionView.vue', import.meta.url)), 'utf8')
+  const utils = await readFile(fileURLToPath(new globalThis.URL('../src/utils/companion.js', import.meta.url)), 'utf8')
+  const mood = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionMoodPanel.vue', import.meta.url)), 'utf8')
+  const relationship = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionRelationshipPanel.vue', import.meta.url)), 'utf8')
+
+  // 喂养成功后（无论新喂养还是旧 key 回放）都会重取权威主页并整体采用新快照。
+  assert.match(page, /await refreshAuthoritativeHome\(\)/)
+  assert.match(page, /const authoritative = await getCompanionHome\(\)/)
+  assert.match(page, /home\.value = adoptAuthoritativeHome\(home\.value, authoritative\)/)
+  assert.match(utils, /export function adoptAuthoritativeHome\(previous, authoritative\)/)
+  // 情绪与关系面板直接由 home.mood / home.relationship 驱动，快照替换即面板更新。
+  assert.match(page, /:mood="home\.mood"/)
+  assert.match(page, /:relationship="home\.relationship"/)
+  assert.match(mood, /mood\.summary/)
+  assert.match(relationship, /recentFeedback/)
 })
 
 test('orders growth instants by time even when fractional precision differs', () => {
@@ -163,4 +259,85 @@ test('a late bootstrap result cannot clobber an explicit login or logout', async
   gate.invalidate()
   if (gate.isCurrent(logoutCapture)) currentUser = { id: '7' }
   assert.equal(currentUser, null)
+})
+
+test('parses sse chunks across fragmented buffers and names events', () => {
+  const first = parseSse('data:你\n\ndata:好')
+  assert.deepEqual(first.parsed, [{ name: 'message', data: '你' }])
+  assert.equal(first.remainder, 'data:好')
+
+  const second = parseSse(first.remainder + '\n\nevent:done\ndata:\n\n')
+  assert.deepEqual(second.parsed, [
+    { name: 'message', data: '好' },
+    { name: 'done', data: '' }
+  ])
+  assert.equal(second.remainder, '')
+
+  const error = parseSse('event:error\ndata:伙伴走神了\n\n')
+  assert.deepEqual(error.parsed, [{ name: 'error', data: '伙伴走神了' }])
+
+  // CRLF 变体（部分代理/网关会转换换行）同样可解析。
+  const crlf = parseSse('data:第一段\r\n\r\ndata:第二段\r\n\r\n')
+  assert.deepEqual(crlf.parsed, [
+    { name: 'message', data: '第一段' },
+    { name: 'message', data: '第二段' }
+  ])
+  assert.equal(crlf.remainder, '')
+})
+
+test('chat panel reuses the companion bubble and streams replies', async () => {
+  const chat = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionChatPanel.vue', import.meta.url)), 'utf8')
+  const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/CompanionView.vue', import.meta.url)), 'utf8')
+  const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/companion.js', import.meta.url)), 'utf8')
+  const utils = await readFile(fileURLToPath(new globalThis.URL('../src/utils/companion.js', import.meta.url)), 'utf8')
+
+  assert.match(chat, /CompanionMessageBubble/)
+  assert.match(chat, /streamCompanionChat/)
+  assert.match(chat, /listCompanionChatHistory/)
+  assert.match(chat, /role === 'COMPANION'/)
+  assert.match(chat, /user-bubble/)
+  // 发送失败时恢复草稿，避免用户输入丢失。
+  assert.match(chat, /draft\.value = content/)
+  // 非 MODEL 档必须明示「演示回复（不调用模型）」，避免用户误以为伙伴在用真实模型。
+  assert.match(chat, /chatPolicy !== 'MODEL'/)
+  assert.match(chat, /演示回复（不调用模型）/)
+  assert.match(page, /CompanionChatPanel/)
+  assert.match(api, /\/companion\/chat\/history/)
+  assert.match(utils, /parseSse/)
+  assert.match(utils, /\/companion\/chat\/stream/)
+  assert.match(utils, /credentials: 'include'/)
+})
+
+test('proposal panel gates by contract and supports accept ignore scold', async () => {
+  const panel = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionProposalPanel.vue', import.meta.url)), 'utf8')
+  const memory = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionMemoryPanel.vue', import.meta.url)), 'utf8')
+  const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/CompanionView.vue', import.meta.url)), 'utf8')
+  const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/companion.js', import.meta.url)), 'utf8')
+
+  assert.match(panel, /CompanionMessageBubble/)
+  assert.match(panel, /getActiveCompanionProposal/)
+  assert.match(panel, /acceptCompanionProposal/)
+  assert.match(panel, /ignoreCompanionProposal/)
+  assert.match(panel, /scoldCompanionProposal/)
+  assert.match(panel, /敲打只抑制这一次提议/)
+  assert.match(panel, /getCompanionContract/)
+  assert.match(panel, /updateCompanionContract/)
+  assert.match(panel, /quietStart/)
+  assert.match(panel, /maxFrequencyHours/)
+  assert.match(panel, /OPPORTUNITY_LABELS/)
+  assert.match(panel, /ANNIVERSARY/)
+  assert.match(panel, /SIMILAR_STORY/)
+  // 契约保存后立即按新契约重新评估提案；反馈用正向语气而非错误样式。
+  assert.match(panel, /await loadProposal\(\)/)
+  assert.match(panel, /伙伴安静了，这次提议已被止住。/)
+  assert.match(panel, /已忽略，伙伴不会再提这件事。/)
+  // 喂养成功后通过 refreshKey 通知面板刷新。
+  assert.match(panel, /refreshKey/)
+  assert.match(memory, /refreshKey/)
+  assert.match(page, /panelsRefreshKey/)
+  assert.match(page, /:refresh-key="panelsRefreshKey"/)
+  assert.match(page, /CompanionProposalPanel/)
+  assert.match(api, /\/companion\/contract/)
+  assert.match(api, /\/companion\/proposals\/active/)
+  assert.match(api, /\/companion\/proposals\/\$\{id\}\/scold/)
 })

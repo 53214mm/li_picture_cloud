@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <preConditions onFail="HALT" onError="HALT">
+        <or>
+            <not><tableExists tableName="model_capability_profile"/></not>
+            <and>
+                <columnExists tableName="model_capability_profile" columnName="id"/>
+                <columnExists tableName="model_capability_profile" columnName="connectionId"/>
+                <columnExists tableName="model_capability_profile" columnName="subjectId"/>
+                <columnExists tableName="model_capability_profile" columnName="provider"/>
+                <columnExists tableName="model_capability_profile" columnName="modelCode"/>
+                <columnExists tableName="model_capability_profile" columnName="text"/>
+                <columnExists tableName="model_capability_profile" columnName="vision"/>
+                <columnExists tableName="model_capability_profile" columnName="toolCall"/>
+                <columnExists tableName="model_capability_profile" columnName="structuredOutput"/>
+                <columnExists tableName="model_capability_profile" columnName="reasoning"/>
+                <columnExists tableName="model_capability_profile" columnName="embedding"/>
+                <columnExists tableName="model_capability_profile" columnName="imageGeneration"/>
+                <columnExists tableName="model_capability_profile" columnName="maxContextTokens"/>
+                <columnExists tableName="model_capability_profile" columnName="syncAsync"/>
+                <columnExists tableName="model_capability_profile" columnName="costHint"/>
+                <columnExists tableName="model_capability_profile" columnName="createdTime"/>
+            </and>
+        </or>
+    </preConditions>
+
+    <changeSet id="20260814-36" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="model_capability_profile"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE model_capability_profile (
+    id BIGINT PRIMARY KEY,
+    connectionId BIGINT NOT NULL,
+    subjectId BIGINT NOT NULL,
+    provider VARCHAR(32) NOT NULL,
+    modelCode VARCHAR(64) NOT NULL,
+    text BOOLEAN NOT NULL DEFAULT FALSE,
+    vision BOOLEAN NOT NULL DEFAULT FALSE,
+    toolCall BOOLEAN NOT NULL DEFAULT FALSE,
+    structuredOutput BOOLEAN NOT NULL DEFAULT FALSE,
+    reasoning BOOLEAN NOT NULL DEFAULT FALSE,
+    embedding BOOLEAN NOT NULL DEFAULT FALSE,
+    imageGeneration BOOLEAN NOT NULL DEFAULT FALSE,
+    maxContextTokens INT NULL,
+    syncAsync VARCHAR(16) NOT NULL DEFAULT 'UNKNOWN',
+    costHint VARCHAR(16) NULL,
+    createdTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+        ]]></sql>
+        <rollback><dropTable tableName="model_capability_profile"/></rollback>
+    </changeSet>
+
+    <changeSet id="20260814-37" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><indexExists indexName="idx_capability_connection"
+                              tableName="model_capability_profile"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE INDEX idx_capability_connection
+    ON model_capability_profile (connectionId, createdTime, id);
+        ]]></sql>
+        <rollback>
+            <dropIndex indexName="idx_capability_connection"
+                       tableName="model_capability_profile"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

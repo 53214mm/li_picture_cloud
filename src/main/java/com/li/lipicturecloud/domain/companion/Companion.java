@@ -104,6 +104,15 @@ public record Companion(
                 skillDelta, reason, checkedBalance.version());
     }
 
+    /**
+     * 应用一次用户反馈（如重复敲打）带来的性格微调；经验不变，只推进一个 revision。
+     */
+    public Companion applyFeedback(TraitDelta requestedDelta, CompanionBalance balance) {
+        Objects.requireNonNull(requestedDelta, "requestedDelta");
+        CompanionBalance checkedBalance = requireMatchingBalance(balance);
+        return grow(0L, applyTraits(requestedDelta, checkedBalance), Map.of(), checkedBalance);
+    }
+
     private Companion grow(long experienceDelta, TraitDelta traitDelta,
                            Map<CompanionSkill, Long> skillDelta, CompanionBalance balance) {
         long afterExperience = Math.addExact(lifeExperience, experienceDelta);

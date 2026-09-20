@@ -36,4 +36,19 @@ public class CompanionFeatureProperties {
     private Duration visionTimeout = Duration.ofSeconds(20);
     private DataSize visionMaxBytes = DataSize.ofMegabytes(8);
     private int visionDailyLimit = 10;
+    /**
+     * 伙伴站内对话策略：DEMO_ONLY 为零外发确定性回复（默认），MODEL 使用平台语言模型。
+     */
+    private CompanionChatPolicy chatPolicy = CompanionChatPolicy.DEMO_ONLY;
+    private int chatDailyLimit = 50;
+    private int chatHistoryLimit = 20;
+    private int chatMemoryLimit = 5;
+    /** MODEL 档每轮提示词（系统提示 + 历史 + 当前消息）的总码点预算，超出部分从最旧历史截断。 */
+    private int chatContextBudget = 12000;
+
+    /** 伙伴对话策略。 */
+    public enum CompanionChatPolicy {
+        DEMO_ONLY,
+        MODEL
+    }
 }
