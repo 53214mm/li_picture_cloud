@@ -142,7 +142,8 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider,
                         callbacks.stream().map(ToolCallback::getToolDefinition)
                                 .map(ToolDefinition::name).toList());
             } catch (Exception e) {
-                log.warn("MCP 工具列表获取失败: {}", e.getMessage());
+                log.warn("mcp_tool_list_refresh_failed service={} exceptionType={}",
+                        REVIEWED_SERVICE_CODE, e.getClass().getName());
             } finally {
                 if (client != null) { try { client.close(); } catch (Exception ignored) {} }
             }
@@ -234,7 +235,8 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider,
                 }
                 return text;
             } catch (Exception e) {
-                log.warn("MCP 工具 {} 调用失败: {}", toolName, e.getMessage());
+                log.warn("mcp_tool_invocation_failed service={} tool={} exceptionType={}",
+                        REVIEWED_SERVICE_CODE, toolName, e.getClass().getName());
                 return "调用失败，请稍后重试。";
             } finally {
                 if (client != null) { try { client.close(); } catch (Exception ignored) {} }
@@ -256,14 +258,15 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider,
      * @return 最终结果（含图片 URL）或超时提示
      */
     String pollUntilComplete(String generationResult) {
-        log.info(">>> generate_image 原始返回: {}", generationResult);
-
         // 1. 提取 taskId
         String taskId = extractTaskId(generationResult);
         if (taskId == null) {
-            log.info("生成工具同步返回结果（无 taskId），直接返回");
+            log.info("mcp_generation_initial_response_received service={} mode=synchronous",
+                    REVIEWED_SERVICE_CODE);
             return stripPollingInstruction(generationResult);
         }
+        log.info("mcp_generation_submitted service={} taskId={}",
+                REVIEWED_SERVICE_CODE, taskId);
 
         // 2. 内部轮询同样属于工具调用：get_task_status 被停用/未审核时不得在后台绕过
         // 白名单继续调用（逐工具启停、fail-closed）。首次检查不通过立即返回，不发起轮询。
@@ -371,7 +374,8 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider,
                             Map.of("serial_no", taskId)));
             return extractText(result);
         } catch (Exception e) {
-            log.warn("callMcpGetTaskStatus 失败 (taskId={}): {}", taskId, e.getMessage());
+            log.warn("mcp_status_poll_failed service={} taskId={} exceptionType={}",
+                    REVIEWED_SERVICE_CODE, taskId, e.getClass().getName());
             return null;
         } finally {
             if (client != null) { try { client.close(); } catch (Exception ignored) {} }

@@ -13,7 +13,7 @@ import reactor.core.publisher.Flux;
 
 
 /**
- * 日志记录顾问，拦截 AI 请求与响应并输出日志
+ * AI 调用审计顾问。只记录调用阶段，不记录请求上下文、提示词或响应正文。
  */
 @Slf4j
 public class MyLoggerAdvisor implements CallAdvisor, StreamAdvisor {
@@ -21,7 +21,7 @@ public class MyLoggerAdvisor implements CallAdvisor, StreamAdvisor {
 
     @Override
     public ChatClientResponse adviseCall(ChatClientRequest chatClientRequest, CallAdvisorChain callAdvisorChain) {
-         logRequest(chatClientRequest);
+        logRequest();
 
         ChatClientResponse chatClientResponse = callAdvisorChain.nextCall(chatClientRequest);
 
@@ -33,29 +33,21 @@ public class MyLoggerAdvisor implements CallAdvisor, StreamAdvisor {
     @Override
     public Flux<ChatClientResponse> adviseStream(ChatClientRequest chatClientRequest,
                                                  StreamAdvisorChain streamAdvisorChain) {
-        logRequest(chatClientRequest);
+        logRequest();
 
         Flux<ChatClientResponse> chatClientResponses = streamAdvisorChain.nextStream(chatClientRequest);
 
         return new ChatClientMessageAggregator().aggregateChatClientResponse(chatClientResponses, this::logResponse);
     }
 
-    private void logRequest(ChatClientRequest request) {
-        log.info("ai-request: {}",request.context());
+    private void logRequest() {
+        log.debug("ai_request_started advisor={}", getName());
     }
 
     private void logResponse(ChatClientResponse chatClientResponse) {
-        try {
-            if (chatClientResponse != null
-                    && chatClientResponse.chatResponse() != null
-                    && chatClientResponse.chatResponse().getResult() != null
-                    && chatClientResponse.chatResponse().getResult().getOutput() != null) {
-                String text = chatClientResponse.chatResponse().getResult().getOutput().getText();
-                log.info("ai-response: {}", text != null ? text : "(empty)");
-            }
-        } catch (Exception e) {
-            // 流式场景中部分响应不含完整 result，忽略
-        }
+        boolean hasResponse = chatClientResponse != null
+                && chatClientResponse.chatResponse() != null;
+        log.debug("ai_response_received advisor={} hasResponse={}", getName(), hasResponse);
     }
 
     @Override

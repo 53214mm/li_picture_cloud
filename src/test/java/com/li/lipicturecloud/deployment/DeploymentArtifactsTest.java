@@ -70,6 +70,23 @@ class DeploymentArtifactsTest {
     }
 
     @Test
+    void modelGatewayProductionSecretsAreDeclaredAndPassedThroughCompose() throws IOException {
+        String prod = read("src/main/resources/application-prod.yaml");
+        String compose = read("compose.yaml");
+        String environment = read(".env.example");
+
+        assertThat(prod).contains(
+                "master-key: ${MODEL_CREDENTIAL_MASTER_KEY}",
+                "endpoint-allowlist: ${MODEL_ENDPOINT_ALLOWLIST}");
+        assertThat(compose).contains(
+                "MODEL_CREDENTIAL_MASTER_KEY: ${MODEL_CREDENTIAL_MASTER_KEY:?MODEL_CREDENTIAL_MASTER_KEY is required}",
+                "MODEL_ENDPOINT_ALLOWLIST: ${MODEL_ENDPOINT_ALLOWLIST:?MODEL_ENDPOINT_ALLOWLIST is required}");
+        assertThat(environment).contains(
+                "MODEL_CREDENTIAL_MASTER_KEY=replace_with_64_hex_or_base64_32_byte_key",
+                "MODEL_ENDPOINT_ALLOWLIST=replace.with.approved.provider.host");
+    }
+
+    @Test
     void composeKeepsEveryProjectServiceInternalAndResourceLimited() throws IOException {
         String compose = read("compose.yaml");
 

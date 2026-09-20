@@ -44,6 +44,8 @@
 3. 数据库抽查：`companion_memory` 的 `content/originalContent` 只来自视觉独白或 Demo
    固定文案；`companion_growth_record.reason` 无用户原文。
 4. 轮换 `DASHSCOPE_API_KEY` 后旧 key 立即撤销，不在任何提交或环境文件中留存。
+5. AI/Agent/MCP 日志只含调用阶段、Provider、模型、工具名、任务 ID、数量、耗时和安全错误码；
+   不含请求上下文、Prompt、模型回复、工具参数、工具返回正文或供应商异常原文。
 
 ## 3. 真实环境发布检查（每项打勾后才放行）
 
@@ -51,7 +53,20 @@
 
 - [ ] 冷库已备份并确认恢复点。
 - [ ] 只在物理 MySQL 运行 Liquibase（绝不指向 `jdbc:shardingsphere:`）。
-- [ ] `DATABASECHANGELOG` 存在 `20260811-01`…`20260811-07`、`20260813-01`…、`20260814-01`…`20260814-04`。
+- [ ] 按 Liquibase 真实唯一键 `FILENAME + ID + AUTHOR` 核对 `DATABASECHANGELOG`，
+      当前主清单应完整执行 70 个 changeSet（author 均为 `li-picture-cloud`）：
+      `2026-08-11-companion-life-core.xml` 01—07、
+      `2026-08-13-companion-visual-provider.xml` 01—18、
+      `2026-08-14-companion-mood-relationship-memory.xml` 01—04、
+      `2026-08-14-companion-chat.xml` 11—13、
+      `2026-08-14-companion-proposal.xml` 21—28、
+      `2026-08-14-model-gateway.xml` 31—39、
+      `2026-08-14-model-capability-profile.xml` 36—37、
+      `2026-08-15-mcp-whitelist.xml` 01—02、
+      `2026-08-15-trial-ledger.xml` 03、
+      `2026-08-15-creation-task.xml` 04—08/10—11、
+      `2026-08-15-recipe-workshop.xml` 21—29。
+      注意 model-gateway 与 model-capability-profile 存在相同 ID 36/37，只看 ID 会误判。
 - [ ] 若启用分片：先 `scripts/migrate-companion-physical.ps1` 再启动分片 profile；
       用专用主体对 `companion`、`companion_mood`、`companion_relationship`、
       `companion_memory` 做 CRUD smoke test。
@@ -61,6 +76,10 @@
 - [ ] `COMPANION_ENABLED`、`COMPANION_FEEDING_ENABLED` 与 `VITE_COMPANION_ENABLED` 三者一致。
 - [ ] 视觉七项（policy/provider/model/daily-limit/timeout/max-bytes/endpoint）全部显式配置。
 - [ ] `CORS_ALLOWED_ORIGINS` 已按第 1 节配置。
+- [ ] `MODEL_CREDENTIAL_MASTER_KEY` 已替换为独立的 32 字节生产密钥，且没有提交到 Git；
+      `MODEL_ENDPOINT_ALLOWLIST` 只包含实际审核通过的 HTTPS Provider 主机。
+- [ ] `docker compose --env-file .env config` 成功，渲染后的 backend 环境包含上述两个模型变量，
+      但审计记录不得保存主密钥明文。
 
 ### 行为验收
 
