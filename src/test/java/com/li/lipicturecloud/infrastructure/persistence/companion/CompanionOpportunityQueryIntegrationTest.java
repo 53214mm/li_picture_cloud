@@ -10,7 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,8 +22,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Transactional
 class CompanionOpportunityQueryIntegrationTest {
 
-    private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
-
     @Autowired
     private GrowthRecordRepository growthRepository;
 
@@ -34,7 +31,9 @@ class CompanionOpportunityQueryIntegrationTest {
     @Test
     void anniversaryQueryMatchesOnlyPreviousYearsOnSameMonthAndDay() {
         long companionId = 901L;
-        LocalDate today = LocalDate.now(SHANGHAI);
+        // 固定在运行时之后的年份，保证查询必须使用应用传入的上海日历年，
+        // 不能偷偷依赖数据库 CURRENT_TIMESTAMP 或执行机器默认时区。
+        LocalDate today = LocalDate.of(2032, 8, 14);
         LocalDate lastYearSameDay = today.minusYears(1);
         LocalDate thisYearSameDay = today; // 今年的同日不应计入"往年"
         insertGrowth(companionId, 1001L, 1L, lastYearSameDay);
@@ -42,8 +41,7 @@ class CompanionOpportunityQueryIntegrationTest {
         insertGrowth(companionId, 1003L, 3L, thisYearSameDay);
         insertGrowth(companionId, 1004L, 4L, today.minusMonths(3));
 
-        long count = growthRepository.countAnniversaryFeeds(companionId,
-                today.getMonthValue(), today.getDayOfMonth());
+        long count = growthRepository.countAnniversaryFeeds(companionId, today);
 
         assertThat(count).isEqualTo(2L);
     }
@@ -62,7 +60,6 @@ class CompanionOpportunityQueryIntegrationTest {
     }
 
     private void insertGrowth(long companionId, long pictureId, long runId, LocalDate date) {
-        Instant created = date.atStartOfDay(SHANGHAI).toInstant();
         jdbcTemplate.update("""
                 INSERT INTO companion_growth_record
                 (id, feedingRunId, companionId, pictureId, eventType, lifeExperienceDelta,
@@ -75,7 +72,7 @@ class CompanionOpportunityQueryIntegrationTest {
                         '6f26d166-0a82-4d9f-8a61-6c21cf2e59d0',
                         'fef53056-2d9f-467d-9b1d-1afe9a6638fe', ?)
                 """, runId * 1000 + pictureId % 10, runId, companionId, pictureId,
-                java.sql.Timestamp.from(created));
+                java.sql.Timestamp.valueOf(date.atStartOfDay()));
     }
 
     private void insertGrowth(long companionId, long pictureId, long runId, Instant created) {

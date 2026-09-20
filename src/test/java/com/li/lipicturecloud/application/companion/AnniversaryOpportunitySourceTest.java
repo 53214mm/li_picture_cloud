@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
 
@@ -43,7 +44,7 @@ class AnniversaryOpportunitySourceTest {
 
     @Test
     void proposesWhenFeedsHappenedOnThisDayInPreviousYears() {
-        when(growthRepository.countAnniversaryFeeds(11L, 8, 14)).thenReturn(2L);
+        when(growthRepository.countAnniversaryFeeds(11L, LocalDate.of(2026, 8, 14))).thenReturn(2L);
 
         Optional<ProposalOpportunity> opportunity = materialize(11L, 7L);
 
@@ -58,7 +59,7 @@ class AnniversaryOpportunitySourceTest {
 
     @Test
     void staysQuietWithoutPastFeedsOnThisDay() {
-        when(growthRepository.countAnniversaryFeeds(11L, 8, 14)).thenReturn(0L);
+        when(growthRepository.countAnniversaryFeeds(11L, LocalDate.of(2026, 8, 14))).thenReturn(0L);
 
         Optional<OpportunityObservation> observation = source.observe(11L, 7L, NOW);
 
@@ -71,12 +72,12 @@ class AnniversaryOpportunitySourceTest {
     void usesShanghaiCalendarForTheDay() {
         // 上海 2026-08-14 02:30（跨午夜后）= 前一日 18:30Z，仍算 8 月 14 日。
         Instant lateNight = Instant.parse("2026-08-13T18:30:00Z");
-        when(growthRepository.countAnniversaryFeeds(11L, 8, 14)).thenReturn(1L);
+        when(growthRepository.countAnniversaryFeeds(11L, LocalDate.of(2026, 8, 14))).thenReturn(1L);
 
         Optional<OpportunityObservation> observation = source.observe(11L, 7L, lateNight);
 
         assertThat(observation).isPresent();
-        verify(growthRepository).countAnniversaryFeeds(11L, 8, 14);
+        verify(growthRepository).countAnniversaryFeeds(11L, LocalDate.of(2026, 8, 14));
     }
 
     private Optional<ProposalOpportunity> materialize(long companionId, long subjectId) {

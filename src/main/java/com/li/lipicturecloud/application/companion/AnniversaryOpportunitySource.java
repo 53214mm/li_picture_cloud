@@ -67,7 +67,6 @@ public class AnniversaryOpportunitySource implements CompanionOpportunitySource 
     }
 
     private long anniversaryFeeds(long companionId, LocalDate today) {
-        return growthRepository.countAnniversaryFeeds(companionId,
-                today.getMonthValue(), today.getDayOfMonth());
+        return growthRepository.countAnniversaryFeeds(companionId, today);
     }
 }

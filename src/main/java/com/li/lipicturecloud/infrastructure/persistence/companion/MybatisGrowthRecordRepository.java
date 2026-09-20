@@ -12,6 +12,7 @@ import com.li.lipicturecloud.model.entity.CompanionGrowthRecordEntity;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
@@ -78,8 +79,10 @@ public class MybatisGrowthRecordRepository implements GrowthRecordRepository {
     }
 
     @Override
-    public long countAnniversaryFeeds(long companionId, int month, int day) {
-        return growthRecordMapper.countAnniversaryFeeds(companionId, month, day);
+    public long countAnniversaryFeeds(long companionId, LocalDate anniversaryDate) {
+        LocalDate date = Objects.requireNonNull(anniversaryDate, "anniversaryDate");
+        return growthRecordMapper.countAnniversaryFeeds(
+                companionId, date.getYear(), date.getMonthValue(), date.getDayOfMonth());
     }
 
     @Override
