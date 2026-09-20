@@ -110,7 +110,9 @@ jobs:
       redis:
         image: redis:7.4-alpine
         ports:
-          - 6379:6379
+          # Browser E2E is deliberately isolated from the default Redis port.
+          # Keep this aligned with src/test/resources/application-e2e.yaml.
+          - 6380:6379
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 5s
