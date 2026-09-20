@@ -54,7 +54,7 @@
 - [ ] 冷库已备份并确认恢复点。
 - [ ] 只在物理 MySQL 运行 Liquibase（绝不指向 `jdbc:shardingsphere:`）。
 - [ ] 按 Liquibase 真实唯一键 `FILENAME + ID + AUTHOR` 核对 `DATABASECHANGELOG`，
-      当前主清单应完整执行 70 个 changeSet（author 均为 `li-picture-cloud`）：
+      当前主清单应完整执行 73 个 changeSet（author 均为 `li-picture-cloud`）：
       `2026-08-11-companion-life-core.xml` 01—07、
       `2026-08-13-companion-visual-provider.xml` 01—18、
       `2026-08-14-companion-mood-relationship-memory.xml` 01—04、
@@ -65,7 +65,8 @@
       `2026-08-15-mcp-whitelist.xml` 01—02、
       `2026-08-15-trial-ledger.xml` 03、
       `2026-08-15-creation-task.xml` 04—08/10—11、
-      `2026-08-15-recipe-workshop.xml` 21—29。
+      `2026-08-15-recipe-workshop.xml` 21—29、
+      `2026-08-30-companion-feed-observation.xml` 01—03。
       注意 model-gateway 与 model-capability-profile 存在相同 ID 36/37，只看 ID 会误判。
 - [ ] 若启用分片：先 `scripts/migrate-companion-physical.ps1` 再启动分片 profile；
       用专用主体对 `companion`、`companion_mood`、`companion_relationship`、
