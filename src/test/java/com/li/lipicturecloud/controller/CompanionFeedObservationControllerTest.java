@@ -19,6 +19,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.reflect.Method;
+import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -67,6 +68,16 @@ class CompanionFeedObservationControllerTest {
 
         assertThat(page.getAnnotation(AuthCheck.class).mustRole()).isEqualTo(UserConstant.ADMIN_ROLE);
         assertThat(detail.getAnnotation(AuthCheck.class).mustRole()).isEqualTo(UserConstant.ADMIN_ROLE);
+    }
+
+    @Test
+    void pageSummaryDoesNotExposeDetailOnlyTechnicalFields() {
+        assertThat(Arrays.stream(CompanionFeedRunSummaryView.class.getRecordComponents())
+                .map(component -> component.getName()))
+                .doesNotContain("correlationId", "requestedPolicy", "actualNutritionMode",
+                        "actualProviderCode", "actualModelCode", "contentUnderstood", "confidence",
+                        "fallbackReasonCode", "safeErrorCode", "safeErrorMessage", "safeErrorTime",
+                        "resultGrowthRecordId");
     }
 
     @Test

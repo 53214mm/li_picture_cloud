@@ -33,3 +33,9 @@ test('maps timeline states without pretending skipped stages succeeded', () => {
   assert.equal(observation.stageStatusLabel('PROCESSING'), '处理中')
   assert.equal(observation.stageStatusLabel('UNKNOWN'), '未知')
 })
+
+test('does not describe a processing run without growth as a failed settlement', () => {
+  assert.equal(observation.growthAbsenceDescription('PROCESSING'), '成长结算尚未完成。')
+  assert.equal(observation.growthAbsenceDescription('FAILED'), '没有成长记录，说明结算没有生效。')
+  assert.equal(observation.growthAbsenceDescription('REJECTED'), '授权未通过，本次没有进入成长结算。')
+})

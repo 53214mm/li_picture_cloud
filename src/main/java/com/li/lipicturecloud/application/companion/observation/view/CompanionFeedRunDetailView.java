@@ -9,5 +9,6 @@ public record CompanionFeedRunDetailView(
         CompanionFeedRunSummaryView summary,
         List<CompanionFeedStageView> timeline,
         GrowthRecordView growth,
-        CompanionFeedTechnicalView technical) {
+        CompanionFeedTechnicalView technical,
+        String safeErrorMessage) {
 }

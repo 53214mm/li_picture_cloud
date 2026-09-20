@@ -33,7 +33,7 @@ public class CompanionFeedObservationAssembler {
                                              GrowthRecordView growth,
                                              Instant now) {
         CompanionFeedRunSummaryView summary = buildSummary(row, now);
-        return new CompanionFeedRunDetailView(summary, timeline(row), growth, technical(row));
+        return new CompanionFeedRunDetailView(summary, timeline(row), growth, technical(row), row.safeErrorMessage());
     }
 
     private CompanionFeedRunSummaryView buildSummary(CompanionFeedObservationRow row, Instant now) {
@@ -43,14 +43,11 @@ public class CompanionFeedObservationAssembler {
         String stageLabel = stageLabel(stageCode);
         String summary = summaryText(row, status, degraded);
         return new CompanionFeedRunSummaryView(
-                row.runId(), row.correlationId(), row.subjectId(), row.userAccount(), row.userName(),
+                row.runId(), row.subjectId(), row.userAccount(), row.userName(),
                 row.pictureId(), pictureLabel(row.pictureName(), row.pictureId()), row.status(), statusLabel(status),
-                stageCode, stageLabel, summary, row.requestedPolicy(), policyLabel(row.requestedPolicy()),
-                row.actualNutritionMode(), nutritionLabel(row.actualNutritionMode(), row.fallbackReasonCode()),
-                row.actualProviderCode(), row.actualModelCode(), row.contentUnderstood(), row.confidence(),
-                row.fallbackReasonCode(), degraded, row.attemptCount(), durationMillis(row, now),
-                row.createTime(), row.updateTime(), row.safeErrorCode(), row.safeErrorMessage(),
-                row.safeErrorTime(), row.resultGrowthRecordId());
+                stageCode, stageLabel, summary, policyLabel(row.requestedPolicy()),
+                nutritionLabel(row.actualNutritionMode(), row.fallbackReasonCode()),
+                degraded, row.attemptCount(), durationMillis(row, now), row.createTime(), row.updateTime());
     }
 
     private List<CompanionFeedStageView> timeline(CompanionFeedObservationRow row) {

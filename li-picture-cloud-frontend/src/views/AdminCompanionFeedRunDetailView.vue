@@ -31,13 +31,13 @@
             <div><span>实际营养方式</span><strong>{{ displayActualNutrition(detail.summary) }}</strong></div>
             <div><span>本次耗时</span><strong>{{ formatObservationDuration(detail.summary.durationMillis) }}</strong></div>
             <div><span>尝试次数</span><strong>{{ detail.summary.attemptCount }}</strong></div>
-            <div><span>成长记录</span><strong>{{ detail.summary.resultGrowthRecordId ? '已生成' : '未生成' }}</strong></div>
+            <div><span>成长记录</span><strong>{{ detail.technical.resultGrowthRecordId ? '已生成' : '未生成' }}</strong></div>
           </div>
-          <p v-if="detail.summary.safeErrorMessage && detail.summary.status !== 'COMPLETED'" class="safe-error">
-            {{ detail.summary.safeErrorMessage }}
+          <p v-if="detail.safeErrorMessage && detail.summary.status !== 'COMPLETED'" class="safe-error">
+            {{ detail.safeErrorMessage }}
           </p>
-          <p v-else-if="detail.summary.safeErrorMessage" class="retry-history">
-            历史尝试曾失败：{{ detail.summary.safeErrorMessage }}
+          <p v-else-if="detail.safeErrorMessage" class="retry-history">
+            历史尝试曾失败：{{ detail.safeErrorMessage }}
           </p>
         </section>
 
@@ -65,7 +65,7 @@
                 <div><dt>变化</dt><dd>{{ growthChanges(detail.growth) }}</dd></div>
               </dl>
             </div>
-            <p v-else class="no-growth">没有成长记录，说明结算没有生效。</p>
+            <p v-else class="no-growth">{{ growthAbsenceDescription(detail.summary.status) }}</p>
           </section>
         </div>
 
@@ -101,6 +101,7 @@ import {
   displayUser,
   formatObservationDateTime,
   formatObservationDuration,
+  growthAbsenceDescription,
   statusClass
 } from '@/utils/companionObservation'
 

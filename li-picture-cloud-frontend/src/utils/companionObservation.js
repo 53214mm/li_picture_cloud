@@ -64,3 +64,10 @@ export function stageClass(status) {
 export function stageStatusLabel(status) {
   return STAGE_STATUS_LABEL[status] || status || '未知'
 }
+
+export function growthAbsenceDescription(status) {
+  if (status === 'PROCESSING') return '成长结算尚未完成。'
+  if (status === 'REJECTED') return '授权未通过，本次没有进入成长结算。'
+  if (status === 'FAILED') return '没有成长记录，说明结算没有生效。'
+  return '当前没有成长记录，结算状态无法确认。'
+}

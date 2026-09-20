@@ -88,11 +88,13 @@ class CompanionFeedObservationAssemblerTest {
         CompanionFeedObservationRow row = row(FeedingRunStatus.COMPLETED.name(), "NUTRITION_FAILED",
                 "本次没有消化成功，图片未被消耗", "METADATA_ONLY", "METADATA_DETERMINISTIC", null, null, 2);
 
-        CompanionFeedRunSummaryView summary = assembler.summary(row, UPDATED);
+        CompanionFeedRunDetailView detail = assembler.detail(row, UPDATED);
+        CompanionFeedRunSummaryView summary = detail.summary();
 
         assertThat(summary.statusLabel()).isEqualTo("已完成");
         assertThat(summary.summary()).contains("重试").contains("最终成功");
-        assertThat(summary.safeErrorCode()).isEqualTo("NUTRITION_FAILED");
+        assertThat(detail.technical().safeErrorCode()).isEqualTo("NUTRITION_FAILED");
+        assertThat(detail.safeErrorMessage()).isEqualTo("本次没有消化成功，图片未被消耗");
     }
 
     @Test
