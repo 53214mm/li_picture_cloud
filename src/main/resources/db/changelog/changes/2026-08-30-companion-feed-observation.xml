@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="20260830-01" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not>
+                <indexExists indexName="idx_companion_feed_observation_time"
+                             tableName="companion_feed_run"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_companion_feed_observation_time"
+                     tableName="companion_feed_run">
+            <column name="createTime"/>
+            <column name="id"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_companion_feed_observation_time"
+                       tableName="companion_feed_run"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260830-02" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not>
+                <indexExists indexName="idx_companion_feed_observation_status_time"
+                             tableName="companion_feed_run"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_companion_feed_observation_status_time"
+                     tableName="companion_feed_run">
+            <column name="status"/>
+            <column name="createTime"/>
+            <column name="id"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_companion_feed_observation_status_time"
+                       tableName="companion_feed_run"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20260830-03" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not>
+                <indexExists indexName="idx_companion_feed_observation_correlation"
+                             tableName="companion_feed_run"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_companion_feed_observation_correlation"
+                     tableName="companion_feed_run">
+            <column name="correlationId"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_companion_feed_observation_correlation"
+                       tableName="companion_feed_run"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

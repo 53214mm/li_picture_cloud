@@ -115,16 +115,30 @@ public class CompanionLifeService implements CompanionLife {
                         ? properties.getVisionProvider() : null,
                 requestedPolicy == NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK
                         ? properties.getVisionModel() : null);
+        log.info("companion_feed_stage stage=run_reserved correlationId={} runId={} subjectId={} pictureId={} "
+                        + "reservationKind={} attemptCount={} requestedPolicy={}",
+                reservation.run().correlationId(), reservation.run().id(), command.subject().userId(),
+                command.pictureId(), reservation.kind(), reservation.run().attemptCount(), requestedPolicy);
 
         // 授权放在回放判断之前：历史结果不是绕过空间权限的旁路。
         checkAuthorization(command, reservation);
+        log.info("companion_feed_stage stage=authorization correlationId={} runId={} result=check_passed "
+                        + "reservationKind={}",
+                reservation.run().correlationId(), reservation.run().id(), reservation.kind());
         if (reservation.kind() == FeedReservation.Kind.REPLAY) {
+            log.info("companion_feed_stage stage=settlement correlationId={} runId={} attemptCount={} result=replay",
+                    reservation.run().correlationId(), reservation.run().id(), reservation.run().attemptCount());
             return reservation.replay();
         }
         if (reservation.kind() == FeedReservation.Kind.REJECTED) {
+            log.info("companion_feed_stage stage=authorization correlationId={} runId={} result=rejected "
+                            + "safeErrorCode={}", reservation.run().correlationId(), reservation.run().id(),
+                    reservation.run().safeErrorCode());
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR, reservation.run().safeErrorMessage());
         }
         if (reservation.kind() == FeedReservation.Kind.IN_PROGRESS) {
+            log.info("companion_feed_stage stage=run correlationId={} runId={} result=in_progress",
+                    reservation.run().correlationId(), reservation.run().id());
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "这次喂养还在消化中，请稍后重试");
         }
 
@@ -139,15 +153,28 @@ public class CompanionLifeService implements CompanionLife {
             String safeCode = error instanceof VisionSafeFailure failure
                     ? failure.safeCode() : "NUTRITION_FAILED";
             coordinator.fail(reservation.run(), safeCode, "本次没有消化成功，图片未被消耗");
-            log.warn("companion_feed_nutrition_failed correlationId={} subjectId={} pictureId={} exceptionType={}",
-                    reservation.run().correlationId(), command.subject().userId(), command.pictureId(),
-                    error.getClass().getName());
+            log.warn("companion_feed_stage stage=nutrition correlationId={} runId={} subjectId={} pictureId={} "
+                            + "attemptCount={} result=failed exceptionType={}",
+                    reservation.run().correlationId(), reservation.run().id(), command.subject().userId(),
+                    command.pictureId(), reservation.run().attemptCount(), error.getClass().getName());
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "本次没有消化成功，图片未被消耗");
         }
+        log.info("companion_feed_stage stage=nutrition correlationId={} runId={} result=passed "
+                        + "nutritionMode={} providerCode={} modelCode={} fallbackReasonCode={}",
+                reservation.run().correlationId(), reservation.run().id(), nutrition.provenance().actualMode(),
+                nutrition.provenance().providerCode(), nutrition.provenance().modelCode(),
+                nutrition.provenance().fallbackReasonCode());
         try {
-            return coordinator.complete(reservation.run(), nutrition);
+            FeedPictureResult result = coordinator.complete(reservation.run(), nutrition);
+            log.info("companion_feed_stage stage=settlement correlationId={} runId={} attemptCount={} result=completed",
+                    reservation.run().correlationId(), reservation.run().id(), reservation.run().attemptCount());
+            return result;
         } catch (RuntimeException error) {
             coordinator.fail(reservation.run(), "FEED_COMMIT_FAILED", "本次没有消化成功，图片未被消耗");
+            log.warn("companion_feed_stage stage=settlement correlationId={} runId={} subjectId={} pictureId={} "
+                            + "attemptCount={} result=failed exceptionType={}",
+                    reservation.run().correlationId(), reservation.run().id(), command.subject().userId(),
+                    command.pictureId(), reservation.run().attemptCount(), error.getClass().getName());
             if (error instanceof BusinessException businessException) {
                 throw businessException;
             }
@@ -175,8 +202,10 @@ public class CompanionLifeService implements CompanionLife {
                 if (reservation.kind() == FeedReservation.Kind.STARTED) {
                     coordinator.reject(reservation.run(), "PICTURE_UNAVAILABLE", "图片不可用或无权访问");
                 }
-                log.warn("companion_feed_denied correlationId={} subjectId={} pictureId={} reason=PICTURE_UNAVAILABLE",
-                        reservation.run().correlationId(), command.subject().userId(), command.pictureId());
+                log.warn("companion_feed_stage stage=authorization correlationId={} runId={} subjectId={} "
+                                + "pictureId={} attemptCount={} result=denied safeErrorCode=PICTURE_UNAVAILABLE",
+                        reservation.run().correlationId(), reservation.run().id(), command.subject().userId(),
+                        command.pictureId(), reservation.run().attemptCount());
                 throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "图片不可用或无权访问");
             }
             if (error.getCode() == ErrorCode.NOT_LOGIN_ERROR.getCode()) {
@@ -197,9 +226,10 @@ public class CompanionLifeService implements CompanionLife {
             return;
         }
         coordinator.fail(reservation.run(), "AUTHORIZATION_CHECK_FAILED", "暂时无法校验图片访问权限，请重试");
-        log.warn("companion_feed_authorization_failed correlationId={} subjectId={} pictureId={} exceptionType={}",
-                reservation.run().correlationId(), command.subject().userId(), command.pictureId(),
-                exceptionType.getName());
+        log.warn("companion_feed_stage stage=authorization correlationId={} runId={} subjectId={} pictureId={} "
+                        + "attemptCount={} result=failed safeErrorCode=AUTHORIZATION_CHECK_FAILED exceptionType={}",
+                reservation.run().correlationId(), reservation.run().id(), command.subject().userId(),
+                command.pictureId(), reservation.run().attemptCount(), exceptionType.getName());
     }
 
     private static String fingerprint(long pictureId) {

@@ -81,6 +81,18 @@ if (COMPANION_UI_ENABLED) {
     component: () => import('@/views/CompanionView.vue'),
     meta: { requiresAuth: true }
   })
+  routes.push({
+    path: '/admin/companion-feed-runs',
+    name: 'admin-companion-feed-runs',
+    component: () => import('@/views/AdminCompanionFeedRunsView.vue'),
+    meta: { requiresAuth: true }
+  })
+  routes.push({
+    path: '/admin/companion-feed-runs/:runId',
+    name: 'admin-companion-feed-run-detail',
+    component: () => import('@/views/AdminCompanionFeedRunDetailView.vue'),
+    meta: { requiresAuth: true }
+  })
 }
 
 const router = createRouter({

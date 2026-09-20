@@ -30,8 +30,9 @@ class CompanionSchemaMigrationTest {
             update(dataSource);
             assertCompanionTables(dataSource, 1, 1);
 
-            rollback(dataSource, visualProviderChangeSetCount(dataSource));
-            // 视觉 migration 全部回滚后，初始伙伴四表仍在，后续加入的额度表已消失。
+            rollback(dataSource, visualProviderChangeSetCount(dataSource)
+                    + observationChangeSetCount(dataSource));
+            // 伙伴扩展 migration 全部回滚后，初始伙伴四表仍在，后续加入的额度表已消失。
             assertCompanionTables(dataSource, 1, 0);
             assertLegacyContentUnderstoodRemainsNotNull(dataSource);
 
@@ -41,6 +42,22 @@ class CompanionSchemaMigrationTest {
 
             update(dataSource);
             assertCompanionTables(dataSource, 1, 1);
+        }
+    }
+
+    @Test
+    void addsIndexesForFeedObservationQueries() throws Exception {
+        try (HikariDataSource dataSource = new HikariDataSource()) {
+            dataSource.setJdbcUrl("jdbc:h2:mem:companion_observation_indexes;MODE=MySQL;DB_CLOSE_DELAY=-1");
+            dataSource.setUsername("sa");
+            dataSource.setPassword("");
+
+            update(dataSource);
+
+            JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+            assertThat(indexExists(jdbcTemplate, "companion_feed_run", "idx_companion_feed_observation_time")).isTrue();
+            assertThat(indexExists(jdbcTemplate, "companion_feed_run", "idx_companion_feed_observation_status_time")).isTrue();
+            assertThat(indexExists(jdbcTemplate, "companion_feed_run", "idx_companion_feed_observation_correlation")).isTrue();
         }
     }
 
@@ -273,6 +290,15 @@ class CompanionSchemaMigrationTest {
         return count != null && count == 1;
     }
 
+    private static boolean indexExists(JdbcTemplate jdbcTemplate, String tableName, String indexName) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEXES
+                WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = LOWER(?)
+                  AND LOWER(INDEX_NAME) = LOWER(?)
+                """, Integer.class, tableName, indexName);
+        return count != null && count == 1;
+    }
+
     private static void insertLegacyGrowth(JdbcTemplate jdbcTemplate, long id, String nutritionMode) {
         jdbcTemplate.update("""
                 INSERT INTO companion_growth_record
@@ -289,6 +315,13 @@ class CompanionSchemaMigrationTest {
         return new JdbcTemplate(dataSource).queryForObject("""
                 SELECT COUNT(*) FROM DATABASECHANGELOG
                 WHERE FILENAME LIKE '%2026-08-13-companion-visual-provider.xml'
+                """, Integer.class);
+    }
+
+    private static int observationChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-30-companion-feed-observation.xml'
                 """, Integer.class);
     }
 

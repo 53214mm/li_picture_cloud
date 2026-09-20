@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.li.lipicturecloud.mapper.CompanionFeedObservationMapper">
+
+    <resultMap id="CompanionFeedObservationMap"
+               type="com.li.lipicturecloud.application.companion.observation.CompanionFeedObservationRow">
+        <constructor>
+            <idArg column="runId" javaType="java.lang.Long"/>
+            <arg column="correlationId" javaType="java.lang.String"/>
+            <arg column="companionId" javaType="java.lang.Long"/>
+            <arg column="subjectId" javaType="java.lang.Long"/>
+            <arg column="pictureId" javaType="java.lang.Long"/>
+            <arg column="userAccount" javaType="java.lang.String"/>
+            <arg column="userName" javaType="java.lang.String"/>
+            <arg column="status" javaType="java.lang.String"/>
+            <arg column="requestedPolicy" javaType="java.lang.String"/>
+            <arg column="requestedProviderCode" javaType="java.lang.String"/>
+            <arg column="requestedModelCode" javaType="java.lang.String"/>
+            <arg column="resultGrowthRecordId" javaType="java.lang.Long"/>
+            <arg column="safeErrorCode" javaType="java.lang.String"/>
+            <arg column="safeErrorMessage" javaType="java.lang.String"/>
+            <arg column="safeErrorTime" javaType="java.time.Instant"/>
+            <arg column="attemptCount" javaType="java.lang.Integer"/>
+            <arg column="revision" javaType="java.lang.Long"/>
+            <arg column="createTime" javaType="java.time.Instant"/>
+            <arg column="updateTime" javaType="java.time.Instant"/>
+            <arg column="pictureName" javaType="java.lang.String"/>
+            <arg column="idempotencyKey" javaType="java.lang.String"/>
+            <arg column="actualNutritionMode" javaType="java.lang.String"/>
+            <arg column="contentUnderstood" javaType="java.lang.Boolean"/>
+            <arg column="actualProviderCode" javaType="java.lang.String"/>
+            <arg column="actualModelCode" javaType="java.lang.String"/>
+            <arg column="promptVersion" javaType="java.lang.String"/>
+            <arg column="resultSchemaVersion" javaType="java.lang.String"/>
+            <arg column="confidence" javaType="java.math.BigDecimal"/>
+            <arg column="fallbackReasonCode" javaType="java.lang.String"/>
+            <arg column="growthLifeExperienceDelta" javaType="java.lang.Long"/>
+            <arg column="growthEventType" javaType="java.lang.String"/>
+            <arg column="growthReason" javaType="java.lang.String"/>
+            <arg column="growthCreateTime" javaType="java.time.Instant"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="observationColumns">
+        r.id AS runId,
+        r.correlationId AS correlationId,
+        r.companionId AS companionId,
+        r.subjectId AS subjectId,
+        r.pictureId AS pictureId,
+        u.userAccount AS userAccount,
+        u.userName AS userName,
+        r.status AS status,
+        r.requestedPolicy AS requestedPolicy,
+        r.requestedProviderCode AS requestedProviderCode,
+        r.requestedModelCode AS requestedModelCode,
+        r.resultGrowthRecordId AS resultGrowthRecordId,
+        r.safeErrorCode AS safeErrorCode,
+        r.safeErrorMessage AS safeErrorMessage,
+        r.safeErrorTime AS safeErrorTime,
+        r.attemptCount AS attemptCount,
+        r.revision AS revision,
+        r.createTime AS createTime,
+        r.updateTime AS updateTime,
+        NULL AS pictureName,
+        r.idempotencyKey AS idempotencyKey,
+        g.nutritionMode AS actualNutritionMode,
+        g.contentUnderstood AS contentUnderstood,
+        g.providerCode AS actualProviderCode,
+        g.modelCode AS actualModelCode,
+        g.promptVersion AS promptVersion,
+        g.resultSchemaVersion AS resultSchemaVersion,
+        g.confidence AS confidence,
+        g.fallbackReasonCode AS fallbackReasonCode,
+        g.lifeExperienceDelta AS growthLifeExperienceDelta,
+        g.eventType AS growthEventType,
+        g.reason AS growthReason,
+        g.createTime AS growthCreateTime
+    </sql>
+
+    <sql id="observationFrom">
+        FROM companion_feed_run r
+        LEFT JOIN `user` u ON u.id = r.subjectId
+        LEFT JOIN companion_growth_record g ON g.id = r.resultGrowthRecordId
+    </sql>
+
+    <sql id="observationFilters">
+        <where>
+            <if test="query.subjectId != null">
+                AND r.subjectId = #{query.subjectId}
+            </if>
+            <if test="query.pictureId != null">
+                AND r.pictureId = #{query.pictureId}
+            </if>
+            <if test="query.userKeyword != null and query.userKeyword != ''">
+                AND (u.userAccount LIKE CONCAT('%', #{query.userKeyword}, '%')
+                    OR u.userName LIKE CONCAT('%', #{query.userKeyword}, '%'))
+            </if>
+            <if test="query.status != null and query.status != ''">
+                AND r.status = #{query.status}
+            </if>
+            <if test="query.requestedPolicy != null and query.requestedPolicy != ''">
+                AND r.requestedPolicy = #{query.requestedPolicy}
+            </if>
+            <if test="query.safeErrorCode != null and query.safeErrorCode != ''">
+                AND r.safeErrorCode = #{query.safeErrorCode}
+            </if>
+            <if test="query.correlationId != null and query.correlationId != ''">
+                AND r.correlationId = #{query.correlationId}
+            </if>
+            <if test="query.startTime != null">
+                AND r.createTime &gt;= #{query.startTime}
+            </if>
+            <if test="query.endTime != null">
+                AND r.createTime &lt;= #{query.endTime}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultMap="CompanionFeedObservationMap">
+        SELECT
+        <include refid="observationColumns"/>
+        <include refid="observationFrom"/>
+        <include refid="observationFilters"/>
+        ORDER BY r.createTime DESC, r.id DESC
+    </select>
+
+    <select id="selectByRunId" resultMap="CompanionFeedObservationMap">
+        SELECT
+        <include refid="observationColumns"/>
+        <include refid="observationFrom"/>
+        WHERE r.id = #{runId}
+    </select>
+</mapper>

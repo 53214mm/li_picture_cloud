@@ -30,7 +30,8 @@ export function buildNavigationGroups({ isLoggedIn, isAdmin, companionEnabled = 
       label: '管理',
       items: [
         { label: '图片审核', to: '/admin/pictures' },
-        { label: '用户管理', to: '/admin/users' }
+        { label: '用户管理', to: '/admin/users' },
+        ...(companionEnabled ? [{ label: '喂养日志', to: '/admin/companion-feed-runs' }] : [])
       ]
     })
   }
