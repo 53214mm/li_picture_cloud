@@ -72,6 +72,22 @@ public class MybatisGrowthRecordRepository implements GrowthRecordRepository {
         return growthRecordMapper.sumRevisitExperience(companionId, pictureId);
     }
 
+    @Override
+    public long countSince(long companionId, Instant since) {
+        return growthRecordMapper.countSince(companionId, Date.from(Objects.requireNonNull(since, "since")));
+    }
+
+    @Override
+    public long countAnniversaryFeeds(long companionId, int month, int day) {
+        return growthRecordMapper.countAnniversaryFeeds(companionId, month, day);
+    }
+
+    @Override
+    public List<Long> findRecentFedPictureIds(long companionId, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 20));
+        return growthRecordMapper.selectRecentFedPictureIds(companionId, safeLimit);
+    }
+
     private GrowthRecord fromRow(CompanionGrowthRecordEntity row) {
         return new GrowthRecord(row.getId(), row.getFeedingRunId(), row.getCompanionId(), row.getPictureId(),
                 GrowthEventType.valueOf(row.getEventType()), row.getLifeExperienceDelta(),

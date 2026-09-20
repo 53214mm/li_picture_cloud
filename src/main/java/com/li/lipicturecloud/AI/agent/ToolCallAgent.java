@@ -70,20 +70,18 @@ public class ToolCallAgent extends ReActAgent {
             List<AssistantMessage.ToolCall> toolCallList = assistantMessage.getToolCalls();
             String result = assistantMessage.getText();
             this.lastThinkText = result;
-            log.info(getName() + "的思考：" + result);
-            log.info(getName() + "选择了 " + toolCallList.size() + " 个工具来使用");
-            String toolCallInfo = toolCallList.stream()
-                    .map(tc -> String.format("工具名称：%s，参数：%s", tc.name(), tc.arguments()))
-                    .collect(Collectors.joining(NL));
-            log.info(toolCallInfo);
+            log.info("agent_think_completed agent={} toolCallCount={} toolNames={}",
+                    getName(), toolCallList.size(),
+                    toolCallList.stream().map(AssistantMessage.ToolCall::name).toList());
             if (toolCallList.isEmpty()) {
                 getMessageList().add(assistantMessage);
                 return false;
             }
             return true;
         } catch (Exception e) {
-            log.error(getName() + "的思考过程遇到了问题：" + e.getMessage());
-            getMessageList().add(new AssistantMessage("处理时遇到了错误：" + e.getMessage()));
+            log.warn("agent_think_failed agent={} exceptionType={}",
+                    getName(), e.getClass().getName());
+            getMessageList().add(new AssistantMessage("处理时遇到了错误，请稍后重试。"));
             return false;
         }
     }
@@ -103,8 +101,9 @@ public class ToolCallAgent extends ReActAgent {
             }
             return actionResult;
         } catch (Exception e) {
-            e.printStackTrace();
-            return "步骤执行失败: " + e.getMessage();
+            log.warn("agent_step_failed agent={} exceptionType={}",
+                    getName(), e.getClass().getName());
+            return "步骤执行失败，请稍后重试。";
         }
     }
 
@@ -121,7 +120,9 @@ public class ToolCallAgent extends ReActAgent {
         String results = toolResponseMessage.getResponses().stream()
                 .map(r -> "工具 " + r.name() + " 返回的结果：" + r.responseData())
                 .collect(Collectors.joining(NL));
-        log.info(results);
+        log.info("agent_tool_execution_completed agent={} responseCount={} toolNames={}",
+                getName(), toolResponseMessage.getResponses().size(),
+                toolResponseMessage.getResponses().stream().map(response -> response.name()).toList());
 
         boolean terminateToolCalled = toolResponseMessage.getResponses().stream()
                 .anyMatch(r -> r.name().equals("doTerminate"));

@@ -33,6 +33,29 @@ rules:
       - primary.companion_feed_run
       - primary.companion_growth_record
       - primary.companion_vision_usage
+      - primary.companion_mood
+      - primary.companion_relationship
+      - primary.companion_memory
+      - primary.companion_chat_message
+      - primary.companion_chat_usage
+      - primary.companion_autonomy_contract
+      - primary.companion_proposal
+      - primary.companion_proposal_reaction
+      - primary.model_connection
+      - primary.credential_vault
+      - primary.model_usage_record
+      - primary.task_routing_rule
+      - primary.model_capability_profile
+      - primary.mcp_connection
+      - primary.mcp_tool_whitelist
+      - primary.platform_trial_ledger
+      - primary.creation_task
+      - primary.creation_lineage
+      - primary.creation_candidate
+      - primary.creation_fusion_image
+      - primary.recipe
+      - primary.recipe_version
+      - primary.recipe_execution
     defaultDataSource: primary
 
 props:

@@ -1,12 +1,18 @@
 package com.li.lipicturecloud.application.companion;
 
 import com.li.lipicturecloud.application.companion.view.CompanionHomeView;
+import com.li.lipicturecloud.application.companion.view.CompanionMoodView;
+import com.li.lipicturecloud.application.companion.view.CompanionRelationshipView;
 import com.li.lipicturecloud.application.companion.view.CompanionView;
 import com.li.lipicturecloud.application.companion.view.FeedPictureResult;
 import com.li.lipicturecloud.application.companion.view.GrowthRecordView;
 import com.li.lipicturecloud.config.CompanionFeatureProperties;
 import com.li.lipicturecloud.domain.companion.Companion;
 import com.li.lipicturecloud.domain.companion.CompanionBalance;
+import com.li.lipicturecloud.domain.companion.CompanionMood;
+import com.li.lipicturecloud.domain.companion.CompanionMoodRepository;
+import com.li.lipicturecloud.domain.companion.CompanionMoodRules;
+import com.li.lipicturecloud.domain.companion.CompanionRelationshipRepository;
 import com.li.lipicturecloud.domain.companion.CompanionRepository;
 import com.li.lipicturecloud.domain.companion.GrowthRecordRepository;
 import com.li.lipicturecloud.domain.companion.NutritionPolicy;
@@ -26,6 +32,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
@@ -50,31 +57,45 @@ public class CompanionLifeService implements CompanionLife {
 
     private final CompanionRepository companionRepository;
     private final GrowthRecordRepository growthRepository;
+    private final CompanionMoodRepository moodRepository;
+    private final CompanionRelationshipRepository relationshipRepository;
     private final CompanionFeedingCoordinator coordinator;
     private final SpaceAuthorizationAccessService authorization;
     private final PictureNutritionAnalyzer analyzer;
     private final CompanionViewAssembler assembler;
     private final CompanionFeatureProperties properties;
     private final CompanionBalance balance;
+    private final CompanionMoodRules moodRules;
+    private final Clock clock;
     private final TransactionTemplate homeReadTransaction;
+    /** 只读快照内计算出的情绪衰减，请求结束后由 flushDecayedMood 条件写回。 */
+    private final ThreadLocal<CompanionMood> decayedMood = new ThreadLocal<>();
 
     public CompanionLifeService(CompanionRepository companionRepository,
                                 GrowthRecordRepository growthRepository,
+                                CompanionMoodRepository moodRepository,
+                                CompanionRelationshipRepository relationshipRepository,
                                 CompanionFeedingCoordinator coordinator,
                                 SpaceAuthorizationAccessService authorization,
                                 PictureNutritionAnalyzer analyzer,
                                 CompanionViewAssembler assembler,
                                 CompanionFeatureProperties properties,
                                 CompanionBalance balance,
+                                CompanionMoodRules moodRules,
+                                Clock clock,
                                 PlatformTransactionManager transactionManager) {
         this.companionRepository = companionRepository;
         this.growthRepository = growthRepository;
+        this.moodRepository = moodRepository;
+        this.relationshipRepository = relationshipRepository;
         this.coordinator = coordinator;
         this.authorization = authorization;
         this.analyzer = analyzer;
         this.assembler = assembler;
         this.properties = properties;
         this.balance = balance;
+        this.moodRules = moodRules;
+        this.clock = clock;
         this.homeReadTransaction = new TransactionTemplate(transactionManager);
         this.homeReadTransaction.setReadOnly(true);
         this.homeReadTransaction.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
@@ -83,14 +104,33 @@ public class CompanionLifeService implements CompanionLife {
     @Override
     public CompanionHomeView home(AuthorizationSubject subject) {
         Objects.requireNonNull(subject, "subject");
-        // 主页由伙伴、技能和成长记录组成，使用可重复读快照避免并发喂养时看到“半新半旧”的页面。
-        return homeReadTransaction.execute(status -> readHome(subject));
+        // 主页在只读可重复读快照中组装；情绪惰性衰减在快照内计算，事务结束后再条件写回。
+        try {
+            return homeReadTransaction.execute(status -> readHome(subject));
+        } finally {
+            flushDecayedMood();
+        }
+    }
+
+    private void flushDecayedMood() {
+        CompanionMood decayed = decayedMood.get();
+        decayedMood.remove();
+        if (decayed == null) {
+            return;
+        }
+        if (!moodRepository.save(decayed, Math.subtractExact(decayed.revision(), 1L))) {
+            // 并发喂养已推进 revision；丢弃本次衰减，下一次读取会重新计算。
+            log.warn("companion_mood_decay_conflict companionId={}", decayed.companionId());
+        }
     }
 
     @Override
     public CompanionHomeView awaken(AuthorizationSubject subject) {
         Objects.requireNonNull(subject, "subject");
         companionRepository.createIfAbsent(subject.userId(), balance);
+        companionRepository.findByOwnerId(subject.userId()).ifPresent(companion ->
+                log.info("companion_awakened subjectId={} companionId={} level={} stage={}",
+                        subject.userId(), companion.id(), companion.level(), companion.lifeStage().name()));
         return home(subject);
     }
 
@@ -187,10 +227,29 @@ public class CompanionLifeService implements CompanionLife {
         if (companion == null) {
             return new CompanionHomeView(null, assembler.nutritionStatus(), List.of());
         }
+        // 伙伴主页加载是"故事阅读"漏斗的代理事件，只记录已唤醒主体，避免把空页噪音计入漏斗。
+        log.info("companion_home_viewed subjectId={} companionId={} level={}",
+                subject.userId(), companion.id(), companion.level());
         CompanionView companionView = assembler.companion(companion);
         List<GrowthRecordView> growth = growthRepository.findRecent(companion.id(), 20)
                 .stream().map(assembler::growth).toList();
-        return new CompanionHomeView(companionView, assembler.nutritionStatus(), growth);
+        CompanionMoodView mood = moodRepository.findByCompanionId(companion.id())
+                .map(existing -> {
+                    CompanionMood decayed = existing.decayed(clock.instant(), moodRules);
+                    if (decayed != existing) {
+                        decayedMood.set(decayed);
+                    }
+                    return decayed;
+                })
+                .map(assembler::mood)
+                // 已唤醒但还没有 companion_mood 行时返回服务端生成的中性情绪视图；
+                // 普通主页读取不为了展示中性值而插入数据库行。
+                .orElseGet(() -> assembler.mood(CompanionMood.neutral(companion.id(), clock.instant())));
+        CompanionRelationshipView relationship = relationshipRepository
+                .findByCompanionAndSubject(companion.id(), subject.userId())
+                .map(assembler::relationship).orElse(null);
+        return new CompanionHomeView(companionView, assembler.nutritionStatus(), growth, mood,
+                relationship, properties.getChatPolicy().name());
     }
 
     private void checkAuthorization(FeedPictureCommand command, FeedReservation reservation) {

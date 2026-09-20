@@ -29,9 +29,104 @@ class CompanionSchemaMigrationTest {
 
             update(dataSource);
             assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+            assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 1);
+            assertCapabilityTables(dataSource, 1);
+            assertMcpTables(dataSource, 1);
+            assertTrialLedgerTable(dataSource, 1);
+            assertCreationTables(dataSource, 1);
+            assertRecipeTables(dataSource, 1);
 
-            rollback(dataSource, visualProviderChangeSetCount(dataSource)
-                    + observationChangeSetCount(dataSource));
+            rollback(dataSource, observationChangeSetCount(dataSource));
+            // 观测索引回滚后，业务表及其他扩展能力不受影响。
+            assertObservationIndexes(dataSource, false);
+            assertCompanionTables(dataSource, 1, 1);
+            assertRecipeTables(dataSource, 1);
+
+            rollback(dataSource, recipeChangeSetCount(dataSource));
+            // 配方工坊 migration 全部回滚后，创作任务等其余表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+            assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 1);
+            assertCapabilityTables(dataSource, 1);
+            assertMcpTables(dataSource, 1);
+            assertTrialLedgerTable(dataSource, 1);
+            assertCreationTables(dataSource, 1);
+            assertRecipeTables(dataSource, 0);
+
+            rollback(dataSource, creationChangeSetCount(dataSource));
+            // 创作任务 migration 全部回滚后，其余模型网关与伙伴表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+            assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 1);
+            assertCapabilityTables(dataSource, 1);
+            assertMcpTables(dataSource, 1);
+            assertTrialLedgerTable(dataSource, 1);
+            assertCreationTables(dataSource, 0);
+
+            rollback(dataSource, trialLedgerChangeSetCount(dataSource));
+            // 试用账本 migration 全部回滚后，其余模型网关与伙伴表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+            assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 1);
+            assertCapabilityTables(dataSource, 1);
+            assertMcpTables(dataSource, 1);
+            assertTrialLedgerTable(dataSource, 0);
+
+            rollback(dataSource, mcpChangeSetCount(dataSource));
+            // MCP 白名单 migration 全部回滚后，其余模型网关与伙伴表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+            assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 1);
+            assertCapabilityTables(dataSource, 1);
+            assertMcpTables(dataSource, 0);
+
+            rollback(dataSource, capabilityChangeSetCount(dataSource));
+            // 能力画像 migration 全部回滚后，其余模型网关与伙伴表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+            assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 1);
+            assertCapabilityTables(dataSource, 0);
+
+            rollback(dataSource, modelGatewayChangeSetCount(dataSource));
+            // 模型网关 migration 全部回滚后，其余伙伴表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+            assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 0);
+
+            rollback(dataSource, proposalChangeSetCount(dataSource));
+            // 提案 migration 全部回滚后，其余伙伴表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+            assertProposalTables(dataSource, 0);
+
+            rollback(dataSource, chatChangeSetCount(dataSource));
+            // 对话 migration 全部回滚后，其余伙伴表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 0);
+
+            rollback(dataSource, moodMemoryChangeSetCount(dataSource));
+            // 情绪/关系/记忆 migration 全部回滚后，视觉与初始伙伴表不受影响。
+            assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 0);
+
+            rollback(dataSource, visualProviderChangeSetCount(dataSource));
             // 伙伴扩展 migration 全部回滚后，初始伙伴四表仍在，后续加入的额度表已消失。
             assertCompanionTables(dataSource, 1, 0);
             assertLegacyContentUnderstoodRemainsNotNull(dataSource);
@@ -39,9 +134,27 @@ class CompanionSchemaMigrationTest {
             update(dataSource);
             rollback(dataSource);
             assertCompanionTables(dataSource, 0, 0);
+            assertMoodRelationshipMemoryTables(dataSource, 0);
+            assertChatTables(dataSource, 0);
+            assertProposalTables(dataSource, 0);
+            assertModelGatewayTables(dataSource, 0);
+            assertCapabilityTables(dataSource, 0);
+            assertMcpTables(dataSource, 0);
+            assertTrialLedgerTable(dataSource, 0);
+            assertCreationTables(dataSource, 0);
+            assertRecipeTables(dataSource, 0);
 
             update(dataSource);
             assertCompanionTables(dataSource, 1, 1);
+            assertMoodRelationshipMemoryTables(dataSource, 1);
+            assertChatTables(dataSource, 1);
+            assertProposalTables(dataSource, 1);
+            assertModelGatewayTables(dataSource, 1);
+            assertCapabilityTables(dataSource, 1);
+            assertMcpTables(dataSource, 1);
+            assertTrialLedgerTable(dataSource, 1);
+            assertCreationTables(dataSource, 1);
+            assertRecipeTables(dataSource, 1);
         }
     }
 
@@ -323,6 +436,177 @@ class CompanionSchemaMigrationTest {
                 SELECT COUNT(*) FROM DATABASECHANGELOG
                 WHERE FILENAME LIKE '%2026-08-30-companion-feed-observation.xml'
                 """, Integer.class);
+    }
+
+    private static int moodMemoryChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-14-companion-mood-relationship-memory.xml'
+                """, Integer.class);
+    }
+
+    private static int chatChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-14-companion-chat.xml'
+                """, Integer.class);
+    }
+
+    private static int proposalChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-14-companion-proposal.xml'
+                """, Integer.class);
+    }
+
+    private static int modelGatewayChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-14-model-gateway.xml'
+                """, Integer.class);
+    }
+
+    private static int capabilityChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-14-model-capability-profile.xml'
+                """, Integer.class);
+    }
+
+    private static int mcpChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-15-mcp-whitelist.xml'
+                """, Integer.class);
+    }
+
+    private static int trialLedgerChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-15-trial-ledger.xml'
+                """, Integer.class);
+    }
+
+    private static int creationChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-15-creation-task.xml'
+                """, Integer.class);
+    }
+
+    private static int recipeChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-08-15-recipe-workshop.xml'
+                """, Integer.class);
+    }
+
+    private static void assertMoodRelationshipMemoryTables(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        for (String table : List.of("companion_mood", "companion_relationship", "companion_memory")) {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
+                    """, Integer.class, table);
+            assertThat(count).as(table).isEqualTo(expectedTableCount);
+        }
+    }
+
+    private static void assertChatTables(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        for (String table : List.of("companion_chat_message", "companion_chat_usage")) {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
+                    """, Integer.class, table);
+            assertThat(count).as(table).isEqualTo(expectedTableCount);
+        }
+    }
+
+    private static void assertProposalTables(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        for (String table : List.of("companion_autonomy_contract", "companion_proposal",
+                "companion_proposal_reaction")) {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
+                    """, Integer.class, table);
+            assertThat(count).as(table).isEqualTo(expectedTableCount);
+        }
+    }
+
+    private static void assertModelGatewayTables(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        for (String table : List.of("model_connection", "credential_vault",
+                "model_usage_record", "task_routing_rule")) {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
+                    """, Integer.class, table);
+            assertThat(count).as(table).isEqualTo(expectedTableCount);
+        }
+    }
+
+    private static void assertCapabilityTables(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = 'model_capability_profile'
+                """, Integer.class);
+        assertThat(count).as("model_capability_profile").isEqualTo(expectedTableCount);
+    }
+
+    private static void assertMcpTables(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        for (String table : List.of("mcp_connection", "mcp_tool_whitelist")) {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
+                    """, Integer.class, table);
+            assertThat(count).as(table).isEqualTo(expectedTableCount);
+        }
+    }
+
+    private static void assertTrialLedgerTable(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = 'platform_trial_ledger'
+                """, Integer.class);
+        assertThat(count).as("platform_trial_ledger").isEqualTo(expectedTableCount);
+    }
+
+    private static void assertCreationTables(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        for (String table : List.of("creation_task", "creation_lineage", "creation_candidate",
+                "creation_fusion_image")) {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
+                    """, Integer.class, table);
+            assertThat(count).as(table).isEqualTo(expectedTableCount);
+        }
+    }
+
+    private static void assertRecipeTables(DataSource dataSource, int expectedTableCount) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        for (String table : List.of("recipe", "recipe_version", "recipe_execution")) {
+            Integer count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = ?
+                    """, Integer.class, table);
+            assertThat(count).as(table).isEqualTo(expectedTableCount);
+        }
+    }
+
+    private static void assertObservationIndexes(DataSource dataSource, boolean expected) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        for (String index : List.of(
+                "idx_companion_feed_observation_time",
+                "idx_companion_feed_observation_status_time",
+                "idx_companion_feed_observation_correlation")) {
+            assertThat(indexExists(jdbcTemplate, "companion_feed_run", index)).as(index).isEqualTo(expected);
+        }
     }
 
     private static void assertLegacyContentUnderstoodRemainsNotNull(DataSource dataSource) {

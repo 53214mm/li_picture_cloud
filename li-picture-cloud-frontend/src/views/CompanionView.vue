@@ -111,6 +111,23 @@
             </section>
           </div>
 
+          <div class="state-grid">
+            <CompanionMoodPanel :mood="home.mood" />
+            <CompanionRelationshipPanel :relationship="home.relationship" />
+          </div>
+
+          <CompanionChatPanel :chat-policy="home?.chatPolicy" />
+
+          <CompanionProposalPanel :refresh-key="panelsRefreshKey" />
+
+          <CompanionMemoryPanel :refresh-key="panelsRefreshKey" />
+
+          <CompanionStoryPanel :pictures="pictures" :refresh-key="panelsRefreshKey" />
+
+          <CompanionEmojiPanel :pictures="pictures" :refresh-key="panelsRefreshKey" />
+
+          <CompanionFusionPanel :pictures="pictures" :refresh-key="panelsRefreshKey" />
+
           <CompanionGrowthTimeline :records="home.recentGrowth || []" />
         </template>
       </template>
@@ -128,7 +145,16 @@ import { listPictureVOByPageUncached } from '@/api/picture'
 import CompanionStats from '@/components/companion/CompanionStats.vue'
 import CompanionPicturePicker from '@/components/companion/CompanionPicturePicker.vue'
 import CompanionGrowthTimeline from '@/components/companion/CompanionGrowthTimeline.vue'
+import CompanionMoodPanel from '@/components/companion/CompanionMoodPanel.vue'
+import CompanionRelationshipPanel from '@/components/companion/CompanionRelationshipPanel.vue'
+import CompanionMemoryPanel from '@/components/companion/CompanionMemoryPanel.vue'
+import CompanionStoryPanel from '@/components/companion/CompanionStoryPanel.vue'
+import CompanionEmojiPanel from '@/components/companion/CompanionEmojiPanel.vue'
+import CompanionFusionPanel from '@/components/companion/CompanionFusionPanel.vue'
+import CompanionChatPanel from '@/components/companion/CompanionChatPanel.vue'
+import CompanionProposalPanel from '@/components/companion/CompanionProposalPanel.vue'
 import {
+  adoptAuthoritativeHome,
   applyFeedResult,
   beginFeedAttempt,
   buildCompanionPictureQuery,
@@ -152,6 +178,7 @@ const pendingAttempt = ref(null)
 const feedBusy = ref(false)
 const feedError = ref('')
 const feedNotice = ref('')
+const panelsRefreshKey = ref(0)
 
 const authError = computed(() => userStore.authBootstrapError)
 const feedButtonLabel = computed(() => {
@@ -192,6 +219,20 @@ async function loadHome() {
     else loadError.value = error.message || '伙伴状态加载失败，请稍后重试。'
   } finally {
     pageLoading.value = false
+  }
+}
+
+/**
+ * 喂养成功后再取一次权威主页：情绪与关系只随 /companion/me 返回，不随喂养回执下发。
+ * 静默执行，失败时保留已合并的本次喂养结果，只影响面板的即时性。
+ */
+async function refreshAuthoritativeHome() {
+  try {
+    const authoritative = await getCompanionHome()
+    home.value = adoptAuthoritativeHome(home.value, authoritative)
+  } catch (error) {
+    // 不把刷新失败误报成喂养失败：成长与记忆已经展示，下一次读取会补上最新情绪/关系。
+    console.warn('[companion] 喂养后权威主页刷新失败，情绪与关系面板可能停留在旧值', error)
   }
 }
 
@@ -261,12 +302,17 @@ async function submitFeed() {
     const result = await feedCompanion(pendingAttempt.value)
     // applyFeedResult 会合并回放记录，同时按 revision 防止旧回放把当前伙伴显示倒退。
     home.value = applyFeedResult(home.value, result)
+    // 喂养可能产生新的记忆候选/机会，通知面板按新状态刷新。
+    panelsRefreshKey.value += 1
     feedNotice.value = wasRetry
       ? '这次喂养已安全完成，没有重复成长。'
       : result.outcome === 'FAMILIARITY'
         ? '伙伴认出了这张图片，只获得了一点熟悉感。'
         : '伙伴完成了这次喂养。'
     pendingAttempt.value = null
+    // 情绪与关系面板直接读取 home.mood / home.relationship：喂养成功后重取权威主页，
+    // 用户无需手动刷新页面即可看到本次喂养后的最新情绪与关系。
+    await refreshAuthoritativeHome()
   } catch (error) {
     // 结果不确定时留下 key，下一次重试由后端决定回放还是继续处理，前端绝不猜测是否已成长。
     const retrySameKey = shouldRetrySameFeedKey(error)
@@ -307,6 +353,7 @@ async function submitFeed() {
 .nutrition-label { font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .nutrition-banner p { font-size: .85rem; }
 .companion-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(23rem, .85fr); gap: 1.5rem; align-items: start; }
+.state-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; align-items: start; }
 .feeding-column { min-width: 0; display: grid; gap: 1rem; }
 .feeding-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .feeding-heading h2 { font-size: 1.5rem; }
@@ -323,7 +370,7 @@ async function submitFeed() {
 .feed-message.notice { color: #075d2a; font-weight: 700; }
 .feed-helper { color: var(--gray-600); }
 @media (max-width: 900px) {
-  .companion-grid { grid-template-columns: 1fr; }
+  .companion-grid, .state-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 767px) {
   .companion-page { padding-block: 1rem 3rem; }
