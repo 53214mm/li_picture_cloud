@@ -1,0 +1,85 @@
+:root {
+  /* Short, functional UI motion. */
+  --lp-dur-instant: 80ms;
+  --lp-dur-fast: 160ms;
+  --lp-dur-base: 240ms;
+  --lp-dur-slow: 420ms;
+  --lp-ease-standard: cubic-bezier(0.2, 0.6, 0.25, 1);
+  --lp-ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Ambient/life motion is a separate 2400–4000ms channel. */
+  --lp-dur-ambient-fast: 2400ms;
+  --lp-dur-ambient: 3200ms;
+  --lp-dur-ambient-slow: 4000ms;
+  --lp-ease-ambient: cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+@keyframes lp-ui-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--lp-space-2));
+  }
+}
+
+@keyframes lp-ui-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes lp-ambient-breathe {
+  0%,
+  100% {
+    opacity: 0.78;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes lp-ambient-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(calc(var(--lp-space-1) * -1));
+  }
+}
+
+.lp-motion-enter {
+  animation: lp-ui-enter var(--lp-dur-slow) var(--lp-ease-entrance) both;
+}
+
+.lp-motion-spin {
+  animation: lp-ui-spin var(--lp-dur-slow) linear infinite;
+}
+
+.lp-ambient-breathe {
+  animation: lp-ambient-breathe var(--lp-dur-ambient) var(--lp-ease-ambient) infinite;
+}
+
+.lp-ambient-float {
+  animation: lp-ambient-float var(--lp-dur-ambient-slow) var(--lp-ease-ambient) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .lp-ambient-breathe,
+  .lp-ambient-float,
+  .lp-motion-spin {
+    animation: none !important;
+  }
+}

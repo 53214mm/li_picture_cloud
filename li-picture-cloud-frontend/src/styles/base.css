@@ -1,0 +1,127 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  min-width: 0;
+  min-height: 100%;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body,
+#app {
+  min-width: 0;
+  min-height: 100%;
+}
+
+body {
+  overflow-x: clip;
+  background: var(--lp-bg);
+  color: var(--lp-text-primary);
+  font-family: var(--lp-font-sans);
+  font-size: var(--lp-font-size-body);
+  line-height: var(--lp-line-height-body);
+}
+
+::selection {
+  background: var(--lp-accent-soft);
+  color: var(--lp-text-primary);
+}
+
+:where(h1, h2, h3) {
+  color: var(--lp-text-primary);
+  font-family: var(--lp-font-sans);
+  font-weight: var(--lp-font-weight-semibold);
+  text-wrap: balance;
+}
+
+:where(h1) {
+  font-size: var(--lp-font-size-h1);
+  line-height: var(--lp-line-height-h1);
+}
+
+:where(h2) {
+  font-size: var(--lp-font-size-h2);
+  line-height: var(--lp-line-height-h2);
+}
+
+:where(h3) {
+  font-size: var(--lp-font-size-h3);
+  line-height: var(--lp-line-height-h3);
+}
+
+a {
+  color: inherit;
+  text-decoration-color: var(--lp-border-strong);
+  text-underline-offset: 0.18em;
+}
+
+:where(button, input, select, textarea) {
+  color: inherit;
+  font: inherit;
+}
+
+:where(button, a, input, select, textarea) {
+  touch-action: manipulation;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--lp-focus-ring);
+  outline-offset: 2px;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+.lp-content-text,
+.lp-content-wide,
+.lp-content-fluid {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: var(--lp-gutter);
+}
+
+.lp-content-text {
+  max-width: var(--lp-content-text);
+}
+
+.lp-content-wide {
+  max-width: var(--lp-content-wide);
+}
+
+/* Image-first galleries stay fluid and deliberately receive no hard max-width. */
+.lp-content-fluid {
+  max-width: none;
+}
+
+.lp-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --lp-gutter: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --lp-gutter: 14px;
+  }
+}

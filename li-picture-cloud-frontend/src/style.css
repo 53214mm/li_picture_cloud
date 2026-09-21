@@ -1,50 +1,32 @@
+@import './styles/tokens.css';
+@import './styles/base.css';
+@import './styles/motion.css';
+
 /* ============================================================
-   Swiss Graphic Design — Global Styles
-   配色：白底 + 红(#E03A30) + 黄(#FFC800) + 蓝(#005AFF)
-   字体：Inter，无衬线，大号标题 + 清晰信息层级
+   Legacy compatibility layer
+   旧页面仍依赖以下变量与类名；后续按页面迁移后再逐步移除。
    ============================================================ */
 
 :root {
-  --red: #E03A30;
-  --yellow: #FFC800;
-  --blue: #005AFF;
-  --white: #FFFFFF;
-  --black: #0A0A0A;
-  --gray-100: #F5F5F5;
-  --gray-200: #E8E8E8;
-  --gray-400: #999999;
-  --gray-600: #555555;
-  --gray-900: #1A1A1A;
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
-  --max-width: 1440px;
+  --red: var(--lp-danger);
+  /* --yellow serves several legacy meanings, so it stays unmapped until page migration. */
+  --yellow: #ffc800;
+  --blue: var(--lp-accent);
+  --white: var(--lp-on-accent);
+  --black: var(--lp-text-primary);
+  --gray-100: var(--lp-bg-subtle);
+  --gray-200: var(--lp-border);
+  --gray-300: var(--lp-border-strong);
+  --gray-400: var(--lp-text-tertiary);
+  --gray-600: var(--lp-text-secondary);
+  --gray-900: var(--lp-text-primary);
+  --font: var(--lp-font-sans);
+  --max-width: var(--lp-content-wide);
 }
 
-*,
-*::before,
-*::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-html { font-size: 16px; -webkit-font-smoothing: antialiased; }
-html, body, #app { min-width: 0; min-height: 100%; }
-
-body {
-  font-family: var(--font);
-  color: var(--black);
-  background: var(--white);
-  line-height: 1.5;
-  overflow-x: clip;
-}
-
-a { color: inherit; text-decoration: none; }
+a { text-decoration: none; }
 button { cursor: pointer; font-family: inherit; border: none; background: none; }
 ul, ol { list-style: none; }
-img { max-width: 100%; display: block; }
-input { font-family: inherit; }
-button, a, input, select, textarea { touch-action: manipulation; }
-
-:where(a, button, input, select, textarea):focus-visible {
-  outline: 3px solid var(--blue);
-  outline-offset: 3px;
-}
 
 /* ============================================================
    布局工具类
@@ -73,7 +55,7 @@ button, a, input, select, textarea { touch-action: manipulation; }
 }
 
 .btn-primary { background: var(--black); color: var(--white); }
-.btn-primary:hover { background: var(--red); }
+.btn-primary:hover { background: var(--blue); }
 
 .btn-outline {
   border: 2px solid var(--black);
@@ -104,15 +86,15 @@ button, a, input, select, textarea { touch-action: manipulation; }
    页面过渡
    ============================================================ */
 .page-enter-active,
-.page-leave-active { transition: opacity 0.3s; }
+.page-leave-active { transition: opacity var(--lp-dur-base) var(--lp-ease-standard); }
 .page-enter-from,
 .page-leave-to { opacity: 0; }
 
-@media (max-width: 1023px) {
+@media (max-width: 1024px) {
   .container { padding-inline: 1.5rem; }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .container {
     padding-left: max(1rem, env(safe-area-inset-left));
     padding-right: max(1rem, env(safe-area-inset-right));
@@ -130,16 +112,5 @@ button, a, input, select, textarea { touch-action: manipulation; }
   .container {
     padding-left: max(0.875rem, env(safe-area-inset-left));
     padding-right: max(0.875rem, env(safe-area-inset-right));
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
   }
 }

@@ -1,0 +1,81 @@
+:root {
+  color-scheme: light;
+
+  /* Direction A: Mist Island Paper Space */
+  --lp-bg: #f6f4ef;
+  --lp-bg-subtle: #efede6;
+  --lp-surface: #fcfbf8;
+  --lp-surface-elevated: #ffffff;
+
+  --lp-text-primary: #211e1a;
+  --lp-text-secondary: #6e675d;
+  --lp-text-tertiary: #a8a196;
+
+  --lp-accent: #47618c;
+  --lp-accent-strong: #38507a;
+  --lp-accent-soft: #e4eaf3;
+  --lp-on-accent: #ffffff;
+
+  --lp-danger: #b4482f;
+  --lp-danger-soft: #f9e9e4;
+  --lp-success: #4e7a5b;
+  --lp-success-soft: #e8f0ea;
+  --lp-warning: #9a7418;
+  --lp-warning-soft: #f7efda;
+
+  --lp-border: #e3dfd6;
+  --lp-border-strong: #cfc9bd;
+  --lp-scrim: rgba(28, 25, 21, 0.4);
+  --lp-focus-ring: #47618c;
+
+  --lp-radius-s: 6px;
+  --lp-radius-m: 10px;
+  --lp-radius-l: 16px;
+  --lp-radius-full: 999px;
+
+  --lp-shadow-s: 0 1px 2px rgba(33, 30, 26, 0.05);
+  --lp-shadow-m: 0 2px 6px rgba(33, 30, 26, 0.06), 0 10px 24px rgba(33, 30, 26, 0.08);
+  --lp-shadow-l: 0 4px 12px rgba(33, 30, 26, 0.07), 0 24px 48px rgba(33, 30, 26, 0.12);
+
+  --lp-space-1: 4px;
+  --lp-space-2: 8px;
+  --lp-space-3: 12px;
+  --lp-space-4: 16px;
+  --lp-space-5: 24px;
+  --lp-space-6: 32px;
+  --lp-space-7: 48px;
+  --lp-space-8: 64px;
+
+  --lp-content-text: 1200px;
+  --lp-content-wide: 1440px;
+  --lp-gutter: 24px;
+
+  --lp-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  /* Optional display stack only. Noto Serif SC is not approved or loaded by default. */
+  --lp-font-display: 'Noto Serif SC', 'Songti SC', serif;
+
+  --lp-font-size-display: clamp(2.5rem, 6vw, 4rem);
+  --lp-font-size-h1: 2rem;
+  --lp-font-size-h2: 1.5rem;
+  --lp-font-size-h3: 1.125rem;
+  --lp-font-size-body: 0.9375rem;
+  --lp-font-size-small: 0.8125rem;
+  --lp-font-size-caption: 0.75rem;
+  --lp-line-height-display: 1.15;
+  --lp-line-height-h1: 1.25;
+  --lp-line-height-h2: 1.3;
+  --lp-line-height-h3: 1.4;
+  --lp-line-height-body: 1.6;
+  --lp-font-weight-regular: 400;
+  --lp-font-weight-medium: 500;
+  --lp-font-weight-semibold: 600;
+
+  --lp-z-base: 0;
+  --lp-z-sticky: 100;
+  --lp-z-companion: 150;
+  --lp-z-drawer: 200;
+  --lp-z-overlay: 300;
+  --lp-z-modal: 350;
+  --lp-z-popover: 400;
+  --lp-z-toast: 500;
+}
