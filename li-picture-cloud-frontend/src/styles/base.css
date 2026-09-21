@@ -35,7 +35,6 @@ body {
 }
 
 :where(h1, h2, h3) {
-  color: var(--lp-text-primary);
   font-family: var(--lp-font-sans);
   font-weight: var(--lp-font-weight-semibold);
   text-wrap: balance;
