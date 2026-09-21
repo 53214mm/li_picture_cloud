@@ -193,7 +193,12 @@ test('navigation disclosures align with primary entries, animate and remain keyb
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/space/my')
   const nav = page.locator('.desktop-navigation')
+  const spacesToggle = nav.getByRole('button', { name: '空间', exact: true })
+  const toolsToggle = nav.getByRole('button', { name: '工具', exact: true })
   const toggle = nav.getByRole('button', { name: '管理', exact: true })
+  await expect(spacesToggle).toHaveAttribute('aria-expanded', 'true')
+  if (testInfo.project.name === 'development') await expect(toolsToggle).toHaveAttribute('aria-expanded', 'false')
+  else await expect(toolsToggle).toHaveCount(0)
   const controlled = await toggle.getAttribute('aria-controls')
   const panel = page.locator(`[id="${controlled}"]`)
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -221,6 +226,100 @@ test('navigation disclosures align with primary entries, animate and remain keyb
   await expect(panel).toHaveCSS('transition-property', 'none')
   await expect(panel).toHaveCSS('opacity', '1')
   await page.screenshot({ path: testInfo.outputPath('navigation-polish.png'), fullPage: true })
+})
+
+test('space disclosure, semantic breadcrumbs and compact toolbar actions remain consistent', async ({ page }, testInfo) => {
+  await fixture(page, { user: { ...member, userRole: 'admin' } })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/space/my')
+  const nav = page.locator('.desktop-navigation')
+  const spacesToggle = nav.getByRole('button', { name: '空间', exact: true })
+  const controlled = await spacesToggle.getAttribute('aria-controls')
+  const spaceItems = page.locator(`[id="${controlled}"]`)
+  await expect(spacesToggle).toHaveAttribute('aria-expanded', 'true')
+  await spacesToggle.click()
+  await expect(spaceItems).toHaveAttribute('inert', '')
+  await spaceItems.locator('a').filter({ hasText: '我的空间' }).evaluate(el => el.focus())
+  await expect(spacesToggle).toBeFocused()
+  await page.goto('/space/analyze')
+  await expect(nav.getByRole('button', { name: '空间', exact: true })).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.locator('.location')).toHaveText(/空间\s*\/\s*空间分析/)
+
+  const actions = page.locator('.toolbar-actions')
+  const search = actions.getByRole('link', { name: '图库搜索' })
+  const upload = actions.getByRole('link', { name: '上传' })
+  const account = actions.getByRole('button', { name: '打开账户菜单' })
+  for (const control of [search, upload, account]) {
+    await expect(control).toBeVisible()
+    expect((await control.boundingBox()).height).toBe(44)
+  }
+  const positions = await Promise.all([search, upload, account].map(async control => (await control.boundingBox()).y))
+  expect(new Set(positions).size).toBe(1)
+  await expect(search).toHaveAttribute('href', '/gallery')
+  await expect(upload).toHaveAttribute('href', '/upload')
+  await account.click()
+  const accountDialog = page.getByRole('dialog', { name: '账户' })
+  await expect(accountDialog.getByText('测试用户', { exact: true })).toBeVisible()
+  await expect(accountDialog.getByText('账号：shell-test')).toBeVisible()
+  await expect(accountDialog.getByText('返回官网')).toHaveCount(0)
+  await page.screenshot({ path: testInfo.outputPath('account-and-toolbar.png'), fullPage: true })
+  await page.keyboard.press('Escape')
+  await search.click()
+  await expect(page).toHaveURL(/\/gallery$/)
+  await page.goto('/space/analyze')
+  await page.locator('.toolbar-actions').getByRole('link', { name: '上传' }).click()
+  await expect(page).toHaveURL(/\/upload$/)
+})
+
+test('breadcrumbs reflect gallery, tools, admin and companion sections', async ({ page }, testInfo) => {
+  await fixture(page, { user: { ...member, userRole: 'admin' } })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const cases = [
+    ['/gallery', /^图库$/],
+    ['/admin/users', /管理\s*\/\s*用户管理/]
+  ]
+  if (testInfo.project.name === 'development') {
+    cases.push(
+      ['/model-gateway', /工具\s*\/\s*模型连接/],
+      ['/companion', /^伙伴$/]
+    )
+  }
+  for (const [path, expected] of cases) {
+    await page.goto(path)
+    await expect(page.locator('.location')).toHaveText(expected)
+  }
+})
+
+test('required smoke screenshots preserve shell hierarchy and landing accent', async ({ page }, testInfo) => {
+  await fixture(page, { user: { ...member, userRole: 'admin' } })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const pages = [
+    ['/space/my', 'space-my'],
+    ['/space/analyze', 'space-analyze'],
+    ['/admin/users', 'admin-users'],
+    ['/', 'landing']
+  ]
+  if (testInfo.project.name === 'development') pages.splice(2, 0, ['/model-gateway', 'model-gateway'])
+  for (const [path, name] of pages) {
+    await page.goto(path)
+    await expect(page.locator('body')).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath(`${name}-1440.png`), fullPage: true })
+  }
+  await page.goto('/')
+  await expect(page.locator('.line.accent')).toHaveCSS('color', 'rgb(240, 68, 56)')
+  await page.setViewportSize({ width: 768, height: 900 })
+  await page.goto('/space/my')
+  await expectNoHorizontalOverflow(page)
+  await expect(page.locator('.location > a')).toBeHidden()
+  await expect(page.locator('.location > .separator')).toBeHidden()
+  await expect(page.locator('.location > [aria-current="page"]').last()).toHaveText('我的空间')
+  await page.screenshot({ path: testInfo.outputPath('space-my-768.png'), fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expectNoHorizontalOverflow(page)
+  await expect(page.locator('.location > a')).toBeHidden()
+  await expect(page.locator('.location > .separator')).toBeHidden()
+  await expect(page.locator('.location > [aria-current="page"]').last()).toHaveText('我的空间')
+  await page.screenshot({ path: testInfo.outputPath('space-my-390.png'), fullPage: true })
 })
 
 test('feature flags hide tools and companion together, disabled deep links are unavailable', async ({ page }, testInfo) => {

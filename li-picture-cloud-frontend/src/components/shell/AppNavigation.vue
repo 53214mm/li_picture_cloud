@@ -43,8 +43,10 @@ const user = useUserStore()
 const navigationId = useId()
 const section = computed(() => route.meta.section)
 const expanded = ref({})
-// Open the active section on deep links. Ordinary rerenders do not undo a manual toggle.
-watch(section, value => { expanded.value = value ? { [value]: true } : {} }, { immediate: true })
+// Every navigation opens its current section; a manual toggle remains respected until navigation.
+watch(() => route.name, () => {
+  expanded.value = section.value ? { [section.value]: true } : {}
+}, { immediate: true })
 const groups = computed(() => buildAppNavigation({ isAdmin: user.isAdmin, companionEnabled: COMPANION_UI_ENABLED }))
 </script>
 <style scoped>

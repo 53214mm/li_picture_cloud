@@ -63,6 +63,7 @@ function handleSearch() {
 
 <style scoped>
 .hero {
+  --hero-brand-accent: #f04438;
   position: relative;
   min-height: 85vh;
   display: flex; flex-direction: column; justify-content: center;
@@ -86,7 +87,7 @@ function handleSearch() {
   margin-bottom: 1.5rem;
 }
 .line { display: block; }
-.line.accent { color: var(--red); }
+.line.accent { color: var(--hero-brand-accent); }
 .hero-desc {
   font-size: 1.25rem; line-height: 1.6; color: var(--gray-600);
   max-width: 560px; margin-bottom: 2.5rem;

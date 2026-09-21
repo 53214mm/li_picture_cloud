@@ -10,7 +10,7 @@ export function buildPublicNavigation(isLoggedIn) {
 
 export function buildAppNavigation({ isAdmin, companionEnabled }) {
   return [
-    { id: 'spaces', label: '空间', to: '/space/my', items: [
+    { id: 'spaces', label: '空间', items: [
       { label: '我的空间', to: '/space/my' },
       { label: '空间管理', to: '/spaces' },
       { label: '空间分析', to: '/space/analyze' }

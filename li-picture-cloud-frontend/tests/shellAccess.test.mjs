@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { routeAccess, loginDestination } from '../src/utils/shellAccess.js'
-import { shellMeta } from '../src/constants/shell.js'
+import { buildShellBreadcrumb, shellMeta } from '../src/constants/shell.js'
 import { buildAppNavigation, buildPublicNavigation } from '../src/constants/navigation.js'
 
 test('protected content cannot mount before auth is ready, including transient failures', () => {
@@ -42,5 +42,27 @@ test('app navigation groups tools and management, public navigation does not exp
   assert.deepEqual(admin.map(group => group.id), ['spaces', 'gallery', 'tools', 'admin'])
   assert.equal(admin.find(group => group.id === 'tools').items.length, 2)
   assert.equal(admin.find(group => group.id === 'admin').items.length, 3)
+  assert.equal(admin.find(group => group.id === 'spaces').to, undefined)
   assert.deepEqual(buildPublicNavigation(true).map(item => item.to), ['/', '/gallery', '/space/my'])
+})
+
+test('breadcrumbs use shell sections instead of a hard-coded space root', () => {
+  assert.deepEqual(buildShellBreadcrumb(shellMeta['my-space']), [
+    { label: '空间', to: '/space/my' },
+    { label: '我的空间' }
+  ])
+  assert.deepEqual(buildShellBreadcrumb(shellMeta.gallery), [{ label: '图库' }])
+  assert.deepEqual(buildShellBreadcrumb(shellMeta['picture-detail']), [
+    { label: '图库', to: '/gallery' },
+    { label: '图片详情' }
+  ])
+  assert.deepEqual(buildShellBreadcrumb(shellMeta['model-gateway']), [
+    { label: '工具' },
+    { label: '模型连接' }
+  ])
+  assert.deepEqual(buildShellBreadcrumb(shellMeta['admin-users']), [
+    { label: '管理' },
+    { label: '用户管理' }
+  ])
+  assert.deepEqual(buildShellBreadcrumb(shellMeta.companion), [{ label: '伙伴' }])
 })

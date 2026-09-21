@@ -10,7 +10,15 @@
       <CompanionPresenceSlot v-if="companionEnabled" :active="route.meta.section === 'companion'" />
     </aside>
     <div class="app-content">
-      <AppToolbar :inert="legacyOverlay" :title="route.meta.title" :navigation-open="panel === 'navigation'" :account-open="panel === 'account'" @navigation="panel = 'navigation'" @account="panel = 'account'" />
+      <AppToolbar
+        :inert="legacyOverlay"
+        :title="route.meta.title"
+        :section="route.meta.section"
+        :navigation-open="panel === 'navigation'"
+        :account-open="panel === 'account'"
+        @navigation="panel = 'navigation'"
+        @account="panel = 'account'"
+      />
       <AppMain :workspace="route.meta.workspace" :frame="route.meta.frame"><slot /></AppMain>
       <SiteFooter :inert="legacyOverlay" />
     </div>
@@ -28,17 +36,22 @@
       </div>
     </ShellDialog>
     <ShellDialog :open="panel === 'account'" title="账户" side="right" @close="panel = null">
-      <p class="account-name">{{ user.currentUser?.userName || user.currentUser?.userAccount || '已登录' }}</p>
-      <div class="account-links">
-        <router-link to="/">返回官网</router-link>
-        <LpButton variant="quiet" :disabled="loggingOut" @click="logout">{{ loggingOut ? '正在退出…' : '退出登录' }}</LpButton>
+      <div class="account-summary">
+        <span class="account-avatar" aria-hidden="true">{{ accountInitial }}</span>
+        <div>
+          <strong>{{ accountName }}</strong>
+          <p v-if="accountIdentifier">账号：{{ accountIdentifier }}</p>
+        </div>
+      </div>
+      <div class="account-actions">
+        <LpButton class="logout-button" variant="quiet" :disabled="loggingOut" @click="logout">{{ loggingOut ? '正在退出…' : '退出登录' }}</LpButton>
       </div>
       <p v-if="logoutError" role="alert" class="logout-error">{{ logoutError }}</p>
     </ShellDialog>
   </div>
 </template>
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { COMPANION_UI_ENABLED } from '@/config/features'
@@ -59,6 +72,12 @@ const panel = ref(null)
 const legacyOverlay = useLegacyOverlayIsolation()
 const loggingOut = ref(false)
 const logoutError = ref('')
+const accountName = computed(() => user.currentUser?.userName || user.currentUser?.userAccount || '已登录')
+const accountIdentifier = computed(() => {
+  const account = user.currentUser?.userAccount
+  return account && account !== accountName.value ? account : ''
+})
+const accountInitial = computed(() => Array.from(accountName.value)[0]?.toUpperCase() || '用')
 watch(() => route.fullPath, () => { panel.value = null })
 watch(legacyOverlay, active => { if (active) panel.value = null })
 function closeOnLink(event) { if (event.target.closest('a[href]')) panel.value = null }
@@ -98,9 +117,13 @@ onBeforeUnmount(() => breakpoints.forEach(query => query.removeEventListener('ch
 .app-content { display: flex; flex-direction: column; min-width: 0; }
 .bottom-navigation { display: none; }
 .drawer-links { display: grid; gap: 12px; margin-top: 24px; }
-.drawer-links > a, .account-links > a { padding: 12px; min-height: 44px; font-size: 0.875rem; }
-.account-name { overflow-wrap: anywhere; margin-bottom: 24px; color: var(--lp-text-secondary); }
-.account-links { display: grid; gap: 12px; }
+.drawer-links > a { padding: 12px; min-height: 44px; font-size: 0.875rem; }
+.account-summary { display: flex; align-items: center; gap: var(--lp-space-4); padding: var(--lp-space-3) 0 var(--lp-space-6); }
+.account-avatar { display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 auto; border-radius: var(--lp-radius-full); color: var(--lp-on-accent); background: var(--lp-accent); font-weight: 600; }
+.account-summary strong { display: block; overflow-wrap: anywhere; font-size: 1rem; }
+.account-summary p { margin-top: var(--lp-space-1); color: var(--lp-text-secondary); font-size: 0.8125rem; overflow-wrap: anywhere; }
+.account-actions { padding-top: var(--lp-space-4); border-top: 1px solid var(--lp-border); }
+.logout-button { width: 100%; justify-content: flex-start; }
 .logout-error { color: var(--lp-danger); margin-top: 16px; }
 @media (768px <= width < 1024px) {
   .app-layout { grid-template-columns: 88px minmax(0, 1fr); }
