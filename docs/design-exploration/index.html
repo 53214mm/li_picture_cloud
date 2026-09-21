@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>R01 视觉方向探索 · 索引</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: #F6F4EF; color: #211E1A; line-height: 1.6;
+    display: flex; justify-content: center; padding: 64px 24px 96px;
+  }
+  main { max-width: 720px; width: 100%; }
+  .tag { font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: #A8A196; }
+  h1 { margin-top: 12px; font-size: 28px; font-weight: 600; }
+  .note { margin-top: 12px; font-size: 14px; color: #6E675D; }
+  ul { margin-top: 36px; list-style: none; display: grid; gap: 14px; }
+  a.card {
+    display: block; padding: 22px 24px; text-decoration: none; color: inherit;
+    background: #FCFBF8; border: 1px solid #E3DFD6; border-radius: 12px;
+    transition: box-shadow .3s, transform .3s;
+  }
+  a.card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(33,30,26,.08); }
+  a.card b { font-size: 16px; font-weight: 600; }
+  a.card span { display: block; margin-top: 6px; font-size: 13.5px; color: #6E675D; }
+  a.card em { font-style: normal; color: #47618C; }
+  footer { margin-top: 40px; font-size: 12px; color: #A8A196; line-height: 1.9; }
+</style>
+</head>
+<body>
+<main>
+  <div class="tag">R01 · 新视觉设计体系 · 设计探索</div>
+  <h1>三套视觉方向草图</h1>
+  <p class="note">独立静态原型，与正式项目隔离：不接真实 API、无真实数据、无外部依赖。图片均为 CSS 渐变占位。本目录内容不构成最终方案，仅用于表达设计方向。</p>
+  <ul>
+    <li><a class="card" href="./direction-a-paper-space.html">
+      <b>方向 A · 雾屿纸境</b>
+      <span>安静的个人数字空间。暖纸底、衬线标题、美术馆式图片墙，伙伴是空间里的住客。<em>安静 / 克制 / 图片优先</em></span>
+    </a></li>
+    <li><a class="card" href="./direction-b-darkroom.html">
+      <b>方向 B · 暗房</b>
+      <span>沉浸式影像世界。深色环境中图片是唯一光源，伙伴是暗室里一枚发光的生命。<em>沉浸 / 影像 / 显影感动效</em></span>
+    </a></li>
+    <li><a class="card" href="./direction-c-ambient-habitat.html">
+      <b>方向 C · 生息之间</b>
+      <span>数字生命空间 UI。界面是伙伴的家，图片是空间陈设，环境色取自图片，拖拽即喂养。<em>空间感 / 数字生命 / 层叠材质</em></span>
+    </a></li>
+  </ul>
+  <footer>
+    LiPictureCloud 2.0 · R01 模型运行日志-需求确认 阶段产物 · 与正式代码隔离<br />
+    详细论证见 docs/R01-新视觉设计体系-需求确认报告.md
+  </footer>
+</main>
+</body>
+</html>

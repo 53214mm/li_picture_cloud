@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>方向 B · 暗房 — R01 设计探索（非正式代码）</title>
+<!--
+  ============================================================
+  R01 设计探索 · 方向 B「暗房 — 沉浸式影像世界」
+  - 本文件是独立静态草图，与正式项目隔离
+  - 不接真实 API，不含真实数据，不引入任何依赖
+  - 图片均为 CSS 渐变占位
+  ============================================================
+-->
+<style>
+  :root {
+    --bg: #131110;
+    --bg-raise: #1C1917;
+    --text-1: #EDE8DF;
+    --text-2: #9A9186;
+    --text-3: #5E5850;
+    --accent: #E3B04B;        /* 显影暖琥珀 */
+    --hairline: rgba(237,232,223,.09);
+    --font-sans: 'Inter', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg); color: var(--text-1);
+    line-height: 1.6; -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  .ribbon {
+    position: fixed; top: 14px; right: -46px; z-index: 99;
+    transform: rotate(38deg);
+    background: var(--accent); color: #181410;
+    font-size: 11px; letter-spacing: .12em; padding: 5px 52px;
+    opacity: .9; pointer-events: none;
+  }
+
+  /* ---------- 导航：浮动、隐入暗色 ---------- */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 40px;
+    background: linear-gradient(180deg, rgba(19,17,16,.92) 0%, transparent 100%);
+  }
+  .logo { font-size: 14px; letter-spacing: .28em; text-transform: uppercase; }
+  .logo i { font-style: normal; color: var(--accent); }
+  .nav-links { display: flex; gap: 30px; font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-2); }
+  .nav-links a { color: inherit; text-decoration: none; transition: color .3s; }
+  .nav-links a:hover, .nav-links a.on { color: var(--text-1); }
+
+  /* ---------- 首屏：一张图占满世界 ---------- */
+  .stage { position: relative; height: 100vh; display: flex; align-items: flex-end; }
+  .stage .photo {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 90% 60% at 60% 30%, #d8a75e 0%, transparent 55%),
+      linear-gradient(175deg, #2b3a4d 0%, #151a22 45%, #0c0d10 100%);
+    animation: develop 1.6s cubic-bezier(.16,1,.3,1) both;
+  }
+  @keyframes develop { from { opacity: 0; filter: blur(18px) brightness(.4); } to { opacity: 1; filter: blur(0) brightness(1); } }
+  .stage::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent 55%, rgba(19,17,16,.88) 100%);
+  }
+  .stage .caption {
+    position: relative; z-index: 2; padding: 0 40px 64px; max-width: 720px;
+  }
+  .caption .no { font-size: 11px; letter-spacing: .3em; color: var(--accent); text-transform: uppercase; }
+  .caption h1 { margin-top: 14px; font-size: clamp(2rem, 4.5vw, 3.4rem); font-weight: 300; letter-spacing: .06em; line-height: 1.25; }
+  .caption p { margin-top: 16px; font-size: 13px; letter-spacing: .08em; color: var(--text-2); }
+
+  /* ---------- 胶片卷：横向、发光 ---------- */
+  .film { padding: 72px 0 72px 40px; }
+  .film h2 { font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: var(--text-3); margin-bottom: 24px; }
+  .strip { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: thin; }
+  .frame {
+    flex: 0 0 300px; aspect-ratio: 3/2; border-radius: 3px;
+    border: 1px solid var(--hairline);
+    transition: transform .5s cubic-bezier(.16,1,.3,1), box-shadow .5s, border-color .5s;
+  }
+  .frame:hover {
+    transform: translateY(-6px);
+    border-color: rgba(227,176,75,.35);
+    box-shadow: 0 18px 48px rgba(0,0,0,.6), 0 0 32px rgba(227,176,75,.12);
+  }
+  .f1 { background: linear-gradient(150deg,#c98f4e 0%,#5e3f28 55%,#17110c 100%); }
+  .f2 { background: linear-gradient(210deg,#7d94a8 0%,#33465a 50%,#10161d 100%); }
+  .f3 { background: linear-gradient(160deg,#a8b39a 0%,#4c5843 55%,#12150f 100%); }
+  .f4 { background: linear-gradient(190deg,#c4b7a6 0%,#6b5f4e 50%,#17140f 100%); }
+  .f5 { background: linear-gradient(150deg,#8a6f7d 0%,#453340 55%,#141013 100%); }
+
+  /* ---------- 伙伴：暗室里的光 ---------- */
+  .glow-room {
+    margin: 48px 40px 96px; padding: 88px 40px;
+    background: var(--bg-raise); border: 1px solid var(--hairline); border-radius: 4px;
+    display: grid; grid-template-columns: 240px 1fr; gap: 72px; align-items: center;
+  }
+  .wisp { position: relative; width: 150px; height: 150px; margin: 0 auto; }
+  .wisp .halo {
+    position: absolute; inset: -46px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(227,176,75,.22) 0%, transparent 62%);
+    animation: pulse 4.2s cubic-bezier(.45,0,.55,1) infinite;
+  }
+  .wisp .core {
+    position: absolute; inset: 26px; border-radius: 50%;
+    background: radial-gradient(circle at 42% 36%, #ffe9bd 0%, #e3b04b 48%, #8a5f1e 100%);
+    box-shadow: 0 0 44px rgba(227,176,75,.45), 0 0 120px rgba(227,176,75,.18);
+    animation: drift 7s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { transform: scale(1); opacity:.75; } 50% { transform: scale(1.12); opacity: 1; } }
+  @keyframes drift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  .glow-room .who { font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: var(--accent); }
+  .glow-room blockquote { margin-top: 16px; font-size: 24px; font-weight: 300; letter-spacing: .04em; line-height: 1.55; max-width: 34ch; }
+  .glow-room .hint { margin-top: 20px; font-size: 12.5px; letter-spacing: .1em; color: var(--text-2); }
+  .glow-room .hint b { color: var(--text-1); font-weight: 400; border-bottom: 1px solid rgba(227,176,75,.4); }
+
+  .spec { padding: 0 40px 64px; font-size: 12px; color: var(--text-3); letter-spacing: .06em; line-height: 1.9; }
+
+  @media (max-width: 760px) {
+    .nav-links { display: none; }
+    .glow-room { grid-template-columns: 1fr; gap: 44px; margin: 32px 20px 64px; padding: 56px 24px; }
+    .stage .caption { padding: 0 24px 48px; }
+    .film { padding-left: 24px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="ribbon">R01 设计探索 · 非正式代码</div>
+
+<nav>
+  <div class="logo">LiPictureCloud <i>暗房</i></div>
+  <div class="nav-links">
+    <a class="on" href="#">影像</a><a href="#">底片库</a><a href="#">伙伴</a><a href="#">冲洗</a>
+  </div>
+</nav>
+
+<section class="stage">
+  <div class="photo" role="img" aria-label="图片占位：暮色山脊"></div>
+  <div class="caption">
+    <div class="no">Frame 0247 · 暮色山脊</div>
+    <h1>每一张图片，<br />都是一束被保存下来的光。</h1>
+    <p>界面沉入黑暗。在这里，光是唯一的主角。</p>
+  </div>
+</section>
+
+<section class="film">
+  <h2>最近冲洗 · Recent</h2>
+  <div class="strip">
+    <div class="frame f1"></div><div class="frame f2"></div><div class="frame f3"></div><div class="frame f4"></div><div class="frame f5"></div>
+  </div>
+</section>
+
+<section class="glow-room">
+  <div class="wisp" role="img" aria-label="伙伴是一枚安静发光的光点">
+    <div class="halo"></div><div class="core"></div>
+  </div>
+  <div>
+    <div class="who">Living Light · 光点期</div>
+    <blockquote>“你不在的时候，我数完了这个冬天所有的云。”</blockquote>
+    <p class="hint">它的光此刻很暖。<b>把今天的那张暮色，递给它 →</b></p>
+  </div>
+</section>
+
+<div class="spec">
+  方向 B 关键令牌：bg #131110 · raise #1C1917 · text #EDE8DF / #9A9186 · accent 显影琥珀 #E3B04B · hairline rgba(255,255,255,.09) · radius 2–4px · 无投影、只用光晕 · 细字重 + 宽字距 · 动效：显影渐显 1.6s / 光晕呼吸 4.2s
+</div>
+</body>
+</html>

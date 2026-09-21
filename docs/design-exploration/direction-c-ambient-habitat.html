@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>方向 C · 生息之间 — R01 设计探索（非正式代码）</title>
+<!--
+  ============================================================
+  R01 设计探索 · 方向 C「生息之间 — 数字生命空间 UI」
+  - 本文件是独立静态草图，与正式项目隔离
+  - 不接真实 API，不含真实数据，不引入任何依赖
+  - 图片均为 CSS 渐变占位
+  ============================================================
+-->
+<style>
+  :root {
+    --bg: #EFEDE7;
+    --surface: rgba(252,251,247,.86);
+    --text-1: #262A27;
+    --text-2: #6E7269;
+    --text-3: #A6A89C;
+    --accent: #5F7A5E;        /* 苔绿 */
+    --accent-soft: #E2EADF;
+    --peach: #D9A06B;
+    --shadow-l: 0 4px 10px rgba(38,42,39,.05), 0 24px 56px rgba(38,42,39,.12);
+    --radius-l: 20px;
+    --font-sans: 'Inter', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    color: var(--text-1); line-height: 1.6;
+    background: var(--bg);
+    min-height: 100vh; overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 环境色：模拟“从图片提取的空间氛围色” */
+  .ambient { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+  .ambient i {
+    position: absolute; border-radius: 50%; filter: blur(90px); opacity: .5;
+    animation: ambient-drift 24s ease-in-out infinite alternate;
+  }
+  .ambient .a1 { width: 44vw; height: 44vw; left: -10vw; top: -12vh; background: #d9c8a8; }
+  .ambient .a2 { width: 36vw; height: 36vw; right: -8vw; top: 22vh; background: #b3c4b0; animation-delay: -8s; }
+  .ambient .a3 { width: 30vw; height: 30vw; left: 26vw; bottom: -18vh; background: #c2cdd6; animation-delay: -16s; }
+  @keyframes ambient-drift { from { transform: translate(0,0) scale(1); } to { transform: translate(4vw,3vh) scale(1.08); } }
+
+  .ribbon {
+    position: fixed; top: 14px; right: -46px; z-index: 99;
+    transform: rotate(38deg);
+    background: var(--text-1); color: var(--bg);
+    font-size: 11px; letter-spacing: .12em; padding: 5px 52px;
+    opacity: .85; pointer-events: none;
+  }
+
+  header { max-width: 1080px; margin: 0 auto; padding: 40px 32px 0; display: flex; justify-content: space-between; align-items: baseline; }
+  .logo { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
+  .logo i { font-style: normal; color: var(--accent); }
+  .room-name { font-size: 13px; color: var(--text-2); }
+
+  /* ---------- 空间画布：图片是陈设，不是列表 ---------- */
+  .room { position: relative; max-width: 1080px; margin: 24px auto 0; padding: 32px; min-height: 560px; }
+
+  .piece {
+    position: absolute; background: var(--surface);
+    border-radius: var(--radius-l); box-shadow: var(--shadow-l);
+    padding: 10px 10px 14px;
+    transition: transform .45s cubic-bezier(.34,1.56,.64,1), box-shadow .45s;
+  }
+  .piece:hover { transform: rotate(0deg) translateY(-8px) scale(1.02) !important; z-index: 5; }
+  .piece .ph { border-radius: 12px; }
+  .piece figcaption { padding: 10px 6px 0; font-size: 12.5px; color: var(--text-2); display: flex; justify-content: space-between; }
+
+  .w1 { width: 300px; left: 3%; top: 6%; transform: rotate(-2.4deg); }
+  .w2 { width: 260px; right: 6%; top: 0%; transform: rotate(1.8deg); }
+  .w3 { width: 230px; left: 30%; top: 42%; transform: rotate(-1.2deg); }
+  .w1 .ph { aspect-ratio: 4/5; background: linear-gradient(155deg,#d3b489 0%,#8a6f52 50%,#3d3a33 100%); }
+  .w2 .ph { aspect-ratio: 1/1; background: linear-gradient(205deg,#aebfd0 0%,#5d7891 55%,#26323e 100%); }
+  .w3 .ph { aspect-ratio: 4/3; background: linear-gradient(150deg,#b9c7ae 0%,#64775c 55%,#252b22 100%); }
+
+  /* ---------- 伙伴：空间的主人，有身体 ---------- */
+  .critter { position: absolute; right: 9%; top: 46%; width: 168px; text-align: center; }
+  .critter .form {
+    position: relative; width: 132px; height: 118px; margin: 0 auto;
+    background: radial-gradient(circle at 40% 30%, #ffffff 0%, #efe9db 55%, #ddd2bd 100%);
+    border-radius: 52% 48% 55% 45% / 58% 56% 44% 42%;
+    box-shadow: inset 0 -12px 22px rgba(38,42,39,.07), var(--shadow-l);
+    animation: bob 4.4s ease-in-out infinite;
+  }
+  @keyframes bob { 0%,100% { transform: translateY(0) scale(1,1); } 50% { transform: translateY(-9px) scale(1.02,.98); } }
+  .critter .eye { position: absolute; top: 40%; width: 11px; height: 14px; border-radius: 50%; background: var(--text-1); animation: blink 4.8s infinite; }
+  .critter .eye.l { left: 33%; } .critter .eye.r { right: 33%; }
+  .critter .cheek { position: absolute; top: 55%; width: 14px; height: 8px; border-radius: 50%; background: rgba(217,160,107,.55); }
+  .critter .cheek.l { left: 22%; } .critter .cheek.r { right: 22%; }
+  @keyframes blink { 0%,90%,100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+  .critter .bubble {
+    display: inline-block; margin-top: 16px; padding: 10px 16px;
+    background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-l);
+    font-size: 13px; color: var(--text-1);
+  }
+  .critter .need { margin-top: 10px; font-size: 11.5px; letter-spacing: .1em; color: var(--accent); }
+
+  /* ---------- 投喂提示：拖拽的空间交互 ---------- */
+  .feed-hint {
+    position: absolute; left: 6%; bottom: 4%;
+    padding: 14px 22px; border: 1.5px dashed var(--text-3); border-radius: 16px;
+    font-size: 13px; color: var(--text-2);
+  }
+  .feed-hint b { color: var(--accent); font-weight: 500; }
+
+  /* ---------- 空间式导航：底部房间切换 ---------- */
+  .dock {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    display: flex; gap: 6px; padding: 8px;
+    background: var(--surface); border-radius: 999px; box-shadow: var(--shadow-l);
+    backdrop-filter: blur(8px);
+  }
+  .dock a {
+    padding: 10px 22px; border-radius: 999px; font-size: 13.5px;
+    color: var(--text-2); text-decoration: none; transition: all .28s;
+  }
+  .dock a.on { background: var(--accent); color: #fff; }
+  .dock a:not(.on):hover { background: var(--accent-soft); color: var(--text-1); }
+
+  .spec { max-width: 1080px; margin: 40px auto 120px; padding: 0 32px; font-size: 12px; color: var(--text-3); line-height: 1.9; }
+
+  @media (max-width: 760px) {
+    .room { min-height: auto; display: grid; gap: 20px; }
+    .piece, .critter, .feed-hint { position: static; width: 100%; transform: none; }
+    .critter { padding-top: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="ambient"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
+<div class="ribbon">R01 设计探索 · 非正式代码</div>
+
+<header>
+  <div class="logo">LiPictureCloud <i>· 生息之间</i></div>
+  <div class="room-name">空间：客厅 · 环境色取自《黄昏天台》</div>
+</header>
+
+<main class="room">
+  <figure class="piece w1"><div class="ph"></div><figcaption><span>黄昏天台</span><span>它最喜欢这张</span></figcaption></figure>
+  <figure class="piece w2"><div class="ph"></div><figcaption><span>海边车站</span><span>2024.06</span></figcaption></figure>
+  <figure class="piece w3"><div class="ph"></div><figcaption><span>窗台绿植</span><span>2024.04</span></figcaption></figure>
+
+  <div class="critter">
+    <div class="form">
+      <div class="eye l"></div><div class="eye r"></div>
+      <div class="cheek l"></div><div class="cheek r"></div>
+    </div>
+    <div class="bubble">“今天带了什么回来？”</div>
+    <div class="need">有点饿 · 想吃一张有光的图片</div>
+  </div>
+
+  <div class="feed-hint">把图片<b>拖到它面前</b>，就是一次喂养</div>
+</main>
+
+<nav class="dock">
+  <a class="on" href="#">客厅</a><a href="#">图库墙</a><a href="#">庭院</a><a href="#">我的</a>
+</nav>
+
+<div class="spec">
+  方向 C 关键令牌：bg #EFEDE7 + 图片提取环境色 · surface 半透明暖白 · text #262A27 / #6E7269 · accent 苔绿 #5F7A5E · radius 12–20px 有机形 · 多层空间阴影 · 无描边、用纵深分层 · 动效：弹簧曲线 / 空间漂浮 4.4s · 导航 = 房间切换 Dock
+</div>
+</body>
+</html>

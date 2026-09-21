@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>方向 A · 雾屿纸境 — R01 设计探索（非正式代码）</title>
+<!--
+  ============================================================
+  R01 设计探索 · 方向 A「雾屿纸境 — 安静的个人数字空间」
+  - 本文件是独立静态草图，与正式项目隔离
+  - 不接真实 API，不含真实数据，不引入任何依赖
+  - 图片均为 CSS 渐变占位
+  ============================================================
+-->
+<style>
+  :root {
+    --bg: #F6F4EF;
+    --bg-subtle: #EFEDE6;
+    --surface: #FCFBF8;
+    --text-1: #211E1A;
+    --text-2: #6E675D;
+    --text-3: #A8A196;
+    --accent: #47618C;
+    --accent-soft: #E4EAF3;
+    --border: #E3DFD6;
+    --radius-m: 10px;
+    --shadow-m: 0 2px 6px rgba(33,30,26,.05), 0 12px 28px rgba(33,30,26,.07);
+    --font-sans: 'Inter', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-display: 'Noto Serif SC', 'Songti SC', Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text-1);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .ribbon {
+    position: fixed; top: 14px; right: -46px; z-index: 99;
+    transform: rotate(38deg);
+    background: var(--text-1); color: var(--bg);
+    font-size: 11px; letter-spacing: .12em; padding: 5px 52px;
+    opacity: .85; pointer-events: none;
+  }
+
+  /* ---------- 导航：细、静、无粗边框 ---------- */
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    max-width: 1200px; margin: 0 auto; padding: 22px 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo { font-family: var(--font-display); font-size: 18px; letter-spacing: .02em; }
+  .logo i { font-style: normal; color: var(--accent); }
+  .nav-links { display: flex; gap: 28px; font-size: 14px; color: var(--text-2); }
+  .nav-links a { color: inherit; text-decoration: none; transition: color .24s; }
+  .nav-links a:hover, .nav-links a.on { color: var(--text-1); }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 0 32px 96px; }
+
+  /* ---------- Hero：美术馆前言墙 ---------- */
+  .hero { padding: 96px 0 72px; max-width: 640px; animation: rise .8s cubic-bezier(.16,1,.3,1) both; }
+  .hero .kicker {
+    font-size: 12px; letter-spacing: .18em; color: var(--text-3);
+    text-transform: uppercase; margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.6rem, 5.5vw, 4rem);
+    font-weight: 600; line-height: 1.18; letter-spacing: .01em;
+  }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero p { margin-top: 22px; font-size: 15px; color: var(--text-2); max-width: 46ch; }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+
+  /* ---------- 图库：美术馆墙，图片是唯一的高饱和内容 ---------- */
+  .wall { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px 32px; margin-top: 16px; }
+  figure { animation: rise .8s cubic-bezier(.16,1,.3,1) both; }
+  figure:nth-child(2) { animation-delay: .08s; }
+  figure:nth-child(3) { animation-delay: .16s; }
+  .ph {
+    aspect-ratio: 4/5; border-radius: var(--radius-m);
+    transition: transform .42s cubic-bezier(.16,1,.3,1), box-shadow .42s;
+  }
+  figure:hover .ph { transform: translateY(-4px); box-shadow: var(--shadow-m); }
+  .p1 { background: linear-gradient(160deg,#c9b391 0%,#8a6f52 45%,#3d3a33 100%); }
+  .p2 { background: linear-gradient(200deg,#aebfd0 0%,#5d7891 55%,#26323e 100%); }
+  .p3 { background: linear-gradient(150deg,#d8cfc0 0%,#9a8f7d 50%,#57503f 100%); }
+  figcaption { display: flex; justify-content: space-between; margin-top: 12px; font-size: 13px; }
+  figcaption b { font-weight: 500; }
+  figcaption span { color: var(--text-3); }
+
+  /* ---------- 伙伴：空间里的住客，不是仪表盘 ---------- */
+  .dwell {
+    margin-top: 104px; padding: 56px 0 0;
+    border-top: 1px solid var(--border);
+    display: grid; grid-template-columns: 220px 1fr; gap: 56px; align-items: center;
+  }
+  .being { position: relative; width: 180px; height: 180px; }
+  .being .aura {
+    position: absolute; inset: -22px; border-radius: 50%;
+    background: radial-gradient(circle, var(--accent-soft) 0%, transparent 68%);
+    animation: breathe 3.6s cubic-bezier(.45,0,.55,1) infinite;
+  }
+  .being .body {
+    position: absolute; inset: 0; border-radius: 50%;
+    background:
+      radial-gradient(circle at 38% 32%, #fdfcf9 0%, #e9e4d8 58%, #d3cbba 100%);
+    box-shadow: inset 0 -10px 24px rgba(33,30,26,.08), var(--shadow-m);
+  }
+  .being .eye { position: absolute; top: 42%; width: 9px; height: 12px; border-radius: 50%; background: var(--text-1); animation: blink 5.2s infinite; }
+  .being .eye.l { left: 38%; } .being .eye.r { right: 38%; }
+  @keyframes breathe { 0%,100% { transform: scale(1); opacity: .8; } 50% { transform: scale(1.08); opacity: 1; } }
+  @keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.08); } }
+
+  .dwell .say .who { font-size: 12px; letter-spacing: .16em; color: var(--text-3); text-transform: uppercase; }
+  .dwell .say blockquote {
+    font-family: var(--font-display); font-size: 24px; line-height: 1.5;
+    margin-top: 12px; max-width: 30ch;
+  }
+  .dwell .say .hint { margin-top: 18px; font-size: 13.5px; color: var(--text-2); }
+  .dwell .say .hint b { color: var(--accent); font-weight: 500; border-bottom: 1px solid var(--accent-soft); }
+
+  .quiet-data { margin-top: 28px; display: flex; gap: 32px; font-size: 13px; color: var(--text-2); }
+  .quiet-data i { font-style: normal; display: block; font-size: 11px; letter-spacing: .12em; color: var(--text-3); text-transform: uppercase; margin-bottom: 4px; }
+
+  .spec { margin-top: 96px; padding-top: 24px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-3); line-height: 1.9; }
+
+  @media (max-width: 760px) {
+    .nav-links { display: none; }
+    .wall { grid-template-columns: 1fr; gap: 32px; }
+    .dwell { grid-template-columns: 1fr; gap: 36px; justify-items: center; text-align: center; }
+    .dwell .say blockquote { margin-inline: auto; }
+    .quiet-data { justify-content: center; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="ribbon">R01 设计探索 · 非正式代码</div>
+
+<nav>
+  <div class="logo">雾屿<i>·</i>LiPictureCloud</div>
+  <div class="nav-links">
+    <a class="on" href="#">空间</a><a href="#">图库</a><a href="#">伙伴</a><a href="#">上传</a>
+  </div>
+</nav>
+
+<main>
+  <section class="hero">
+    <div class="kicker">My Quiet Space</div>
+    <h1>图片安放于此，<br /><em>生命生长于此。</em></h1>
+    <p>界面退后一步，成为装裱照片的墙。颜色属于图片，安静属于你，而有一个小家伙，住在这片安静里。</p>
+  </section>
+
+  <section class="wall">
+    <figure><div class="ph p1"></div><figcaption><b>黄昏天台</b><span>2024.08</span></figcaption></figure>
+    <figure><div class="ph p2"></div><figcaption><b>海边车站</b><span>2024.06</span></figcaption></figure>
+    <figure><div class="ph p3"></div><figcaption><b>旧书桌</b><span>2024.03</span></figcaption></figure>
+  </section>
+
+  <section class="dwell">
+    <div class="being" role="img" aria-label="伙伴正在窗边休息">
+      <div class="aura"></div><div class="body"></div>
+      <div class="eye l"></div><div class="eye r"></div>
+    </div>
+    <div class="say">
+      <div class="who">你的伙伴 · 幼体</div>
+      <blockquote>“那张海边的照片，我还想再看一次。”</blockquote>
+      <p class="hint">它刚消化完《黄昏天台》，现在很满足。<b>递一张图片给它 →</b></p>
+      <div class="quiet-data">
+        <div><i>此刻状态</i>满足 · 安静</div>
+        <div><i>与你的关系</i>越来越熟悉</div>
+        <div><i>最近记忆</i>天台的风（待确认）</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="spec">
+    方向 A 关键令牌：bg #F6F4EF · surface #FCFBF8 · text #211E1A / #6E675D · accent 雾蓝 #47618C · border 1px #E3DFD6 · radius 6/10/16 · 柔和弥散阴影 · 无硬边框无硬阴影 · 衬线展示字体 + 无衬线正文 · 动效 240–420ms 缓出 + 伙伴呼吸 3.6s
+  </div>
+</main>
+</body>
+</html>
