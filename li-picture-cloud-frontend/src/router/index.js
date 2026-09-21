@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
 import { useUserStore } from '@/stores/user'
 import { COMPANION_UI_ENABLED } from '@/config/features'
+import { shellMeta } from '@/constants/shell'
 
 const routes = [
   {
@@ -107,13 +108,21 @@ if (COMPANION_UI_ENABLED) {
   })
 }
 
+for (const route of routes) route.meta = shellMeta[route.name]
+routes.push({
+  path: '/:pathMatch(.*)*',
+  name: 'unavailable',
+  component: () => import('@/views/UnavailableView.vue'),
+  meta: { layout: 'adaptive', title: '页面不可用', frame: 'legacy' }
+})
+
 const router = createRouter({
   history: createWebHistory(),
   routes
 })
 
 router.beforeEach(async to => {
-  if (!to.meta.requiresAuth) return true
+  if (!to.meta.requiresAuth && to.meta.layout !== 'adaptive') return true
   const userStore = useUserStore()
   try {
     await userStore.ensureCurrentUser()
@@ -121,7 +130,7 @@ router.beforeEach(async to => {
     // 临时网络失败不伪装成“未登录”；目标页会呈现可重试的认证状态。
     return true
   }
-  if (userStore.isLoggedIn) return true
+  if (!to.meta.requiresAuth || userStore.isLoggedIn) return true
   return { name: 'login', query: { redirect: to.fullPath } }
 })
 

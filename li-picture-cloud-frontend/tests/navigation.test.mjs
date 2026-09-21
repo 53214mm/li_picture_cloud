@@ -33,12 +33,8 @@ test('builds user and admin navigation from one model', async () => {
   }).flatMap(group => group.items).some(item => item.to === '/admin/companion-feed-runs'), false)
 })
 
-test('mobile drawer exposes accessible state and close controls', () => {
-  assert.match(navSource, /aria-expanded/)
-  assert.match(navSource, /aria-controls="mobile-navigation"/)
-  assert.match(navSource, /@keydown\.esc/)
-  assert.match(navSource, /class="mobile-nav-overlay"/)
-  assert.match(navSource, /closeMobileNav\(\{ restoreFocus: true \}\)/)
-  assert.match(navSource, /window\.matchMedia\('\(min-width: 1024px\)'\)/)
-  assert.match(navSource, /@media \(max-width: 1023px\)[\s\S]*\.nav-links \{ display: none;/)
+test('public navbar uses the public model; app drawer behavior is covered by shell browser tests', () => {
+  assert.match(navSource, /buildPublicNavigation/)
+  assert.match(navSource, /aria-label="官网导航"/)
+  assert.doesNotMatch(navSource, /buildNavigationGroups/)
 })

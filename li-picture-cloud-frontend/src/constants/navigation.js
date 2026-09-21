@@ -1,3 +1,34 @@
+export function buildPublicNavigation(isLoggedIn) {
+  return [
+    { label: '首页', to: '/' },
+    { label: '图库', to: '/gallery' },
+    ...(isLoggedIn
+      ? [{ label: '进入空间', to: '/space/my' }]
+      : [{ label: '登录', to: '/login' }, { label: '注册', to: '/register' }])
+  ]
+}
+
+export function buildAppNavigation({ isAdmin, companionEnabled }) {
+  return [
+    { id: 'spaces', label: '空间', to: '/space/my', items: [
+      { label: '我的空间', to: '/space/my' },
+      { label: '空间管理', to: '/spaces' },
+      { label: '空间分析', to: '/space/analyze' }
+    ] },
+    { id: 'gallery', label: '图库', to: '/gallery' },
+    ...(companionEnabled ? [{ id: 'tools', label: '工具', items: [
+      { label: '配方', to: '/recipes' },
+      { label: '模型连接', to: '/model-gateway' }
+    ] }] : []),
+    ...(isAdmin ? [{ id: 'admin', label: '管理', items: [
+      { label: '图片管理', to: '/admin/pictures' },
+      { label: '用户管理', to: '/admin/users' },
+      ...(companionEnabled ? [{ label: '喂养日志', to: '/admin/companion-feed-runs' }] : [])
+    ] }] : [])
+  ]
+}
+
+// Retained for legacy consumers until their navigation migrates.
 export function buildNavigationGroups({ isLoggedIn, isAdmin, companionEnabled = true }) {
   const groups = [
     {

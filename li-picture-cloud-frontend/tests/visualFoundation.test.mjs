@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
+import process from 'node:process'
 
 const root = process.cwd()
 const baseCss = readFileSync(join(root, 'src/styles/base.css'), 'utf8')

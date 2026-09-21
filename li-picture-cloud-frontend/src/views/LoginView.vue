@@ -31,6 +31,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { loginDestination } from '@/utils/shellAccess'
 
 const router = useRouter()
 const route = useRoute()
@@ -48,8 +49,8 @@ async function handleLogin() {
   loading.value = true
   try {
     await userStore.login({ userAccount: form.userAccount, userPassword: form.userPassword })
-    const redirect = route.query.redirect || '/'
-    router.push(redirect)
+    const redirect = loginDestination(route.query.redirect, value => router.resolve(value))
+    await router.push(redirect)
   } catch (e) {
     error.value = e.message || '登录失败'
   } finally {
