@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>R04 · 保留原版挑图体验 · 定向对照</title><link rel="stylesheet" href="prototype.css"><script defer src="prototype.js"></script></head>
+<body data-version="targeted">
+  <div class="mock-layout">
+    <aside class="mock-sidebar" aria-label="R02 外壳尺寸示意，非业务导航"><span class="mock-brand">LiPictureCloud</span><div class="mock-nav"><span>空间</span><span class="selected">图库</span></div><span class="mock-companion">伙伴</span></aside>
+    <div class="mock-content">
+      <header class="mock-top"><span>图库</span><div><span class="mock-search">图库搜索</span><span>上传</span><span>账户</span></div></header>
+      <main class="gallery-page"><div class="container">
+        <div class="gallery-header"><h1>探索图库</h1></div>
+        <section class="search-bar" aria-label="检索图片">
+          <div class="retrieval-controls">
+            <form class="search-box-inline" role="search">
+              <label class="search-shell"><span class="sr-only">搜索图片名称或简介</span><svg class="search-icon" aria-hidden="true" viewBox="0 0 20 20" fill="none"><circle cx="8.5" cy="8.5" r="5.8" stroke="currentColor" stroke-width="1.5"/><path d="m13 13 4.2 4.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><input id="search" class="input" type="search" placeholder="搜索图片名称或简介…" autocomplete="off"></label>
+              <button class="btn btn-primary" type="submit">搜索</button>
+            </form>
+            <div class="filter-row">
+              <select id="category" class="input filter-select" aria-label="分类"><option value="">全部分类</option><option>风景</option><option>建筑</option><option>人物</option><option>摄影</option></select>
+              <select id="format" class="input filter-select" aria-label="格式"><option value="">全部格式</option><option value="jpg">JPG</option><option value="jpeg">JPEG</option><option value="png">PNG</option><option value="webp">WEBP</option></select>
+              <select id="order" class="input filter-select" aria-label="排序"><option value="descend">最新优先</option><option value="ascend">最早优先</option></select>
+              <button class="clear-filters" type="button">清除筛选</button>
+            </div>
+          </div>
+          <div class="tag-filters" aria-label="标签筛选，同时满足"></div>
+          <p class="applied-summary" role="status"></p>
+        </section>
+        <div class="gallery-grid" aria-label="图片列表"></div>
+        <section class="empty-state" role="status" hidden><p id="state-copy"></p><button id="state-action" class="state-action" type="button" hidden></button></section>
+        <nav class="pagination" aria-label="图库分页">
+          <button id="previous" type="button">上一页</button><span id="page-label" role="status"></span><button id="next" type="button">下一页</button>
+          <form class="jumper" aria-label="直接跳页">跳至 <input id="jump" class="jump-input" type="number" min="1" step="1" placeholder="页数" aria-label="跳转页数"> 页 <button id="jump-go" class="btn-jump" type="submit">GO</button></form>
+        </nav>
+        <section class="prototype-note"><p>R04 定向设计预览，未获设计验收。两态共用 120 条模拟记录和相同排序，每页 12 张，只渲染当前页。图片来自仓库 8 张本地 JPG；名称、作者、日期、分类、格式、标签、简介均为模拟。比例压力选项只替换首图为本地生成的长条 SVG 占位，不代表真实摄影作品。</p><p>两态使用同一简化 App Shell：224 / 88px 侧栏、68 / 60px 顶栏及手机底栏。普通登录者场景，无管理员页头上传按钮。正式点击链路仍为列表 → /picture/:id → 详情内放大 / 下载；此处点击只提示目标，不请求 API。原版手机隐藏跳页，定向改良补回可操作跳页。</p><p>底部切换保留筛选、页码和滚动偏移；“验证工具”可切状态、测量同一视口的两态。<a href="README.md">阅读本轮短记录与未执行检查</a>。</p></section>
+      </div></main>
+    </div>
+    <div class="mock-bottom" aria-label="R02 手机导航占位，非业务操作"><span>空间</span><span>图库</span><span>伙伴</span><span>更多</span></div>
+  </div>
+  <nav class="lab-dock" aria-label="原型比较工具，不属于产品界面"><button type="button" data-show="baseline" aria-pressed="false">原版基线</button><button type="button" data-show="targeted" aria-pressed="true">定向改良</button><details id="lab-options"><summary>验证工具</summary><section>
+    <label>模拟状态<select id="demo-state"><option value="normal">正常结果</option><option value="loading">加载中 · 12 个占位</option><option value="error">列表加载失败</option><option value="image-error">首图加载失败</option></select></label>
+    <label class="check"><input id="stress" type="checkbox">首图替换为 1:12 长条比例测试图</label>
+    <button id="lab-reset" type="button">清空所有条件，回第 1 页</button>
+    <button id="measure" type="button">测量两态（当前视口）</button>
+    <p>测量时临时回到页顶并隐藏工具条，随后恢复。不会改变查询或页码；不代表真实后端、跨浏览器或视觉验收通过。</p>
+    <label for="metrics">浏览器实际测量输出（可选择复制）</label><textarea id="metrics" readonly placeholder="尚未测量"></textarea>
+  </section></details></nav>
+  <aside class="route-notice" role="status" hidden><p id="route-target"></p><button id="dismiss-route" type="button">知道了</button></aside>
+  <noscript>此离线交互原型需要启用 JavaScript。</noscript>
+</body></html>
