@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>R04 · 纸境图墙 — Kimi 设计探索（非正式代码）</title>
+<!--
+  ============================================================
+  R04 设计探索 · Kimi 版「纸境图墙」
+  - 独立静态草图，与正式项目隔离；不接真实 API、无真实数据
+  - 图片素材引用 frontend public/images/mosaic（与 r04-gallery 同源）
+  - 令牌值摘自 src/styles/tokens.css（2026-09-22 快照），内联以便 file:// 直开
+  - 本文件只表达一个方向（用户要求"设计一版"），不做多方案并列
+  ============================================================
+-->
+<style>
+  /* ---- tokens 快照（src/styles/tokens.css @2026-09-22） ---- */
+  :root {
+    --lp-bg:#f6f4ef; --lp-bg-subtle:#efede6; --lp-surface:#fcfbf8; --lp-surface-elevated:#ffffff;
+    --lp-text-primary:#211e1a; --lp-text-secondary:#6e675d; --lp-text-tertiary:#a8a196;
+    --lp-accent:#47618c; --lp-accent-strong:#38507a; --lp-accent-soft:#e4eaf3; --lp-on-accent:#ffffff;
+    --lp-danger:#b4482f; --lp-border:#e3dfd6; --lp-border-strong:#cfc9bd; --lp-scrim:rgba(28,25,21,.4);
+    --lp-radius-s:6px; --lp-radius-m:10px;
+    --lp-shadow-s:0 1px 2px rgba(33,30,26,.05);
+    --lp-shadow-m:0 2px 6px rgba(33,30,26,.06),0 10px 24px rgba(33,30,26,.08);
+    --lp-shadow-l:0 4px 12px rgba(33,30,26,.07),0 24px 48px rgba(33,30,26,.12);
+    --lp-space-1:4px; --lp-space-2:8px; --lp-space-3:12px; --lp-space-4:16px; --lp-space-5:24px; --lp-space-6:32px; --lp-space-7:48px;
+    --lp-ease-standard:cubic-bezier(.2,.6,.25,1); --lp-ease-entrance:cubic-bezier(.16,1,.3,1);
+    --viewer-bg:#161311; /* 中性深灰看图底（R01 风险对策落地，非暗房主题） */
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
+  body {
+    font: 15px/1.6 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--lp-bg); color: var(--lp-text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { border: 0; background: none; cursor: pointer; }
+  a { color: inherit; text-decoration: none; }
+  img { display: block; }
+  :focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 3px; border-radius: 4px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  /* ================= mock App Shell（尺寸参照 astra 原型：侧栏 224 / 顶栏 68） ================= */
+  .mock-side {
+    position: fixed; inset: 0 auto 0 0; width: 224px; z-index: 10;
+    display: flex; flex-direction: column; padding: 26px 20px;
+    background: var(--lp-surface); border-right: 1px solid var(--lp-border);
+  }
+  .mock-brand { font-weight: 600; letter-spacing: -.03em; font-size: 15px; padding: 10px 12px; }
+  .mock-nav { display: grid; gap: 2px; margin-top: 34px; font-size: 13.5px; color: var(--lp-text-secondary); }
+  .mock-nav span { padding: 10px 12px; border-radius: var(--lp-radius-s); display: flex; align-items: center; gap: 10px; }
+  .mock-nav i { width: 6px; height: 6px; border-radius: 50%; background: var(--lp-border-strong); font-style: normal; }
+  .mock-nav .on { color: var(--lp-accent-strong); background: var(--lp-accent-soft); font-weight: 500; }
+  .mock-nav .on i { background: var(--lp-accent); }
+  .mock-presence { margin-top: auto; padding: 16px 12px 4px; border-top: 1px solid var(--lp-border); display: flex; align-items: center; gap: 10px; }
+  .presence-dot { position: relative; width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 38% 32%, #fff 0%, #efe9db 60%, #ddd2bd 100%); box-shadow: var(--lp-shadow-s); }
+  .presence-dot::before, .presence-dot::after { content: ''; position: absolute; top: 40%; width: 2.5px; height: 3.5px; border-radius: 50%; background: var(--lp-text-primary); }
+  .presence-dot::before { left: 34%; } .presence-dot::after { right: 34%; }
+  .presence-halo { position: absolute; inset: -5px; border-radius: 50%; background: radial-gradient(circle, var(--lp-accent-soft) 0%, transparent 70%); animation: breathe 3.6s cubic-bezier(.45,0,.55,1) infinite; z-index: -1; }
+  @keyframes breathe { 0%,100% { transform: scale(1); opacity: .7; } 50% { transform: scale(1.15); opacity: 1; } }
+  .mock-presence small { display: block; font-size: 11.5px; color: var(--lp-text-tertiary); }
+  .mock-presence b { display: block; font-size: 12.5px; font-weight: 500; color: var(--lp-text-secondary); }
+
+  .mock-toolbar {
+    position: sticky; top: 0; z-index: 9; height: 68px; margin-left: 224px;
+    display: flex; align-items: center; justify-content: space-between; padding: 0 32px;
+    background: color-mix(in srgb, var(--lp-bg) 88%, transparent); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--lp-border); font-size: 13px; color: var(--lp-text-secondary);
+  }
+  .mock-toolbar .crumb b { color: var(--lp-text-primary); font-weight: 500; }
+  .mock-toolbar .acts { display: flex; gap: 20px; align-items: center; }
+  .mock-toolbar .avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(140deg,#c9b391,#8a6f52); }
+
+  .shell-body { margin-left: 224px; }
+
+  /* ================= 图库页 ================= */
+  .gallery { padding: 28px 32px 120px; max-width: none; }
+
+  /* 页首：一行，极轻 */
+  .g-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .g-head h1 { font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+  .g-head .count { font-size: 13px; color: var(--lp-text-tertiary); white-space: nowrap; }
+  .g-head .count b { color: var(--lp-text-secondary); font-weight: 500; }
+
+  /* 检索行：一行完成 */
+  .g-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .g-search {
+    flex: 1 1 320px; max-width: 440px; display: flex; align-items: center; gap: 8px;
+    height: 42px; padding: 0 14px; background: var(--lp-surface);
+    border: 1px solid var(--lp-border); border-radius: var(--lp-radius-m);
+    transition: border-color .16s var(--lp-ease-standard), box-shadow .16s var(--lp-ease-standard);
+  }
+  .g-search:focus-within { border-color: var(--lp-accent); box-shadow: 0 0 0 3px var(--lp-accent-soft); }
+  .g-search svg { flex: none; color: var(--lp-text-tertiary); }
+  .g-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-size: 14px; }
+  .g-search input::placeholder { color: var(--lp-text-tertiary); }
+  .g-select {
+    height: 42px; padding: 0 30px 0 12px; border: 1px solid var(--lp-border); border-radius: var(--lp-radius-m);
+    background: var(--lp-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236e675d' fill='none' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+    font-size: 13.5px; color: var(--lp-text-secondary); appearance: none; cursor: pointer;
+  }
+  .g-tags-btn {
+    height: 42px; padding: 0 14px; border: 1px solid var(--lp-border); border-radius: var(--lp-radius-m);
+    background: var(--lp-surface); font-size: 13.5px; color: var(--lp-text-secondary);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .g-tags-btn .n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--lp-accent); color: #fff; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; }
+  .g-tags-btn[aria-expanded="true"] { border-color: var(--lp-accent); color: var(--lp-accent-strong); background: var(--lp-accent-soft); }
+
+  /* 标签面板（默认收起） */
+  .g-tagpane { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0 4px; }
+  .g-tag {
+    padding: 6px 14px; border-radius: 999px; border: 1px solid var(--lp-border);
+    background: var(--lp-surface); font-size: 13px; color: var(--lp-text-secondary);
+    transition: all .16s var(--lp-ease-standard);
+  }
+  .g-tag:hover { border-color: var(--lp-border-strong); color: var(--lp-text-primary); }
+  .g-tag.on { background: var(--lp-accent-soft); border-color: transparent; color: var(--lp-accent-strong); font-weight: 500; }
+
+  /* 已应用条件 chips */
+  .g-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
+  .g-chips:empty { display: none; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px; padding: 5px 8px 5px 12px;
+    border-radius: 999px; background: var(--lp-accent-soft); color: var(--lp-accent-strong); font-size: 12.5px;
+  }
+  .chip button { width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; line-height: 1; color: inherit; opacity: .7; }
+  .chip button:hover { opacity: 1; background: rgba(71,97,140,.18); }
+  .g-clear { font-size: 12.5px; color: var(--lp-text-secondary); text-decoration: underline; text-underline-offset: 3px; padding: 6px 4px; }
+  .g-clear:hover { color: var(--lp-accent-strong); }
+
+  /* ================= 图墙 ================= */
+  .wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 26px 24px; margin-top: 20px; }
+  .tile { text-align: left; display: block; width: 100%; animation: tile-in .48s var(--lp-ease-entrance) both; animation-delay: var(--d, 0s); }
+  @keyframes tile-in { from { opacity: 0; transform: translateY(10px); } }
+  .tile .ph {
+    position: relative; aspect-ratio: 4/3; border-radius: var(--lp-radius-m); overflow: hidden;
+    background: var(--lp-bg-subtle);
+    transition: box-shadow .24s var(--lp-ease-standard);
+  }
+  .tile .ph img {
+    width: 100%; height: 100%; object-fit: cover;
+    opacity: 0; transform: scale(1.001);
+    transition: opacity .42s var(--lp-ease-standard), transform .42s var(--lp-ease-entrance);
+  }
+  .tile .ph img.ok { opacity: 1; }
+  .tile .ph.imgerr { display: flex; align-items: center; justify-content: center; }
+  .tile .ph.imgerr::before { content: '图片暂时无法显示'; font-size: 12px; color: var(--lp-text-tertiary); }
+  .tile .ph.imgerr img { display: none; }
+  .tile:hover .ph { box-shadow: var(--lp-shadow-m); }
+  .tile:hover .ph img.ok { transform: scale(1.035); }
+  .tile .t-info { padding: 10px 2px 0; }
+  .tile .t-name { display: block; font-size: 14.5px; font-weight: 500; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color .16s; }
+  .tile:hover .t-name { color: var(--lp-accent-strong); }
+  .tile .t-meta { display: block; margin-top: 2px; font-size: 12.5px; color: var(--lp-text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* 骨架 */
+  .sk .ph::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.55) 50%, transparent 70%);
+    background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite;
+  }
+  @keyframes shimmer { from { background-position: 180% 0; } to { background-position: -80% 0; } }
+  .sk .t-name, .sk .t-meta { border-radius: 4px; color: transparent !important; background: var(--lp-bg-subtle); width: 62%; }
+  .sk .t-meta { width: 40%; margin-top: 6px; }
+
+  /* 状态块 */
+  .state { min-height: 380px; display: grid; place-content: center; justify-items: center; text-align: center; gap: 6px; padding: 48px 0; }
+  .state .dot { width: 34px; height: 34px; border-radius: 50%; background: var(--lp-bg-subtle); margin-bottom: 10px; position: relative; }
+  .state .dot::after { content: ''; position: absolute; inset: 11px; border-radius: 50%; background: var(--lp-border-strong); }
+  .state.err .dot::after { background: var(--lp-danger); opacity: .55; }
+  .state h2 { font-size: 17px; font-weight: 500; }
+  .state p { font-size: 13.5px; color: var(--lp-text-secondary); max-width: 34ch; }
+  .state .act { margin-top: 14px; display: flex; gap: 16px; }
+  .state .act button { min-height: 40px; padding: 8px 18px; border-radius: var(--lp-radius-m); font-size: 13.5px; }
+  .state .act .pri { background: var(--lp-text-primary); color: var(--lp-bg); }
+  .state .act .pri:hover { background: var(--lp-accent-strong); }
+  .state .act .lnk { color: var(--lp-accent-strong); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* 分页 */
+  .pager { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 56px; font-size: 13.5px; }
+  .pager button, .pager .pg {
+    min-width: 38px; height: 38px; padding: 0 12px; border-radius: var(--lp-radius-m);
+    display: inline-flex; align-items: center; justify-content: center; color: var(--lp-text-secondary);
+  }
+  .pager button:hover:not(:disabled) { background: var(--lp-bg-subtle); color: var(--lp-text-primary); }
+  .pager .pg.cur { background: var(--lp-text-primary); color: var(--lp-bg); font-weight: 500; }
+  .pager button:disabled { opacity: .35; cursor: default; }
+  .pager .total { margin-left: 14px; font-size: 12.5px; color: var(--lp-text-tertiary); }
+
+  /* ================= Viewer ================= */
+  .viewer { position: fixed; inset: 0; z-index: 100; background: var(--viewer-bg); display: flex; flex-direction: column; animation: v-in .24s var(--lp-ease-standard) both; }
+  @keyframes v-in { from { opacity: 0; } }
+  .viewer[hidden] { display: none; }
+  .v-top { height: 60px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; color: rgba(237,232,223,.72); font-size: 13px; }
+  .v-top .v-acts { display: flex; align-items: center; gap: 6px; }
+  .v-btn { min-width: 40px; height: 40px; padding: 0 12px; border-radius: var(--lp-radius-m); color: rgba(237,232,223,.82); display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; }
+  .v-btn:hover { background: rgba(237,232,223,.1); color: #ede8df; }
+  .v-stage { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; padding: 0 72px; }
+  .v-stage img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; box-shadow: 0 24px 80px rgba(0,0,0,.5); }
+  .v-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 64px; border-radius: var(--lp-radius-m); color: rgba(237,232,223,.6); display: flex; align-items: center; justify-content: center; }
+  .v-nav:hover:not(:disabled) { color: #ede8df; background: rgba(237,232,223,.08); }
+  .v-nav:disabled { opacity: .18; cursor: default; }
+  .v-nav.prev { left: 12px; } .v-nav.next { right: 12px; }
+  .v-cap { flex: none; text-align: center; padding: 16px 24px 26px; color: #ede8df; }
+  .v-cap b { display: block; font-size: 15px; font-weight: 500; }
+  .v-cap span { display: block; margin-top: 3px; font-size: 12.5px; color: rgba(237,232,223,.55); }
+
+  /* ================= 演示 dock ================= */
+  .dock {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 200;
+    display: flex; align-items: center; gap: 2px; padding: 5px;
+    background: var(--lp-surface-elevated); border: 1px solid var(--lp-border); border-radius: 999px;
+    box-shadow: var(--lp-shadow-m); font-size: 12.5px; max-width: calc(100vw - 24px); overflow-x: auto;
+  }
+  .dock .lab-tag { padding: 0 10px; color: var(--lp-text-tertiary); white-space: nowrap; font-size: 11.5px; }
+  .dock button { min-height: 34px; padding: 6px 13px; border-radius: 999px; color: var(--lp-text-secondary); white-space: nowrap; }
+  .dock button:hover { background: var(--lp-bg-subtle); }
+  .dock button.cur { background: var(--lp-text-primary); color: var(--lp-bg); }
+
+  /* ================= 响应式 ================= */
+  @media (max-width: 1024px) {
+    .mock-side { width: 84px; padding: 26px 12px; }
+    .mock-brand, .mock-nav span em, .mock-presence div { display: none; }
+    .mock-brand::after { content: 'LP'; font-size: 14px; }
+    .mock-nav span { justify-content: center; }
+    .mock-toolbar, .shell-body { margin-left: 84px; }
+    .wall { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px 16px; }
+  }
+  @media (max-width: 768px) {
+    .mock-side { display: none; }
+    .mock-toolbar, .shell-body { margin-left: 0; }
+    .mock-toolbar { height: 58px; padding: 0 16px; }
+    .mock-toolbar .acts .hidem { display: none; }
+    .gallery { padding: 18px 16px 130px; }
+    .g-bar { flex-wrap: wrap; }
+    .g-search { flex: 1 1 100%; max-width: none; order: -1; }
+    .wall { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+    .tile .t-name { font-size: 13.5px; }
+    .tile .t-meta { font-size: 11.5px; }
+    .v-stage { padding: 0 8px; }
+    .v-nav { display: none; }
+    .v-cap { padding-bottom: 20px; }
+    .dock { bottom: 12px; }
+  }
+  @media (max-width: 480px) {
+    .g-select { flex: 1; }
+  }
+  @media (hover: none) { .tile:hover .ph { box-shadow: none; } .tile:hover .ph img.ok { transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== mock App Shell ===== -->
+<aside class="mock-side" aria-hidden="true">
+  <div class="mock-brand">LiPictureCloud</div>
+  <nav class="mock-nav">
+    <span><i></i><em>首页</em></span>
+    <span class="on"><i></i><em>图库</em></span>
+    <span><i></i><em>我的空间</em></span>
+    <span><i></i><em>上传</em></span>
+    <span><i></i><em>配方工坊</em></span>
+  </nav>
+  <div class="mock-presence">
+    <span class="presence-dot"><span class="presence-halo"></span></span>
+    <div><small>伙伴 · 幼体</small><b>在你身边</b></div>
+  </div>
+</aside>
+<div class="mock-toolbar" aria-hidden="true">
+  <div class="crumb">工作空间 / <b>图库</b></div>
+  <div class="acts">
+    <span class="hidem">搜索</span><span class="hidem">上传图片</span><span class="avatar"></span>
+  </div>
+</div>
+
+<main class="shell-body">
+  <div class="gallery">
+
+    <header class="g-head">
+      <h1>图库</h1>
+      <span class="count" id="count"></span>
+    </header>
+
+    <div class="g-bar" role="search">
+      <label class="g-search">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <input id="q" type="search" placeholder="搜索图片 · 按名称或简介" aria-label="搜索图片" />
+      </label>
+      <select class="g-select" aria-label="分类"><option>全部分类</option><option>城市</option><option>自然</option><option>人物</option></select>
+      <select class="g-select" aria-label="格式"><option>全部格式</option><option>JPG</option><option>PNG</option><option>WebP</option></select>
+      <select class="g-select" aria-label="排序"><option>最新上传</option><option>最早上传</option></select>
+      <button class="g-tags-btn" id="tagsBtn" aria-expanded="false">标签<span class="n" id="tagsN" hidden>2</span></button>
+    </div>
+
+    <div class="g-tagpane" id="tagPane" hidden>
+      <button class="g-tag on">街拍</button><button class="g-tag on">黑白</button><button class="g-tag">城市夜景</button><button class="g-tag">人像</button><button class="g-tag">建筑</button><button class="g-tag">胶片感</button><button class="g-tag">山</button><button class="g-tag">海</button><button class="g-tag">静物</button><button class="g-tag">抽象</button>
+    </div>
+
+    <div class="g-chips" id="chips"></div>
+
+    <!-- 图墙 / 状态 -->
+    <section id="wall" class="wall" aria-live="polite"></section>
+    <section id="state" class="state" hidden></section>
+
+    <nav class="pager" id="pager" aria-label="分页">
+      <button disabled>‹ 上一页</button>
+      <span class="pg cur">1</span>
+      <button class="pg">2</button>
+      <button class="pg">3</button>
+      <button>下一页 ›</button>
+      <span class="total">每页 16 · 共 128 张</span>
+    </nav>
+  </div>
+</main>
+
+<!-- ===== Viewer ===== -->
+<div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-label="查看图片">
+  <div class="v-top">
+    <span id="vCount">3 / 16</span>
+    <div class="v-acts">
+      <button class="v-btn" id="vDetail">打开详情页</button>
+      <button class="v-btn" id="vClose" aria-label="关闭">✕</button>
+    </div>
+  </div>
+  <div class="v-stage">
+    <button class="v-nav prev" id="vPrev" aria-label="上一张">‹</button>
+    <img id="vImg" alt="" />
+    <button class="v-nav next" id="vNext" aria-label="下一张">›</button>
+  </div>
+  <div class="v-cap"><b id="vName"></b><span id="vMeta"></span></div>
+</div>
+
+<!-- ===== 演示 dock ===== -->
+<div class="dock" role="group" aria-label="演示状态切换">
+  <span class="lab-tag">Kimi · R04 设计探索</span>
+  <button data-s="default" class="cur">默认</button>
+  <button data-s="filtered">已应用筛选</button>
+  <button data-s="loading">加载中</button>
+  <button data-s="searchEmpty">搜索无结果</button>
+  <button data-s="empty">空图库</button>
+  <button data-s="error">加载失败</button>
+</div>
+
+<script>
+const IMG = '../../../li-picture-cloud-frontend/public/images/mosaic/';
+const PHOTOS = [
+  { src: 'city.jpg',         name: '城市切片 · 夜',   author: '林一舟', date: '2026.09', tags: ['城市','街拍'] },
+  { src: 'nature.jpg',       name: '山谷晨雾',        author: '沈青禾', date: '2026.09', tags: ['自然','山'] },
+  { src: 'portrait.jpg',     name: '窗边人像',        author: '陆远',   date: '2026.08', tags: ['人像','胶片感'] },
+  { src: 'architecture.jpg', name: '混凝土诗',        author: '阿灿',   date: '2026.08', tags: ['建筑'] },
+  { src: 'bw.jpg',           name: '黑白剧场',        author: '林一舟', date: '2026.07', tags: ['黑白','街拍'] },
+  { src: 'travel.jpg',       name: '旅行胶片 · 北',   author: '沈青禾', date: '2026.07', tags: ['旅行','胶片感'] },
+  { src: 'still-life.jpg',   name: '静物练习 03',     author: '陆远',   date: '2026.06', tags: ['静物'] },
+  { src: 'abstract.jpg',     name: '色块实验',        author: '阿灿',   date: '2026.06', tags: ['抽象'] },
+  { src: 'nature.jpg',       name: '苔原光线',        author: '林一舟', date: '2026.05', tags: ['自然'] },
+  { src: 'city.jpg',         name: '雨后街口',        author: '沈青禾', date: '2026.05', tags: ['城市','街拍'] },
+  { src: 'bw.jpg',           name: '剧院侧幕',        author: '陆远',   date: '2026.04', tags: ['黑白'] },
+  { src: 'travel.jpg',       name: '站台告别',        author: '阿灿',   date: '2026.04', tags: ['旅行'] },
+  { src: 'portrait.jpg',     name: '侧光练习',        author: '林一舟', date: '2026.03', tags: ['人像'] },
+  { src: 'architecture.jpg', name: '美术馆转角',      author: '沈青禾', date: '2026.03', tags: ['建筑','黑白'] },
+  { src: 'still-life.jpg',   name: '早餐桌',          author: '陆远',   date: '2026.02', tags: ['静物','胶片感'] },
+  { src: 'abstract.jpg',     name: '雾蓝研究',        author: '阿灿',   date: '2026.02', tags: ['抽象'] },
+];
+const PAGE_TOTAL = 128;
+
+const wall = document.getElementById('wall');
+const state = document.getElementById('state');
+const pager = document.getElementById('pager');
+const chips = document.getElementById('chips');
+const count = document.getElementById('count');
+const viewer = document.getElementById('viewer');
+let current = 0, lastFocus = null;
+
+function tileHTML(p, i) {
+  return `<button class="tile" style="--d:${Math.min(i * 45, 400)}ms" data-i="${i}">
+    <span class="ph"><img src="${IMG}${p.src}" alt="${p.name}" loading="${i < 3 ? 'eager' : 'lazy'}" onload="this.classList.add('ok')" onerror="this.closest('.ph').classList.add('imgerr')" /></span>
+    <span class="t-info"><span class="t-name">${p.name}</span><span class="t-meta">${p.author} · ${p.date} · ${p.tags.join(' / ')}</span></span>
+  </button>`;
+}
+
+function renderWall(list) {
+  state.hidden = true; pager.hidden = false;
+  wall.hidden = false;
+  wall.innerHTML = list.map(tileHTML).join('');
+}
+
+function renderState(kind) {
+  wall.hidden = true; pager.hidden = true; state.hidden = false;
+  const map = {
+    loading: null,
+    searchEmpty: { cls: '', h: '没有符合条件的图片', p: '换个关键词试试，或清除已应用的筛选条件。', act: '<button class="lnk" data-go="filtered">查看当前筛选</button><button class="pri" data-go="default">清除筛选</button>' },
+    empty: { cls: '', h: '暂无图片', p: '公开图库还没有可展示的图片。', act: '' },
+    error: { cls: 'err', h: '图片列表加载失败', p: '网络似乎不太稳定，已应用的筛选条件会保留。', act: '<button class="pri" data-go="default">重试</button>' },
+  };
+  if (kind === 'loading') {
+    state.hidden = true; pager.hidden = true; wall.hidden = false;
+    wall.innerHTML = Array.from({ length: 8 }, (_, i) =>
+      `<div class="tile sk"><span class="ph"></span><span class="t-info"><span class="t-name">占位</span><span class="t-meta">占位</span></span></div>`).join('');
+    return;
+  }
+  const s = map[kind];
+  state.className = 'state ' + s.cls;
+  state.innerHTML = `<span class="dot"></span><h2>${s.h}</h2><p>${s.p}</p><div class="act">${s.act}</div>`;
+}
+
+function renderChips(active) {
+  chips.innerHTML = active
+    ? `<span class="chip">分类：城市<button aria-label="移除">×</button></span>
+       <span class="chip">标签：街拍<button aria-label="移除">×</button></span>
+       <span class="chip">标签：黑白<button aria-label="移除">×</button></span>
+       <button class="g-clear" data-go="default">清除全部</button>`
+    : '';
+}
+
+function setCount(n, total) { count.innerHTML = `共 <b>${n}</b> 张${total ? ' · 全库 ' + total : ''}`; }
+
+const STATES = {
+  default() { renderChips(false); setCount(PAGE_TOTAL); renderWall(PHOTOS); document.getElementById('pager').querySelector('.total').textContent = '每页 16 · 共 128 张'; },
+  filtered() { renderChips(true); setCount(6); renderWall(PHOTOS.filter(p => p.tags.includes('城市') || p.tags.includes('黑白')).slice(0, 6)); document.getElementById('pager').querySelector('.total').textContent = '每页 16 · 共 6 张'; },
+  loading() { renderChips(false); setCount('…'); renderState('loading'); },
+  searchEmpty() { renderChips(true); setCount(0); renderState('searchEmpty'); },
+  empty() { renderChips(false); setCount(0); renderState('empty'); },
+  error() { renderChips(false); setCount('—'); renderState('error'); },
+};
+
+document.querySelectorAll('.dock button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.dock button').forEach(b => b.classList.toggle('cur', b === btn));
+    STATES[btn.dataset.s]();
+  });
+});
+document.addEventListener('click', e => {
+  const go = e.target.closest('[data-go]');
+  if (go) { document.querySelector(`.dock button[data-s="${go.dataset.go}"]`).click(); }
+});
+
+/* 标签面板 */
+const tagsBtn = document.getElementById('tagsBtn');
+tagsBtn.addEventListener('click', () => {
+  const pane = document.getElementById('tagPane');
+  const open = pane.hidden;
+  pane.hidden = !open;
+  tagsBtn.setAttribute('aria-expanded', String(open));
+  document.getElementById('tagsN').hidden = !open;
+});
+document.querySelectorAll('.g-tag').forEach(t => t.addEventListener('click', () => t.classList.toggle('on')));
+
+/* Viewer */
+function openViewer(i) {
+  current = i; lastFocus = document.activeElement;
+  syncViewer();
+  viewer.hidden = false;
+  document.body.style.overflow = 'hidden';
+  document.getElementById('vClose').focus();
+}
+function closeViewer() {
+  viewer.hidden = true;
+  document.body.style.overflow = '';
+  if (lastFocus) lastFocus.focus();
+}
+function syncViewer() {
+  const p = PHOTOS[current];
+  const img = document.getElementById('vImg');
+  img.src = IMG + p.src; img.alt = p.name;
+  document.getElementById('vName').textContent = p.name;
+  document.getElementById('vMeta').textContent = `${p.author} · ${p.date} · ${p.tags.join(' / ')}`;
+  document.getElementById('vCount').textContent = `${current + 1} / ${PHOTOS.length}`;
+  document.getElementById('vPrev').disabled = current === 0;
+  document.getElementById('vNext').disabled = current === PHOTOS.length - 1;
+}
+wall.addEventListener('click', e => {
+  const t = e.target.closest('.tile[data-i]');
+  if (t) openViewer(Number(t.dataset.i));
+});
+document.getElementById('vClose').addEventListener('click', closeViewer);
+document.getElementById('vPrev').addEventListener('click', () => { if (current > 0) { current--; syncViewer(); } });
+document.getElementById('vNext').addEventListener('click', () => { if (current < PHOTOS.length - 1) { current++; syncViewer(); } });
+document.addEventListener('keydown', e => {
+  if (viewer.hidden) return;
+  if (e.key === 'Escape') closeViewer();
+  if (e.key === 'ArrowLeft') document.getElementById('vPrev').click();
+  if (e.key === 'ArrowRight') document.getElementById('vNext').click();
+});
+viewer.addEventListener('click', e => { if (e.target.classList.contains('v-stage')) closeViewer(); });
+
+STATES.default();
+</script>
+</body>
+</html>
