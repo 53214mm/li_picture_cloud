@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>R04 · 图库方向比较</title><link rel="stylesheet" href="prototype.css"></head>
+<body class="index-page">
+<main class="index-main">
+  <p class="eyebrow">LiPictureCloud 2.0 / R04 / 需求冻结 · 交接 Kimi</p>
+  <h1>设计探索归档。<br>尚无获认可方案。</h1>
+  <p class="intro">A–D 及最后的原版微调均未采纳。用户已要求冻结 R04；以下仅供复核反馈与比较，不是已确认设计，不进入正式实现。<a href="README.md">查看冻结交接说明 →</a></p>
+  <p><a class="revision-copy" href="original-refinement.html">打开「原版 / 微调版」切换对照 →</a></p>
+  <section class="revision-entry" aria-labelledby="revision-title">
+    <a class="revision-preview" href="direction-d.html" aria-label="打开 D 整齐网格原型">
+      <img src="../../../li-picture-cloud-frontend/public/images/mosaic/nature.jpg" alt="" width="600" height="400"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/architecture.jpg" alt="" width="600" height="766"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/city.jpg" alt="" width="800" height="492"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/portrait.jpg" alt="" width="600" height="899"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/travel.jpg" alt="" width="800" height="632"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/bw.jpg" alt="" width="600" height="900">
+    </a>
+    <div class="revision-copy"><span class="eyebrow">D / 历史对照 · 未采纳</span><h2 id="revision-title">整齐网格</h2><p>图片一样大，行列都对齐。延续原版 4:3 和每页 12 张，减少边框与常驻遮挡；点击看完整图片。</p><a href="direction-d.html">查看此前 D →</a></div>
+  </section>
+  <h2>此前探索 · 未采纳</h2>
+  <div class="directions">
+    <a class="direction-link" href="direction-a.html"><div class="preview a"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/nature.jpg" alt="自然风景" width="600" height="400"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/bw.jpg" alt="黑白摄影" width="600" height="900"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/city.jpg" alt="城市摄影" width="800" height="492"></div><span class="eyebrow">A / 初版对照</span><h2>行式相册</h2><p>完整比例沿行展开。紧凑搜索、折叠筛选、分页，点击进入轻量查看器。</p><span>打开 A →</span></a>
+    <a class="direction-link" href="direction-b.html"><div class="preview b"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/architecture.jpg" alt="建筑摄影" width="600" height="766"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/travel.jpg" alt="旅行摄影" width="800" height="632"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/portrait.jpg" alt="人物摄影" width="600" height="899"></div><span class="eyebrow">B / 连续浏览</span><h2>自由瀑布流</h2><p>纵向浏览，更密集地发现图片。侧边筛选、加载更多，侧边详情保留列表参照。</p><span>打开 B →</span></a>
+    <a class="direction-link" href="direction-c.html"><div class="preview c"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/still-life.jpg" alt="静物摄影" width="600" height="397"><img src="../../../li-picture-cloud-frontend/public/images/mosaic/abstract.jpg" alt="抽象摄影" width="800" height="533"></div><span class="eyebrow">C / 慢速观看</span><h2>留白展墙</h2><p>作品与轻量题签并置。大幅与小幅交替，分页，完整详情页式阅读。</p><span>打开 C →</span></a>
+  </div>
+  <section class="notes"><h2>如何比较</h2><p>D 每页 12 项，A / B / C 默认展示 16 项。移动端直接缩窄窗口；底部“演示设置”可切换访客 / App、筛选结果、空状态、加载及错误。按 Tab 检查焦点，点图片打开查看，Esc 关闭；查看器内左右键切换当前已加载图片。</p><p>全部素材来自仓库现有 8 张本地 JPG。重复项及部分容器比例用于压力观察，不代表线上图片或真实元数据；不请求 API、不联网加载素材。模拟 Shell 只用于尺寸参照，导航不可执行业务操作。下载、编辑、删除仅说明现有详情页边界，不伪装成可用功能。</p><p>当前阶段未选定方向，不改正式 Vue / API / Shell。详情见 <a href="../../R04-Image-first-Gallery-需求确认报告.md">R04 需求确认报告</a>。</p></section>
+</main>
+</body></html>

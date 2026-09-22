@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>R04 · 原版基础微调对照</title><link rel="stylesheet" href="original-refinement.css"><script defer src="original-refinement.js"></script></head>
+<body data-version="refined">
+  <aside class="mock-sidebar" aria-label="已登录外壳示意，非真实导航"><span class="mock-brand">LiPictureCloud</span><div class="mock-nav"><span>空间</span><span class="selected">图库</span></div><span class="mock-companion">伙伴</span></aside>
+  <div class="mock-content">
+    <header class="mock-top"><span>图库</span><div><span class="mock-search">图库搜索</span><span>上传</span><span>账户</span></div></header>
+    <main class="gallery-page"><div class="container">
+      <div class="gallery-header"><h1>探索图库</h1></div>
+      <div class="search-bar">
+        <form class="search-box-inline" role="search"><input id="search" class="input" type="search" aria-label="搜索图片名称或简介" placeholder="搜索图片名称或简介…"><button class="btn btn-primary" type="submit">搜索</button></form>
+        <div class="filter-row">
+          <select id="category" class="input filter-select" aria-label="分类"><option value="">全部分类</option><option>风景</option><option>建筑</option><option>人物</option><option>摄影</option></select>
+          <select id="format" class="input filter-select" aria-label="格式"><option value="">全部格式</option><option value="jpg">JPG</option><option value="jpeg">JPEG</option><option value="png">PNG</option><option value="webp">WEBP</option></select>
+          <select id="order" class="input filter-select" aria-label="排序"><option value="descend">最新优先</option><option value="ascend">最早优先</option></select>
+          <button class="clear-filters" type="button">清除筛选</button>
+        </div>
+        <div class="tag-filters" aria-label="标签筛选，同时满足"></div>
+      </div>
+      <div class="gallery-grid" aria-label="图片列表"></div>
+      <div class="empty-state" hidden><p class="original-copy">暂无图片，上传第一张吧！</p><p class="refinement-copy">没有符合条件的图片，试试其他关键词或清除筛选。</p></div>
+      <nav class="pagination" aria-label="图库分页"><button id="previous" type="button">上一页</button><span id="page-label" role="status"></span><button id="next" type="button">下一页</button><span class="jumper">跳至 <input id="jump" class="jump-input" type="number" min="1" placeholder="页数" aria-label="跳转页数"> 页 <button id="jump-go" class="btn-jump" type="button">GO</button></span></nav>
+      <div class="prototype-note"><p>离线对照：列表结构和原版样式来自当前 GalleryView.vue。保留原标题、搜索、常驻分类 / 格式 / 排序 / 标签、4:3 裁切、24px 桌面间距、每页 12 张，以及常驻名称 / 作者 / 日期 / 标签；手机仍按原版收为单列。</p><p class="refinement-copy">微调仅涉及：弱化边框、6px 小圆角、去掉悬停位移 / 放大与硬阴影、柔和选中态、增加清除筛选与区分搜索空结果。</p><p>8 张本地素材重复为 24 项，名称、作者、日期及筛选元数据均为模拟。普通登录者场景，不增加管理员上传按钮。Shell 仅尺寸示意；点击图片弹出完整图仅为离线演示，正式版仍进入现有详情页，不提议新详情布局。</p></div>
+    </div></main>
+  </div>
+  <nav class="comparison" aria-label="原版微调对照工具，不属于产品"><a href="index.html">返回</a><button type="button" data-show="original" aria-pressed="false">原版</button><button type="button" data-show="refined" aria-pressed="true">微调版</button></nav>
+  <dialog class="detail-demo" aria-labelledby="detail-title"><header><h2 id="detail-title">完整图片</h2><button id="close-detail" type="button">返回图库</button></header><img id="detail-image" alt=""><p>仅用于查看本地素材的完整构图，非新的详情设计。不执行下载、分享、编辑、删除，也不访问 API。</p></dialog>
+  <noscript>此离线对照需要启用 JavaScript。</noscript>
+</body></html>
