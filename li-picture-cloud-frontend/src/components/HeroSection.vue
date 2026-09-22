@@ -1,152 +1,232 @@
 <template>
-  <section class="hero">
-    <div class="hero-bg"></div>
-    <div class="container hero-content">
-      <!-- 大号标题 -->
-      <h1 class="hero-title">
-        <span class="line">你的视觉世界，</span>
-        <span class="line accent">云上智能管理。</span>
-      </h1>
-      <p class="hero-desc">
-        基于 AI 的云端图库平台。上传、搜索、策展，以瑞士设计的精确美学呈现你的每一张作品。
-      </p>
-
-      <!-- 智能搜索框 -->
-      <div class="search-box">
-        <input
-          v-model="keyword"
-          class="search-input"
-          placeholder="输入关键词搜索图片，如：城市夜景、黑白肖像…"
-          @keyup.enter="handleSearch"
-        />
-        <button class="search-btn" @click="handleSearch">
-          搜索
-          <span class="arrow">&rarr;</span>
-        </button>
+  <section class="landing-hero" aria-labelledby="landing-title">
+    <div class="landing-hero__intro">
+      <div>
+        <span class="landing-kicker">你的图片空间</span>
+        <h1 id="landing-title">管理图片，<br>也用图片培养伙伴。</h1>
       </div>
-
-      <!-- 热门标签 -->
-      <div class="tags">
-        <span class="tag-label">热门：</span>
-        <button v-for="t in hotTags" :key="t" class="tag" @click="keyword = t; handleSearch()">
-          {{ t }}
-        </button>
+      <div class="landing-hero__copy">
+        <p class="landing-hero__lead">
+          这里可以上传、搜索和整理图片，管理个人与团队空间。数字伙伴有自己的成长记录，
+          你可以用图片喂养它，也可以回来和它聊聊。
+        </p>
+        <div class="landing-actions" aria-label="首页主要操作">
+          <router-link class="landing-action landing-action--primary" :to="presentation.primary.to">
+            {{ presentation.primary.label }}
+          </router-link>
+          <router-link
+            v-if="presentation.secondary"
+            class="landing-action landing-action--quiet"
+            :to="presentation.secondary.to"
+          >
+            {{ presentation.secondary.label }}
+          </router-link>
+        </div>
+        <p v-if="presentation.companionAvailability" class="landing-availability">
+          {{ presentation.companionAvailability }}
+        </p>
       </div>
     </div>
 
-    <!-- 底部装饰条 -->
-    <div class="hero-stripes">
-      <div class="stripe" style="background: var(--red)"></div>
-      <div class="stripe" style="background: var(--yellow)"></div>
-      <div class="stripe" style="background: var(--blue)"></div>
-      <div class="stripe" style="background: var(--black)"></div>
+    <div class="landing-canvas" aria-label="图片与伙伴栖居位概念示意">
+      <figure class="landing-canvas__photo landing-canvas__photo--main">
+        <img
+          src="/images/mosaic/nature.jpg"
+          alt="暮色中的河谷，本地展示图片"
+          width="800"
+          height="600"
+          fetchpriority="high"
+        >
+      </figure>
+      <figure class="landing-canvas__photo landing-canvas__photo--travel">
+        <img src="/images/mosaic/travel.jpg" alt="旅行地图和相机，本地展示图片" width="800" height="600">
+      </figure>
+      <figure class="landing-canvas__photo landing-canvas__photo--city">
+        <img src="/images/mosaic/city.jpg" alt="城市建筑，本地展示图片" width="800" height="600">
+      </figure>
+      <div class="landing-habitat">
+        <span class="landing-habitat__shape" aria-hidden="true"></span>
+        <span class="landing-habitat__ground" aria-hidden="true"></span>
+        <strong>伙伴的位置</strong>
+        <span>概念示意 · 非正式角色</span>
+      </div>
     </div>
+    <p class="landing-canvas__caption">
+      图片与栖居位的关系示意 · 本地展示图片，不代表用户空间或伙伴喜好
+    </p>
   </section>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-
-const router = useRouter()
-const keyword = ref('')
-const hotTags = ['风景', '人物', '街拍', '黑白', '建筑', '抽象']
-
-function handleSearch() {
-  if (keyword.value.trim()) {
-    router.push({ name: 'gallery', query: { q: keyword.value.trim() } })
-  } else {
-    router.push({ name: 'gallery' })
+defineProps({
+  presentation: {
+    type: Object,
+    required: true
   }
-}
+})
 </script>
 
 <style scoped>
-.hero {
-  --hero-brand-accent: #f04438;
-  position: relative;
-  min-height: 85vh;
-  display: flex; flex-direction: column; justify-content: center;
-  background: var(--white);
-  overflow: hidden;
-}
-/* 装饰几何背景 */
-.hero-bg {
-  position: absolute; inset: 0;
-  background:
-    radial-gradient(circle at 20% 30%, rgba(224,58,48,0.06) 0%, transparent 50%),
-    radial-gradient(circle at 75% 60%, rgba(0,90,255,0.06) 0%, transparent 50%),
-    radial-gradient(circle at 50% 80%, rgba(255,200,0,0.04) 0%, transparent 40%);
-}
-.hero-content { position: relative; z-index: 1; padding: 4rem 0 2rem; }
-.hero-title {
-  font-size: clamp(3rem, 8vw, 6rem);
-  font-weight: 900;
-  letter-spacing: -0.05em;
-  line-height: 1.05;
-  margin-bottom: 1.5rem;
-}
-.line { display: block; }
-.line.accent { color: var(--hero-brand-accent); }
-.hero-desc {
-  font-size: 1.25rem; line-height: 1.6; color: var(--gray-600);
-  max-width: 560px; margin-bottom: 2.5rem;
+.landing-hero {
+  width: calc(100% - var(--lp-gutter) * 2);
+  max-width: var(--lp-content-wide);
+  margin-inline: auto;
+  padding-block: var(--lp-space-7) var(--lp-space-8);
 }
 
-/* 搜索框 */
-.search-box {
+.landing-hero__intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.85fr);
+  gap: clamp(var(--lp-space-6), 5vw, var(--lp-space-8));
+  align-items: start;
+  margin-bottom: var(--lp-space-7);
+}
+
+.landing-kicker {
+  display: block;
+  margin-bottom: var(--lp-space-4);
+  color: var(--lp-accent-strong);
+  font-size: var(--lp-font-size-small);
+}
+
+h1 {
+  max-width: 10em;
+  font-size: clamp(2.5rem, 4.6vw, 3.75rem);
+  line-height: 1.12;
+  letter-spacing: -0.045em;
+}
+
+.landing-hero__lead {
+  max-width: 36rem;
+  color: var(--lp-text-secondary);
+  font-size: 1.0625rem;
+  line-height: 1.9;
+}
+
+.landing-actions {
   display: flex;
-  max-width: 640px;
-  border: 2px solid var(--black);
-  transition: box-shadow 0.2s;
+  flex-wrap: wrap;
+  gap: var(--lp-space-3);
+  margin-top: var(--lp-space-5);
 }
-.search-box:focus-within { box-shadow: 6px 6px 0 var(--black); }
-.search-input {
-  flex: 1; border: none; outline: none;
-  padding: 1rem 1.5rem; font-size: 1.125rem;
-}
-.search-input::placeholder { color: var(--gray-400); }
-.search-btn {
-  display: flex; align-items: center; gap: 0.5rem;
-  padding: 0 2rem;
-  background: var(--black); color: var(--white);
-  font-size: 0.9375rem; font-weight: 600; letter-spacing: 0.04em;
-  text-transform: uppercase;
-  transition: background 0.2s;
-}
-.search-btn:hover { background: var(--red); }
-.arrow { font-size: 1.25rem; }
 
-/* 标签 */
-.tags { display: flex; align-items: center; gap: 0.5rem; margin-top: 1.5rem; flex-wrap: wrap; }
-.tag-label { font-size: 0.8125rem; font-weight: 500; color: var(--gray-400); }
-.tag {
-  padding: 0.375rem 1rem;
-  font-size: 0.8125rem; font-weight: 500;
-  border: 1.5px solid var(--gray-200);
-  transition: border-color 0.2s;
+.landing-action {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lp-space-3) var(--lp-space-5);
+  border: 1px solid transparent;
+  border-radius: var(--lp-radius-s);
+  font-weight: var(--lp-font-weight-semibold);
+  transition: color var(--lp-dur-fast) var(--lp-ease-standard), background-color var(--lp-dur-fast) var(--lp-ease-standard), border-color var(--lp-dur-fast) var(--lp-ease-standard);
 }
-.tag:hover { border-color: var(--black); }
 
-/* 底部三色条 */
-.hero-stripes {
-  display: grid; grid-template-columns: 3fr 1fr 1fr 3fr;
-  height: 6px; width: 100%; margin-top: auto;
+.landing-action--primary { background: var(--lp-accent); color: var(--lp-on-accent); }
+.landing-action--primary:hover { background: var(--lp-accent-strong); }
+.landing-action--quiet { border-color: var(--lp-border); background: var(--lp-surface); }
+.landing-action--quiet:hover { border-color: var(--lp-border-strong); background: var(--lp-bg-subtle); }
+
+.landing-availability {
+  max-width: 36rem;
+  margin-top: var(--lp-space-4);
+  color: var(--lp-text-secondary);
+  font-size: var(--lp-font-size-small);
+}
+
+.landing-canvas {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(9rem, 0.85fr) minmax(9rem, 0.72fr);
+  grid-template-rows: minmax(10rem, 12vw) minmax(10rem, 12vw);
+  gap: var(--lp-space-4);
+}
+
+.landing-canvas__photo {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--lp-radius-m);
+  background: var(--lp-bg-subtle);
+}
+
+.landing-canvas__photo--main { grid-row: span 2; }
+
+.landing-canvas img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.landing-habitat {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  min-width: 0;
+  padding: var(--lp-space-5);
+  border: 1px solid var(--lp-border);
+  border-radius: var(--lp-radius-m);
+  background: var(--lp-surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.landing-habitat__shape {
+  width: 70px;
+  height: 88px;
+  border: 2px solid var(--lp-accent);
+  border-radius: 52% 48% 43% 57% / 42% 45% 55% 58%;
+  background: var(--lp-accent-soft);
+}
+
+.landing-habitat__ground {
+  width: min(100%, 110px);
+  height: 1px;
+  margin-top: var(--lp-space-5);
+  background: var(--lp-border-strong);
+}
+
+.landing-habitat strong { margin-top: var(--lp-space-5); font-size: 1rem; }
+
+.landing-habitat > span:last-child {
+  margin-top: var(--lp-space-1);
+  color: var(--lp-text-secondary);
+  font-size: var(--lp-font-size-caption);
+}
+
+.landing-canvas__caption {
+  margin-top: var(--lp-space-3);
+  color: var(--lp-text-secondary);
+  font-size: var(--lp-font-size-small);
+}
+
+@media (max-width: 1024px) {
+  .landing-hero__intro { gap: var(--lp-space-6); }
+  .landing-canvas {
+    grid-template-columns: minmax(0, 1.4fr) minmax(8rem, 0.8fr) minmax(8rem, 0.8fr);
+    grid-template-rows: 150px 150px;
+  }
 }
 
 @media (max-width: 767px) {
-  .hero { min-height: auto; }
-  .hero-content { padding-block: 3rem 2rem; }
-  .hero-title { font-size: clamp(2.5rem, 13vw, 4.5rem); }
-  .hero-desc { margin-bottom: 1.75rem; font-size: 1rem; }
-  .search-box { width: 100%; }
-  .search-input { min-width: 0; padding: 0.875rem 1rem; font-size: 1rem; }
-  .search-btn { min-height: 48px; padding-inline: 1.25rem; }
-  .tag { min-height: 44px; }
+  .landing-hero { padding-block: var(--lp-space-6) var(--lp-space-7); }
+  .landing-hero__intro { grid-template-columns: 1fr; margin-bottom: var(--lp-space-6); }
+  h1 { font-size: clamp(2.3rem, 10vw, 3.1rem); }
+  .landing-hero__lead { font-size: 1rem; }
+  .landing-canvas {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(210px, 58vw) 190px;
+    gap: var(--lp-space-3);
+  }
+  .landing-canvas__photo--main { grid-column: 1 / 3; grid-row: 1; }
+  .landing-canvas__photo--city { display: none; }
+  .landing-habitat { grid-column: 2; grid-row: 2; padding: var(--lp-space-4); }
+  .landing-habitat__shape { width: 48px; height: 60px; }
+  .landing-habitat__ground, .landing-habitat strong { margin-top: var(--lp-space-3); }
 }
 
 @media (max-width: 480px) {
-  .search-box { flex-direction: column; }
-  .search-btn { justify-content: center; padding-block: 0.75rem; }
+  .landing-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .landing-actions > :only-child { grid-column: 1 / 3; }
 }
 </style>
