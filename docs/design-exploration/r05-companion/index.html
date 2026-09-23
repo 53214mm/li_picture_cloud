@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>R05 · 伙伴身份设计探索 — LiPictureCloud</title>
+  <link rel="stylesheet" href="prototype.css">
+  <script src="prototype.js" defer></script>
+</head>
+<body>
+  <header class="study-header">
+    <a class="wordmark" href="../../R05-Companion-Identity-计划.md">LiPictureCloud <span>/ R05</span></a>
+    <span class="study-status">A 暂留 · 方向待定</span>
+  </header>
+  <main class="study">
+    <section class="intro">
+      <div><p class="eyebrow">COMPANION IDENTITY & EMBODIMENT</p><h1>先认识她，再决定她的身体。</h1>
+      <p class="intro-copy">暂定保留绫页，成熟体采用正常比例全身立绘。Q 版留作桌宠参考，另外两个方向先冻结。</p></div>
+      <p class="exploration-note">概念参考图 / 布局示意<br>不接入真实账号、图片或业务</p>
+    </section>
+
+    <nav class="concept-picker" aria-label="候选角色">
+      <button type="button" class="concept-choice" data-concept="a" aria-pressed="true"><span class="choice-number">A</span><span><strong>绫页</strong><small>纸翼蛾族 · 暂定保留</small></span><span class="choice-mark">当前方向</span></button>
+      <button type="button" class="concept-choice" data-concept="b" aria-pressed="false" disabled><span class="choice-number">B</span><span><strong>汐砚</strong><small>潮壳螺族 · 已冻结</small></span><span class="choice-mark">保留归档</span></button>
+      <button type="button" class="concept-choice" data-concept="c" aria-pressed="false" disabled><span class="choice-number">C</span><span><strong>陶眠</strong><small>陶鳞蜥族 · 已冻结</small></span><span class="choice-mark">保留归档</span></button>
+    </nav>
+
+    <section class="controls" aria-label="设计预览设置">
+      <div class="segmented" aria-label="表现位置">
+        <button type="button" data-view="shell" aria-pressed="false">Shell / 图库</button>
+        <button type="button" data-view="home" aria-pressed="true">Home / 住处</button>
+        <button type="button" data-view="conversation" aria-pressed="false">Conversation / 对话</button>
+      </div>
+      <div class="control-options">
+        <label>生命阶段 <select id="life-stage"><option value="adult">Adult · 成熟体</option><option value="juvenile">Juvenile · 未成熟体</option><option value="egg">Egg · 卵</option></select></label>
+        <label><input id="enabled" type="checkbox" checked> 伙伴入口</label>
+        <label><input id="motion" type="checkbox"> 呼吸示意</label>
+      </div>
+    </section>
+
+    <section class="app-preview" aria-label="隔离产品布局示意">
+      <aside class="app-sidebar">
+        <span class="app-brand">LiPictureCloud</span>
+        <div class="fake-nav"><span>我的空间</span><span id="gallery-nav">图库</span><span>工具 <i>⌄</i></span></div>
+        <div class="sidebar-bottom">
+          <button type="button" class="presence" id="presence" aria-label="进入伙伴住处（原型）">
+            <span class="presence-art" aria-hidden="true"></span>
+            <span class="presence-label"><strong>伙伴空间</strong><small class="character-name">绫页</small></span><span class="presence-chevron">›</span>
+          </button>
+          <span class="sidebar-footnote">固定栖居位</span>
+        </div>
+      </aside>
+      <div class="workspace">
+        <header class="app-toolbar"><span id="breadcrumb">伙伴 / 住处</span><span class="toolbar-actions">图库搜索 <span>上传</span><span>账户</span></span></header>
+        <section id="home-view" class="view-panel home-view">
+          <div class="view-title"><div><p class="eyebrow">留影小屋</p><h2>她住的地方</h2></div><span class="prototype-tag">Home 概念 · 非真实 Room</span></div>
+          <div class="room">
+            <div class="room-window" aria-hidden="true"><span></span></div>
+            <div class="room-caption">窗外是雾屿。<br>窗内留一点位置给相处。</div>
+            <div class="picture-shelf"><div class="empty-photo"><span>一张由你选择的图片</span></div><div class="keepsake-slot">未来纪念品留位</div></div>
+            <div class="room-floor" aria-hidden="true"></div>
+            <div id="home-character" class="home-character" role="img"></div>
+            <div class="room-anchor" aria-hidden="true">地面锚点 / 固定视角</div>
+          </div>
+          <div class="room-below"><div><strong class="character-name">绫页</strong><p id="home-line"></p></div><button type="button" id="open-conversation">坐下来聊聊 <span>↗</span></button></div>
+        </section>
+        <section id="shell-view" class="view-panel shell-view" hidden>
+          <div class="view-title"><div><p class="eyebrow">GALLERY</p><h2>图片仍然是主角</h2></div><span class="prototype-tag">中性图片占位</span></div>
+          <div class="gallery-placeholder-grid" aria-label="六张用于布局的图片占位">
+            <div class="gallery-placeholder landscape"><span>山间 / 图片占位</span></div><div class="gallery-placeholder architecture"><span>街角 / 图片占位</span></div><div class="gallery-placeholder sea"><span>海岸 / 图片占位</span></div><div class="gallery-placeholder paper"><span>手作 / 图片占位</span></div><div class="gallery-placeholder dusk"><span>傍晚 / 图片占位</span></div><div class="gallery-placeholder forest"><span>林地 / 图片占位</span></div>
+          </div>
+          <p class="workspace-note">伙伴待在侧栏里。这里的图块仅用于判断视觉主次；不代表已授权喂养。</p>
+          <button type="button" class="text-action" id="open-overlay">查看弹层出现时的退让示意</button>
+        </section>
+        <section id="conversation-view" class="view-panel conversation-view" hidden>
+          <div class="view-title"><div><p class="eyebrow">CONVERSATION</p><h2>靠近一点说话</h2></div><span class="prototype-tag">固定台词示例 · 不发送消息</span></div>
+          <div class="conversation-layout"><div class="portrait-column"><div id="portrait" class="portrait" role="img"></div><div class="portrait-caption"><strong class="character-name">绫页</strong><span id="portrait-description">同一角色的半身视角</span></div></div>
+          <div class="dialogue-column"><p class="sample-label">场景示例：用户主动展示一张城堡图</p><div class="user-bubble">这张图，我想给你看看。</div><div class="companion-bubble"><span class="character-name">绫页</span><p id="conversation-line"></p></div><p class="context-note" id="context-note">只谈画面，不替用户编造经历。</p><div class="mock-input"><span>对话输入区示意</span><span>未连接</span></div></div></div>
+        </section>
+        <section id="disabled-view" class="view-panel disabled-view" hidden><p class="eyebrow">功能关闭预览</p><h2>图库照常可用</h2><p>伙伴入口收起，不保留悬浮球或虚构的在线状态。</p><button type="button" id="restore-enabled">恢复伙伴预览</button></section>
+        <nav class="mobile-navigation" aria-label="手机导航示意"><span>空间</span><span>图库</span><button type="button" id="mobile-companion">伙伴</button><span>更多</span></nav>
+      </div>
+    </section>
+    <p class="preview-disclosure" id="preview-disclosure" aria-live="polite"></p>
+
+    <section class="review-grid">
+      <div class="scale-review"><p class="eyebrow">SMALL-SIZE REVIEW</p><h2>正常比例的小尺寸预览</h2><p>同一张成熟体全身立绘，三个显示尺寸。Q 版不再用作 Web 成熟体。</p><div class="scale-row" id="scale-row"></div><p class="review-caution" id="scale-note"></p></div>
+      <div class="identity-review"><p class="eyebrow">IDENTITY DNA</p><h2 id="identity-title"></h2><p id="identity-copy"></p><div class="palette" id="palette" aria-label="角色候选色板"></div><p class="review-caution" id="concept-risk"></p></div>
+    </section>
+
+    <section class="pet-reference" aria-labelledby="pet-reference-title"><div id="pet-reference-art" role="img" aria-label="绫页 Q 版桌宠参考，非 Web 成熟体"></div><div><p class="eyebrow">DESKTOP PET REFERENCE</p><h2 id="pet-reference-title">Q 版保留，留给桌宠方向。</h2><p>用于以后参考 Codex 宠物形式的探索，暂不制作桌宠。它不是幼体，也不再替代 Web 里的成熟体立绘。</p></div></section>
+
+    <section class="concept-sheet-section"><div class="sheet-heading"><div><p class="eyebrow">CHARACTER EXPLORATION</p><h2>从卵到她，还是同一位。</h2></div><a id="sheet-link" href="assets/concept-a.png" target="_blank" rel="noopener">打开原始设定页 ↗</a></div><figure><img id="concept-sheet" src="assets/concept-a.png" width="1536" height="1024" alt="A 绫页的正常比例成熟体、半身、蛋、未成熟体与桌宠 Q 版参考"><figcaption id="sheet-caption"></figcaption></figure></section>
+
+    <footer class="study-footer"><div><strong>A 绫页暂留，B / C 冻结；尚未接入产品。</strong><p>当前探索稿已获准归档。技术路线与最终方向继续讨论。</p></div><a href="../../R05-身体技术路线评估.md">阅读技术路线评估 ↗</a></footer>
+  </main>
+  <dialog id="overlay-demo" aria-labelledby="overlay-title"><form method="dialog"><p class="eyebrow">弹层退让示意</p><h2 id="overlay-title">此刻先完成图片操作</h2><p>背景不可交互，伙伴停止呼吸示意。没有真实图片，也不执行任何上传。</p><button type="submit" autofocus>关闭预览</button></form></dialog>
+</body>
+</html>
