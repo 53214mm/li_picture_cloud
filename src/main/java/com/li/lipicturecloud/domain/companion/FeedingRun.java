@@ -9,6 +9,17 @@ import java.util.regex.Pattern;
  * 一次可重试的喂养请求状态机，而非成长记录本身。
  *
  * <p>同一个幂等键始终对应同一行：网络超时后的重发可以返回原结果，不会再次给伙伴加经验。</p>
+ *
+ * <p>可以把它理解成一张“任务进度单”：</p>
+ * <ul>
+ *     <li>PROCESSING：任务正在处理；</li>
+ *     <li>COMPLETED：任务成功，并通过 resultGrowthRecordId 指向真正的成长事实；</li>
+ *     <li>FAILED：系统处理失败，可以根据规则重试；</li>
+ *     <li>REJECTED：请求在业务上被拒绝，不应当作普通故障盲目重试。</li>
+ * </ul>
+ *
+ * <p>requestFingerprint 用于确认“相同幂等键下的请求内容也相同”；correlationId 用于串联日志；
+ * revision 用于数据库条件更新，防止两个请求同时推进同一执行记录。</p>
  */
 public record FeedingRun(
         Long id,
@@ -35,6 +46,10 @@ public record FeedingRun(
     private static final Pattern FINGERPRINT = Pattern.compile("[0-9a-f]{64}");
     private static final Pattern REQUESTED_CODE = Pattern.compile("[a-zA-Z0-9._-]{1,128}");
 
+    /**
+     * record 的紧凑构造器。每次新建或状态迁移产生 FeedingRun 时都会经过这里，
+     * 因此它是状态机不变量的统一入口，而不仅仅是创建时的参数校验。
+     */
     public FeedingRun {
         if (id != null && id <= 0) {
             throw new IllegalArgumentException("id must be positive");
@@ -61,6 +76,9 @@ public record FeedingRun(
         }
     }
 
+    /**
+     * 创建一张尚未入库的喂养进度单，初始状态固定为 PROCESSING、首次尝试、revision 为 0。
+     */
     public static FeedingRun processing(long companionId, long subjectId, long pictureId,
                                         String idempotencyKey, String requestFingerprint,
                                         String correlationId, NutritionPolicy requestedPolicy,
@@ -95,6 +113,9 @@ public record FeedingRun(
                 revision, createdAt, updatedAt);
     }
 
+    /**
+     * 数据库插入成功后补上主键。record 不可变，所以这里返回新对象，不会修改原对象。
+     */
     public FeedingRun persistedAs(long persistedId) {
         if (persistedId <= 0 || id != null) {
             throw new IllegalStateException("invalid persisted id transition");
@@ -103,6 +124,9 @@ public record FeedingRun(
                 safeErrorTime, attemptCount, revision, updatedAt);
     }
 
+    /**
+     * 开始下一次处理尝试：状态回到 PROCESSING，attemptCount 和 revision 同时加 1。
+     */
     public FeedingRun restarted(Instant now) {
         if (status != FeedingRunStatus.FAILED && status != FeedingRunStatus.PROCESSING) {
             throw new IllegalStateException("only failed or processing runs can restart");
@@ -113,6 +137,10 @@ public record FeedingRun(
                 Math.addExact(revision, 1L), requireTransitionTime(now));
     }
 
+    /**
+     * 从 PROCESSING 进入 COMPLETED，并关联已经写入的成长记录。
+     * 以后相同幂等键再次到达时，可以沿这个 id 找回原成长结果。
+     */
     public FeedingRun completed(long growthRecordId, Instant now) {
         requireStatus(FeedingRunStatus.PROCESSING);
         if (growthRecordId <= 0) {
@@ -123,6 +151,7 @@ public record FeedingRun(
                 requireTransitionTime(now));
     }
 
+    /** 从 PROCESSING 进入可重试的 FAILED，只接收可安全持久化的错误摘要。 */
     public FeedingRun failed(String safeCode, String safeMessage, Instant now) {
         requireStatus(FeedingRunStatus.PROCESSING);
         Instant failureTime = requireTransitionTime(now);
@@ -131,6 +160,7 @@ public record FeedingRun(
                 attemptCount, Math.addExact(revision, 1L), failureTime);
     }
 
+    /** 从 PROCESSING 进入业务终态 REJECTED，例如权限或请求条件不满足。 */
     public FeedingRun rejected(String safeCode, String safeMessage, Instant now) {
         requireStatus(FeedingRunStatus.PROCESSING);
         Instant rejectionTime = requireTransitionTime(now);
@@ -139,6 +169,9 @@ public record FeedingRun(
                 attemptCount, Math.addExact(revision, 1L), rejectionTime);
     }
 
+    /**
+     * 状态迁移的公共复制方法：保留请求身份，只替换状态相关字段并生成新的不可变 record。
+     */
     private FeedingRun copy(Long copyId, FeedingRunStatus copyStatus, Long growthRecordId,
                             String errorCode, String errorMessage, Instant errorTime,
                             int copyAttemptCount, long copyRevision, Instant copyUpdatedAt) {

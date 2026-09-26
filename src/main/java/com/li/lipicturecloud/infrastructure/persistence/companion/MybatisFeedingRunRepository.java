@@ -16,6 +16,12 @@ import java.util.Date;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * 喂养执行记录仓储的 MyBatis 实现。
+ *
+ * <p>一条 FeedingRun 表示一次带幂等键的喂养尝试。状态变更同时校验旧状态和 revision，
+ * 防止重试请求或并发请求把更新后的结果覆盖掉。</p>
+ */
 @Repository
 public class MybatisFeedingRunRepository implements FeedingRunRepository {
 
@@ -25,6 +31,7 @@ public class MybatisFeedingRunRepository implements FeedingRunRepository {
         this.feedRunMapper = feedRunMapper;
     }
 
+    /** 按“伙伴 + 幂等键”查找已有执行，用来识别同一次客户端意图。 */
     @Override
     public Optional<FeedingRun> findByKey(long companionId, String idempotencyKey) {
         return Optional.ofNullable(feedRunMapper.selectOne(
@@ -34,6 +41,7 @@ public class MybatisFeedingRunRepository implements FeedingRunRepository {
                 .map(this::fromRow);
     }
 
+    /** 插入新的 PROCESSING 执行；重复幂等键由数据库唯一约束拦截。 */
     @Override
     public FeedingRun insert(FeedingRun run) {
         Objects.requireNonNull(run, "feeding run");
@@ -90,6 +98,7 @@ public class MybatisFeedingRunRepository implements FeedingRunRepository {
         return requested.isBefore(current.updatedAt()) ? current.updatedAt() : requested;
     }
 
+    /** 条件更新状态与版本；更新 0 行说明记录已经不处于调用方观察到的旧状态。 */
     private boolean transition(long id, long expectedRevision, FeedingRunStatus source, FeedingRun target) {
         UpdateWrapper<CompanionFeedRunEntity> update = new UpdateWrapper<>();
         update.eq("id", id)

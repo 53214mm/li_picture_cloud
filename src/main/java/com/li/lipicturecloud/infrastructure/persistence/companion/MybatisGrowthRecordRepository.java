@@ -18,6 +18,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * 成长记录仓储的 MyBatis 实现。
+ *
+ * <p>成长记录是已经发生的事实，采用只追加策略：当前状态保存在伙伴表，成长记录用于历史展示、
+ * 统计和追溯，不应该回头改写。</p>
+ */
 @Repository
 public class MybatisGrowthRecordRepository implements GrowthRecordRepository {
 
@@ -30,6 +36,7 @@ public class MybatisGrowthRecordRepository implements GrowthRecordRepository {
         this.jsonCodec = jsonCodec;
     }
 
+    /** 追加成长事实，并把增量、伙伴快照和分析来源编码后一起保存。 */
     @Override
     public GrowthRecord append(GrowthRecord record) {
         Objects.requireNonNull(record, "growth record");
@@ -45,6 +52,7 @@ public class MybatisGrowthRecordRepository implements GrowthRecordRepository {
         return fromRow(stored);
     }
 
+    /** 按喂养执行 id 查找唯一成长事实，用于幂等结果恢复。 */
     @Override
     public Optional<GrowthRecord> findByFeedingRunId(long feedingRunId) {
         return Optional.ofNullable(growthRecordMapper.selectByFeedingRunId(feedingRunId))

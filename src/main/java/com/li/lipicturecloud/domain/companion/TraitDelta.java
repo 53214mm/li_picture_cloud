@@ -5,6 +5,11 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * 一次成长对五条性格轴提出或实际应用的增量值对象。
+ *
+ * <p>它只统一数值精度，不负责上限裁剪；最终可应用增量由 {@link CompanionBalance} 决定。</p>
+ */
 public record TraitDelta(
         BigDecimal curiosity,
         BigDecimal enthusiasm,

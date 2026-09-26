@@ -17,6 +17,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * 伙伴持久化专用的 JSON 编解码器。
+ *
+ * <p>领域层使用特质增量、技能 Map 和伙伴对象等强类型数据，数据库则把部分数据保存为 JSON。
+ * 本类集中处理两种表示之间的转换，避免 Jackson 细节散落到各个 Repository 中。</p>
+ *
+ * <p>它只负责数据格式转换，不负责经验、特质或技能的成长计算。</p>
+ */
 @Component
 public class CompanionJsonCodec {
 
@@ -29,14 +37,17 @@ public class CompanionJsonCodec {
         this.objectMapper = objectMapper;
     }
 
+    /** 将一次成长的特质增量编码为数据库可保存的 JSON。 */
     public String writeTraitDelta(TraitDelta value) {
         return write(Objects.requireNonNull(value, "trait delta"));
     }
 
+    /** 将数据库中的特质增量 JSON 恢复成领域值对象。 */
     public TraitDelta readTraitDelta(String json) {
         return read(json, TraitDelta.class);
     }
 
+    /** 将技能经验增量编码为以技能名称为键的 JSON。 */
     public String writeSkillDelta(Map<CompanionSkill, Long> value) {
         Objects.requireNonNull(value, "skill delta");
         Map<String, Long> payload = new HashMap<>();
@@ -44,6 +55,7 @@ public class CompanionJsonCodec {
         return write(payload);
     }
 
+    /** 恢复技能经验增量；后续会为旧数据中缺失的新技能补 0。 */
     public Map<CompanionSkill, Long> readSkillDelta(String json) {
         Map<String, Long> payload = read(json, STRING_LONG_MAP);
         Map<CompanionSkill, Long> result = new EnumMap<>(CompanionSkill.class);
@@ -58,6 +70,7 @@ public class CompanionJsonCodec {
         return Map.copyOf(result);
     }
 
+    /** 保存成长后的伙伴快照；它用于历史展示，不是当前伙伴状态的事实来源。 */
     public String writeSnapshot(Companion companion) {
         Objects.requireNonNull(companion, "companion");
         Map<String, Long> skills = new HashMap<>();
@@ -69,6 +82,7 @@ public class CompanionJsonCodec {
                 skills, companion.balanceVersion(), companion.revision()));
     }
 
+    /** 将历史快照恢复成当时的伙伴状态，并注入领域规则需要的平衡参数。 */
     public Companion readSnapshot(String json, CompanionBalance balance) {
         CompanionSnapshotPayload payload = read(json, CompanionSnapshotPayload.class);
         Map<CompanionSkill, Long> skills = allSkills(payload.skills());

@@ -5,6 +5,11 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * 伙伴五条长期性格轴的不可变值对象。
+ *
+ * <p>构造时统一保留两位小数并限制在 [-100, 100]，使越界脏数据无法进入伙伴聚合。</p>
+ */
 public record CompanionTraits(
         BigDecimal curiosity,
         BigDecimal enthusiasm,

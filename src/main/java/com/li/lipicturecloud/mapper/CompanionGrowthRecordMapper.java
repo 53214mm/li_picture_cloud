@@ -8,6 +8,12 @@ import org.apache.ibatis.annotations.Select;
 import java.util.Date;
 import java.util.List;
 
+/**
+ * 伙伴成长记录表的受限 Mapper。
+ *
+ * <p>这里故意不继承 BaseMapper，只开放插入、查询和统计能力，不暴露 update/delete，
+ * 从数据库访问入口强化成长事实“只能追加、不能改写”的约束。</p>
+ */
 public interface CompanionGrowthRecordMapper {
 
     @Insert("""
@@ -22,6 +28,7 @@ public interface CompanionGrowthRecordMapper {
              #{contentUnderstood}, #{providerCode}, #{modelCode}, #{promptVersion}, #{resultSchemaVersion},
              #{confidence}, #{fallbackReasonCode}, #{balanceVersion}, #{idempotencyKey}, #{correlationId}, #{createTime})
             """)
+    /** 追加一条成长事实。 */
     int insert(CompanionGrowthRecordEntity row);
 
     @Select("""
@@ -40,6 +47,7 @@ public interface CompanionGrowthRecordMapper {
                    confidence, fallbackReasonCode, balanceVersion, idempotencyKey, correlationId, createTime
             FROM companion_growth_record WHERE feedingRunId = #{feedingRunId}
             """)
+    /** 根据喂养执行 id 查询唯一成长事实，用于幂等恢复。 */
     CompanionGrowthRecordEntity selectByFeedingRunId(@Param("feedingRunId") long feedingRunId);
 
     @Select("""
@@ -50,6 +58,7 @@ public interface CompanionGrowthRecordMapper {
             FROM companion_growth_record WHERE companionId = #{companionId}
             ORDER BY createTime DESC, id DESC LIMIT #{limit}
             """)
+    /** 查询伙伴最近的成长事实。 */
     List<CompanionGrowthRecordEntity> selectRecent(@Param("companionId") long companionId,
                                                     @Param("limit") int limit);
 
@@ -58,6 +67,7 @@ public interface CompanionGrowthRecordMapper {
             WHERE companionId = #{companionId} AND pictureId = #{pictureId}
               AND eventType = 'PICTURE_FED'
             """)
+    /** 统计指定图片完成过多少次完整喂养。 */
     long countFullFeeds(@Param("companionId") long companionId, @Param("pictureId") long pictureId);
 
     @Select("""

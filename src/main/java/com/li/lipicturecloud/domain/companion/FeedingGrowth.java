@@ -3,6 +3,11 @@ package com.li.lipicturecloud.domain.companion;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * {@link Companion#feed(PictureNutrition, FeedingContext, CompanionBalance)} 的纯领域计算结果。
+ *
+ * <p>它同时携带新的伙伴快照和本次实际增量，随后由应用层原子保存并生成成长记录。</p>
+ */
 public record FeedingGrowth(
         Companion companionAfter,
         GrowthEventType eventType,

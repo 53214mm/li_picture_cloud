@@ -24,6 +24,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * {@link CompanionRepository} 的 MyBatis 实现，负责领域伙伴与数据库记录之间的转换。
+ *
+ * <p>应用服务只依赖领域层的 Repository 接口，本类在基础设施层实现接口并调用 Mapper，
+ * 因而成长规则不需要知道 MyBatis 的存在。</p>
+ *
+ * <p>喂养事务可通过 {@link #findByOwnerIdForUpdate(long)} 加行锁；保存时还会校验 revision，
+ * 两者共同防止并发请求静默覆盖伙伴状态。</p>
+ */
 @Repository
 public class MybatisCompanionRepository implements CompanionRepository {
 
@@ -36,6 +45,7 @@ public class MybatisCompanionRepository implements CompanionRepository {
         this.companionSkillMapper = companionSkillMapper;
     }
 
+    /** 普通查询，不加数据库行锁，适合只读场景。 */
     @Override
     public Optional<Companion> findByOwnerId(long ownerId) {
         CompanionEntity row = companionMapper.selectOne(new LambdaQueryWrapper<CompanionEntity>()
@@ -43,6 +53,7 @@ public class MybatisCompanionRepository implements CompanionRepository {
         return Optional.ofNullable(row).map(this::fromRow);
     }
 
+    /** 必须在现有事务中调用；通过 SELECT FOR UPDATE 锁住伙伴，保护后续计算与保存。 */
     @Override
     @Transactional(propagation = Propagation.MANDATORY, readOnly = true)
     public Optional<Companion> findByOwnerIdForUpdate(long ownerId) {
@@ -51,6 +62,7 @@ public class MybatisCompanionRepository implements CompanionRepository {
         return Optional.ofNullable(row).map(this::fromRow);
     }
 
+    /** 首次访问时创建伙伴，数据库唯一约束负责仲裁并发创建。 */
     @Override
     public Companion createIfAbsent(long ownerId, CompanionBalance balance) {
         Optional<Companion> existing = findByOwnerId(ownerId);
@@ -69,6 +81,7 @@ public class MybatisCompanionRepository implements CompanionRepository {
         return fromRows(row, List.of());
     }
 
+    /** 按预期 revision 更新主状态并同步技能；false 表示版本已被其他请求推进。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean save(Companion after, long expectedRevision) {
