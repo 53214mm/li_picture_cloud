@@ -25,7 +25,7 @@ async function expectNoHorizontalOverflow(page) {
   })).toBe(true)
 }
 
-test('guest landing uses real guest destinations and the production feature boundary', async ({ page }, testInfo) => {
+test('guest landing uses real guest destinations and the enabled companion entry', async ({ page }) => {
   await fixture(page, null)
   await page.goto('/')
 
@@ -35,15 +35,10 @@ test('guest landing uses real guest destinations and the production feature boun
   await expect(hero.getByRole('link', { name: '登录', exact: true })).toHaveAttribute('href', '/login')
 
   const companionSection = page.locator('[aria-labelledby="companion-title"]')
-  if (testInfo.project.name === 'production-default') {
-    await expect(companionSection.getByText('伙伴功能暂未开放。你可以先使用图片和空间功能。')).toBeVisible()
-    await expect(companionSection.getByRole('link', { name: /伙伴/ })).toHaveCount(0)
-  } else {
-    await expect(companionSection.getByRole('link', { name: '登录后查看伙伴 →' })).toHaveAttribute('href', '/login?redirect=/companion')
-  }
+  await expect(companionSection.getByRole('link', { name: '登录后查看伙伴 →' })).toHaveAttribute('href', '/login?redirect=/companion')
 })
 
-test('member landing leads to the existing space and companion when available', async ({ page }, testInfo) => {
+test('member landing leads to the existing space and enabled companion', async ({ page }) => {
   await fixture(page, member)
   await page.goto('/')
 
@@ -53,11 +48,7 @@ test('member landing leads to the existing space and companion when available', 
   await expect(hero.getByRole('link', { name: '注册', exact: true })).toHaveCount(0)
 
   const companionSection = page.locator('[aria-labelledby="companion-title"]')
-  if (testInfo.project.name === 'development') {
-    await expect(companionSection.getByRole('link', { name: '进入伙伴 →' })).toHaveAttribute('href', '/companion')
-  } else {
-    await expect(companionSection.getByRole('link', { name: /伙伴/ })).toHaveCount(0)
-  }
+  await expect(companionSection.getByRole('link', { name: '进入伙伴 →' })).toHaveAttribute('href', '/companion')
 })
 
 for (const viewport of [
@@ -80,11 +71,11 @@ for (const viewport of [
     const primary = page.locator('.landing-hero .landing-action--primary')
     expect((await primary.boundingBox())?.height).toBeGreaterThanOrEqual(44)
 
-    if (viewport.width === 390 && testInfo.project.name === 'production-default') {
+    if (viewport.width === 390) {
       await expect(page.locator('.landing-canvas__photo--city')).toBeHidden()
       await page.screenshot({ path: testInfo.outputPath('landing-mobile.png'), fullPage: true })
     }
-    if (viewport.width === 1440 && testInfo.project.name === 'production-default') {
+    if (viewport.width === 1440) {
       await page.screenshot({ path: testInfo.outputPath('landing-desktop.png'), fullPage: true })
     }
   })

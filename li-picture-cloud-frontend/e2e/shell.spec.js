@@ -88,7 +88,7 @@ test('public landing stays public; gallery is adaptive; account logout clears sh
   await fixture(page)
   await page.goto('/')
   await expect(page.locator('.public-layout')).toBeVisible()
-  await page.getByRole('link', { name: '进入空间' }).click()
+  await page.getByLabel('首页主要操作').getByRole('link', { name: '进入空间', exact: true }).click()
   await expect(page.locator('.app-layout')).toBeVisible()
   await page.locator('.desktop-navigation').getByRole('link', { name: '图库', exact: true }).click()
   await expect(page.locator('.app-main.workspace--fluid.frame--legacy')).toBeVisible()
@@ -197,8 +197,7 @@ test('navigation disclosures align with primary entries, animate and remain keyb
   const toolsToggle = nav.getByRole('button', { name: '工具', exact: true })
   const toggle = nav.getByRole('button', { name: '管理', exact: true })
   await expect(spacesToggle).toHaveAttribute('aria-expanded', 'true')
-  if (testInfo.project.name === 'development') await expect(toolsToggle).toHaveAttribute('aria-expanded', 'false')
-  else await expect(toolsToggle).toHaveCount(0)
+  await expect(toolsToggle).toHaveAttribute('aria-expanded', 'false')
   const controlled = await toggle.getAttribute('aria-controls')
   const panel = page.locator(`[id="${controlled}"]`)
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -271,19 +270,15 @@ test('space disclosure, semantic breadcrumbs and compact toolbar actions remain 
   await expect(page).toHaveURL(/\/upload$/)
 })
 
-test('breadcrumbs reflect gallery, tools, admin and companion sections', async ({ page }, testInfo) => {
+test('breadcrumbs reflect gallery, tools, admin and companion sections', async ({ page }) => {
   await fixture(page, { user: { ...member, userRole: 'admin' } })
   await page.setViewportSize({ width: 1440, height: 900 })
   const cases = [
     ['/gallery', /^图库$/],
-    ['/admin/users', /管理\s*\/\s*用户管理/]
+    ['/admin/users', /管理\s*\/\s*用户管理/],
+    ['/model-gateway', /工具\s*\/\s*模型连接/],
+    ['/companion', /^伙伴$/]
   ]
-  if (testInfo.project.name === 'development') {
-    cases.push(
-      ['/model-gateway', /工具\s*\/\s*模型连接/],
-      ['/companion', /^伙伴$/]
-    )
-  }
   for (const [path, expected] of cases) {
     await page.goto(path)
     await expect(page.locator('.location')).toHaveText(expected)
@@ -299,14 +294,14 @@ test('required smoke screenshots preserve shell hierarchy and landing accent', a
     ['/admin/users', 'admin-users'],
     ['/', 'landing']
   ]
-  if (testInfo.project.name === 'development') pages.splice(2, 0, ['/model-gateway', 'model-gateway'])
+  pages.splice(2, 0, ['/model-gateway', 'model-gateway'])
   for (const [path, name] of pages) {
     await page.goto(path)
     await expect(page.locator('body')).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath(`${name}-1440.png`), fullPage: true })
   }
   await page.goto('/')
-  await expect(page.locator('.line.accent')).toHaveCSS('color', 'rgb(240, 68, 56)')
+  await expect(page.locator('.landing-hero .landing-kicker')).toHaveCSS('color', 'rgb(56, 80, 122)')
   await page.setViewportSize({ width: 768, height: 900 })
   await page.goto('/space/my')
   await expectNoHorizontalOverflow(page)
@@ -322,31 +317,22 @@ test('required smoke screenshots preserve shell hierarchy and landing accent', a
   await page.screenshot({ path: testInfo.outputPath('space-my-390.png'), fullPage: true })
 })
 
-test('feature flags hide tools and companion together, disabled deep links are unavailable', async ({ page }, testInfo) => {
+test('enabled feature links expose tools and companion together', async ({ page }, testInfo) => {
   await fixture(page, { user: { ...member, userRole: 'admin' } })
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/space/my')
   const nav = page.locator('.desktop-navigation')
   await expect(nav.getByText('管理', { exact: true })).toBeVisible()
-  if (testInfo.project.name === 'production-default') {
-    await expect(nav.getByText('工具', { exact: true })).toHaveCount(0)
-    await expect(page.locator('.sidebar .presence')).toHaveCount(0)
-    for (const path of ['/companion', '/model-gateway', '/recipes', '/admin/companion-feed-runs']) {
-      await page.goto(path)
-      await expect(page.getByRole('heading', { name: '页面不可用' })).toBeVisible()
-    }
-  } else {
-    await expect(page.locator('.sidebar .presence')).toBeVisible()
-    await nav.getByText('工具', { exact: true }).click()
-    await nav.getByRole('link', { name: '模型连接', exact: true }).click()
-    await expect(page.locator('.gateway-hero h1')).toBeVisible()
-    const colors = await page.locator('.gateway-hero h1').evaluate(el => ({
-      // eslint-disable-next-line no-undef
-      heading: getComputedStyle(el).color,
-      // eslint-disable-next-line no-undef
-      container: getComputedStyle(el.closest('.gateway-hero')).color
-    }))
-    expect(colors.heading).toBe(colors.container)
-    await page.screenshot({ path: testInfo.outputPath('gateway.png'), fullPage: true })
-  }
+  await expect(page.locator('.sidebar .presence')).toBeVisible()
+  await nav.getByText('工具', { exact: true }).click()
+  await nav.getByRole('link', { name: '模型连接', exact: true }).click()
+  await expect(page.locator('.gateway-hero h1')).toBeVisible()
+  const colors = await page.locator('.gateway-hero h1').evaluate(el => ({
+    // eslint-disable-next-line no-undef
+    heading: getComputedStyle(el).color,
+    // eslint-disable-next-line no-undef
+    container: getComputedStyle(el.closest('.gateway-hero')).color
+  }))
+  expect(colors.heading).toBe(colors.container)
+  await page.screenshot({ path: testInfo.outputPath('gateway.png'), fullPage: true })
 })
