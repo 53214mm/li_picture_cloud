@@ -238,3 +238,30 @@ test('Feed refresh cannot resurrect a proposal after a concurrent scold has comp
   await allSurfaces(page, 'activity', 'idle')
   expect(state.errors).toEqual([])
 })
+
+test('contract settings wait for the server snapshot before accepting edits', async ({ page }) => {
+  const state = await fixture(page)
+  const pending = gate()
+  let saved
+  await page.route('**/api/companion/contract', async route => {
+    if (route.request().method() === 'GET') {
+      await pending.promise
+      return ok(route, { active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 72 })
+    }
+    saved = route.request().postDataJSON()
+    return ok(route, saved)
+  })
+
+  await page.goto('/companion')
+  await page.getByRole('button', { name: '主动设置' }).click()
+  await expect(page.getByText('正在加载主动设置')).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: /允许伙伴主动提议/ })).toHaveCount(0)
+  pending.release()
+
+  await page.getByRole('checkbox', { name: /允许伙伴主动提议/ }).check()
+  await page.locator('.contract-times input').nth(0).fill('00:00')
+  await page.locator('.contract-times input').nth(1).fill('00:00')
+  await page.getByRole('button', { name: '保存主动设置' }).click()
+  await expect.poll(() => saved).toMatchObject({ active: true, quietStart: '00:00', quietEnd: '00:00' })
+  expect(state.errors).toEqual([])
+})

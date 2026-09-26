@@ -12,27 +12,34 @@
     </header>
 
     <div v-if="showContract" class="contract-panel">
-      <label class="contract-row">
-        <input v-model="contractDraft.active" type="checkbox" :disabled="contractSaving" />
-        <span>允许伙伴主动提议（默认关闭；契约优先于伙伴性格）</span>
-      </label>
-      <div class="contract-row contract-times">
-        <label>安静时段
-          <input v-model="contractDraft.quietStart" type="time" :disabled="contractSaving" />
-          <span>至</span>
-          <input v-model="contractDraft.quietEnd" type="time" :disabled="contractSaving" />
+      <p v-if="contractLoading" role="status">正在加载主动设置…</p>
+      <div v-else-if="contractLoadError" role="alert">
+        <p>{{ contractLoadError }}</p>
+        <button class="btn btn-outline" type="button" @click="loadContract">重试</button>
+      </div>
+      <template v-else>
+        <label class="contract-row">
+          <input v-model="contractDraft.active" type="checkbox" :disabled="contractSaving" />
+          <span>允许伙伴主动提议（默认关闭；契约优先于伙伴性格）</span>
         </label>
-      </div>
-      <label class="contract-row">提案频率上限（小时，0 = 完全关闭）
-        <input v-model.number="contractDraft.maxFrequencyHours" type="number" min="0" max="720"
-               :disabled="contractSaving" />
-      </label>
-      <div class="contract-actions">
-        <button class="btn btn-primary" type="button" :disabled="contractSaving" @click="saveContract">
-          {{ contractSaving ? '正在保存…' : '保存主动设置' }}
-        </button>
-        <p v-if="contractError" class="contract-error" role="alert">{{ contractError }}</p>
-      </div>
+        <div class="contract-row contract-times">
+          <label>安静时段
+            <input v-model="contractDraft.quietStart" type="time" :disabled="contractSaving" />
+            <span>至</span>
+            <input v-model="contractDraft.quietEnd" type="time" :disabled="contractSaving" />
+          </label>
+        </div>
+        <label class="contract-row">提案频率上限（小时，0 = 完全关闭）
+          <input v-model.number="contractDraft.maxFrequencyHours" type="number" min="0" max="720"
+                 :disabled="contractSaving" />
+        </label>
+        <div class="contract-actions">
+          <button class="btn btn-primary" type="button" :disabled="contractSaving" @click="saveContract">
+            {{ contractSaving ? '正在保存…' : '保存主动设置' }}
+          </button>
+          <p v-if="contractError" class="contract-error" role="alert">{{ contractError }}</p>
+        </div>
+      </template>
     </div>
 
     <div v-if="loadError" class="proposal-state error" role="alert">
@@ -87,6 +94,8 @@ const busy = ref(false)
 const actionError = ref('')
 const actionNoticeText = ref('')
 const showContract = ref(false)
+const contractLoading = ref(true)
+const contractLoadError = ref('')
 const contractSaving = ref(false)
 const contractError = ref('')
 const contractDraft = reactive({ active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 72 })
@@ -136,19 +145,23 @@ async function loadProposal() {
 }
 
 async function loadContract() {
+  contractLoading.value = true
+  contractLoadError.value = ''
   try {
     const contract = await getCompanionContract()
     contractDraft.active = contract.active
     contractDraft.quietStart = contract.quietStart
     contractDraft.quietEnd = contract.quietEnd
     contractDraft.maxFrequencyHours = contract.maxFrequencyHours
-  } catch {
-    // 契约加载失败不阻塞提案展示；打开设置面板时再重试。
+  } catch (error) {
+    contractLoadError.value = error.message || '主动设置加载失败，请重试。'
+  } finally {
+    contractLoading.value = false
   }
 }
 
 async function saveContract() {
-  if (contractSaving.value) return
+  if (contractSaving.value || contractLoading.value || contractLoadError.value) return
   contractSaving.value = true
   contractError.value = ''
   try {
