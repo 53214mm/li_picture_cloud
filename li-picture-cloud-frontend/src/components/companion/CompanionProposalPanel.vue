@@ -66,7 +66,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref, watch, watchEffect } from 'vue'
 import {
   acceptCompanionProposal,
   getActiveCompanionProposal,
@@ -78,6 +78,7 @@ import {
 import CompanionMessageBubble from '@/components/companion/CompanionMessageBubble.vue'
 
 const props = defineProps({ refreshKey: { type: Number, default: 0 } })
+const emit = defineEmits(['presentation-change'])
 
 const proposal = ref(null)
 const loading = ref(false)
@@ -89,6 +90,17 @@ const showContract = ref(false)
 const contractSaving = ref(false)
 const contractError = ref('')
 const contractDraft = reactive({ active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 72 })
+let proposalReadGeneration = 0
+watchEffect(() => emit('presentation-change', {
+  status: proposal.value?.status ?? null,
+  loading: loading.value,
+  busy: busy.value,
+  error: Boolean(loadError.value || actionError.value)
+}))
+onBeforeUnmount(() => {
+  proposalReadGeneration += 1
+  emit('presentation-change', { status: null })
+})
 
 const OPPORTUNITY_LABELS = Object.freeze({
   WEEKLY_REVIEW: '每周影像回顾',
@@ -108,14 +120,18 @@ onMounted(() => {
 watch(() => props.refreshKey, () => { loadProposal() })
 
 async function loadProposal() {
+  // Feed/contract refreshes must not overwrite an in-flight user reaction.
+  if (busy.value) return
+  const generation = ++proposalReadGeneration
   loading.value = true
   loadError.value = ''
   try {
-    proposal.value = await getActiveCompanionProposal()
+    const observed = await getActiveCompanionProposal()
+    if (generation === proposalReadGeneration) proposal.value = observed
   } catch (error) {
-    loadError.value = error.message || '提案读取失败，请稍后重试。'
+    if (generation === proposalReadGeneration) loadError.value = error.message || '提案读取失败，请稍后重试。'
   } finally {
-    loading.value = false
+    if (generation === proposalReadGeneration) loading.value = false
   }
 }
 
@@ -155,6 +171,8 @@ async function saveContract() {
 async function react(kind) {
   if (busy.value || !proposal.value) return
   busy.value = true
+  proposalReadGeneration += 1
+  loading.value = false
   actionError.value = ''
   actionNoticeText.value = ''
   try {

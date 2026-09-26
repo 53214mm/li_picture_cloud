@@ -1,5 +1,8 @@
 <template>
-  <figure class="companion-body" :data-visual-stage="visual.visualStage">
+  <figure class="companion-body" :data-visual-stage="visual.visualStage"
+          :data-presentation-availability="presentation.availability" :data-presentation-activity="presentation.activity"
+          :data-presentation-affect="presentation.affect" :data-presentation-attention="presentation.attention"
+          :data-presentation-rapport="presentation.rapport" :data-presentation-freshness="presentation.freshness">
     <div class="body-ground">
       <SpritePlayer v-if="animate && visual.allowIdle" :still="lingyeAssets.home" :atlas="lingyeAssets.idle"
                     :paused="paused || userPaused" :visible="visible" @availability="availability = $event" />
@@ -21,14 +24,13 @@ import { computed, ref } from 'vue'
 import CompanionArtwork from './CompanionArtwork.vue'
 import SpritePlayer from './SpritePlayer.vue'
 import { lingyeAssets } from './lingyeAssets'
-import { resolveCompanionVisual } from './companionVisual'
 const props = defineProps({
-  currentStage: { type: String, default: null },
+  presentation: { type: Object, required: true },
   animate: { type: Boolean, default: true },
   paused: Boolean,
   visible: { type: Boolean, default: true }
 })
-const visual = computed(() => resolveCompanionVisual(props.currentStage))
+const visual = computed(() => props.presentation.appearance)
 const userPaused = ref(false)
 const availability = ref({ reducedMotion: true, failed: false })
 </script>

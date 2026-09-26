@@ -48,7 +48,7 @@
               {{ awakenBusy ? '正在唤醒…' : '唤醒我的伙伴' }}
             </button>
           </div>
-          <CompanionBody v-if="home.companion" :current-stage="home.companion.lifeStage" />
+          <CompanionBody v-if="home.companion" :presentation="presentation" />
           <div v-else class="life-orbit" aria-hidden="true">
             <span class="orbit orbit-one"></span>
             <span class="orbit orbit-two"></span>
@@ -117,9 +117,10 @@
             <CompanionRelationshipPanel :relationship="home.relationship" />
           </div>
 
-          <CompanionChatPanel :chat-policy="home?.chatPolicy" :current-stage="home.companion.lifeStage" />
+          <CompanionChatPanel :chat-policy="home?.chatPolicy" :presentation="presentation"
+                              @presentation-change="chatSignal = $event" />
 
-          <CompanionProposalPanel :refresh-key="panelsRefreshKey" />
+          <CompanionProposalPanel :refresh-key="panelsRefreshKey" @presentation-change="proposalSignal = $event" />
 
           <CompanionMemoryPanel :refresh-key="panelsRefreshKey" />
 
@@ -137,9 +138,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { useCompanionPresentationStore } from '@/stores/companionPresentation'
 import { getCompanionHome, awakenCompanion, feedCompanion } from '@/api/companion'
 import { listSpaceVOByPage } from '@/api/space'
 import { listPictureVOByPageUncached } from '@/api/picture'
@@ -181,6 +184,25 @@ const feedBusy = ref(false)
 const feedError = ref('')
 const feedNotice = ref('')
 const panelsRefreshKey = ref(0)
+const homeFresh = ref(true)
+const chatSignal = ref({})
+const proposalSignal = ref({})
+const presentationStore = useCompanionPresentationStore()
+const { presentation } = storeToRefs(presentationStore)
+const presentationSource = presentationStore.acquireSource()
+onBeforeUnmount(() => presentationSource.close())
+
+// Publish facts already observed by this page; no extra Shell/API requests.
+watchEffect(() => presentationSource.publish({
+  home: home.value,
+  homeStatus: userStore.authBootstrapError || loadError.value ? 'error'
+    : featureUnavailable.value ? 'unavailable'
+      : home.value ? 'ready' : pageLoading.value ? 'loading' : 'unobserved',
+  homeFresh: homeFresh.value,
+  feed: { pending: feedBusy.value, error: Boolean(feedError.value) },
+  chat: chatSignal.value,
+  proposal: proposalSignal.value
+}))
 
 const authError = computed(() => userStore.authBootstrapError)
 const feedButtonLabel = computed(() => {
@@ -215,6 +237,7 @@ async function loadHome() {
   featureUnavailable.value = false
   try {
     home.value = await getCompanionHome()
+    homeFresh.value = true
     if (home.value?.companion) await loadSources()
   } catch (error) {
     if (Number(error.status) === 404) featureUnavailable.value = true
@@ -232,8 +255,10 @@ async function refreshAuthoritativeHome() {
   try {
     const authoritative = await getCompanionHome()
     home.value = adoptAuthoritativeHome(home.value, authoritative)
+    homeFresh.value = Boolean(authoritative?.companion)
   } catch (error) {
     // 不把刷新失败误报成喂养失败：成长与记忆已经展示，下一次读取会补上最新情绪/关系。
+    homeFresh.value = false
     console.warn('[companion] 喂养后权威主页刷新失败，情绪与关系面板可能停留在旧值', error)
   }
 }
@@ -244,6 +269,7 @@ async function awaken() {
   loadError.value = ''
   try {
     home.value = await awakenCompanion()
+    homeFresh.value = true
     await loadSources()
   } catch (error) {
     loadError.value = error.message || '唤醒失败，请稍后再试。'
@@ -304,6 +330,8 @@ async function submitFeed() {
     const result = await feedCompanion(pendingAttempt.value)
     // applyFeedResult 会合并回放记录，同时按 revision 防止旧回放把当前伙伴显示倒退。
     home.value = applyFeedResult(home.value, result)
+    // The receipt has no Mood/Relationship; do not perform an optimistic emotion update.
+    homeFresh.value = false
     // 喂养可能产生新的记忆候选/机会，通知面板按新状态刷新。
     panelsRefreshKey.value += 1
     feedNotice.value = wasRetry
@@ -318,6 +346,7 @@ async function submitFeed() {
   } catch (error) {
     // 结果不确定时留下 key，下一次重试由后端决定回放还是继续处理，前端绝不猜测是否已成长。
     const retrySameKey = shouldRetrySameFeedKey(error)
+    if (retrySameKey) homeFresh.value = false
     if (!retrySameKey) pendingAttempt.value = null
     feedError.value = error.status == null
       ? '响应不确定，请用同一请求重试这次喂养'

@@ -1,7 +1,7 @@
 <template>
   <section class="chat-card" aria-labelledby="chat-title">
     <header>
-      <CompanionPortrait :current-stage="currentStage" />
+      <CompanionPortrait :presentation="presentation" />
       <div>
         <span class="eyebrow">绫页 · 站内对话</span>
         <h2 id="chat-title">和伙伴说说话</h2>
@@ -47,7 +47,7 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
 import { listCompanionChatHistory } from '@/api/companion'
 import { streamCompanionChat } from '@/utils/companion'
 import CompanionMessageBubble from '@/components/companion/CompanionMessageBubble.vue'
@@ -55,8 +55,9 @@ import CompanionPortrait from '@/components/companion/body/CompanionPortrait.vue
 
 defineProps({
   chatPolicy: { type: String, default: null },
-  currentStage: { type: String, default: null }
+  presentation: { type: Object, required: true }
 })
+const emit = defineEmits(['presentation-change'])
 
 const messages = ref([])
 const loading = ref(false)
@@ -64,6 +65,12 @@ const loadError = ref('')
 const draft = ref('')
 const sending = ref(false)
 const sendError = ref('')
+const receiving = ref(false)
+watchEffect(() => emit('presentation-change', {
+  phase: sending.value && !sendError.value ? receiving.value ? 'streaming' : 'waiting' : 'idle',
+  error: Boolean(sendError.value || loadError.value)
+}))
+onBeforeUnmount(() => emit('presentation-change', { phase: 'idle', error: false }))
 let localKeySeed = 0
 
 onMounted(loadHistory)
@@ -85,6 +92,7 @@ async function send() {
   const content = draft.value.trim()
   if (sending.value || !content) return
   sending.value = true
+  receiving.value = false
   sendError.value = ''
   messages.value.push(withKey({ role: 'USER', content }))
   draft.value = ''
@@ -94,10 +102,12 @@ async function send() {
   try {
     await streamCompanionChat(content, {
       onChunk(chunk) {
+        receiving.value = true
         partial += chunk
         companionDraft.content = partial
       },
       onError(error) {
+        receiving.value = false
         companionDraft.content = partial || error.message
         sendError.value = error.message
       }
@@ -111,6 +121,7 @@ async function send() {
     sendError.value = error.message || '伙伴暂时没法回应，请稍后再试。'
   } finally {
     sending.value = false
+    receiving.value = false
     await nextTick()
     scrollToBottom()
   }

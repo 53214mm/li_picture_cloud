@@ -1,6 +1,6 @@
 <template>
   <router-link to="/companion" class="presence" :aria-current="active ? 'page' : undefined" aria-label="伙伴空间">
-    <span class="presence__mark"><CompanionPresence /></span>
+    <span class="presence__mark"><CompanionPresence :presentation="presentation" /></span>
     <span class="presence__label"><span class="presence__full">伙伴空间</span><span class="presence__short">伙伴</span></span>
     <ShellIcon name="chevron" class="presence__arrow" />
   </router-link>
@@ -8,6 +8,9 @@
 <script setup>
 import ShellIcon from '@/components/shell/ShellIcon.vue'
 import CompanionPresence from '@/components/companion/body/CompanionPresence.vue'
+import { storeToRefs } from 'pinia'
+import { useCompanionPresentationStore } from '@/stores/companionPresentation'
+const { presentation } = storeToRefs(useCompanionPresentationStore())
 defineProps({ active: Boolean })
 </script>
 <style scoped>
