@@ -21,6 +21,7 @@ const props = defineProps({
   still: { type: Object, required: true },
   atlas: { type: Object, required: true },
   presentation: { type: Object, required: true },
+  interactionRequest: { type: Number, default: 0 },
   accessibleLabel: { type: String, default: '绫页，纸翼蛾族的成年全身像' },
   paused: Boolean,
   visible: { type: Boolean, default: true }
@@ -43,8 +44,8 @@ const atlasStyle = computed(() => ({
 }))
 const animator = createCompanionAnimator({ onChange: value => { animation.value = value } })
 watch(eligible, value => { if (value) requested.value = true })
-watch([() => props.presentation, playing], ([presentation, playable]) => {
-  animator.update(presentation, playable)
+watch([() => props.presentation, playing, () => props.interactionRequest], ([presentation, playable, interactionRequest]) => {
+  animator.update(presentation, playable, interactionRequest)
 }, { immediate: true, flush: 'sync' })
 watch([reducedMotion, baseFailed, atlasFailed], () => {
   emit('availability', { reducedMotion: reducedMotion.value, failed: baseFailed.value || atlasFailed.value })

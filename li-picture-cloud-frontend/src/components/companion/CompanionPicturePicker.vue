@@ -19,6 +19,7 @@
                 :aria-pressed="String(picture.id) === String(selectedId)" :disabled="disabled"
                 @click="$emit('select', String(picture.id))">
           <img :src="picture.thumbnailUrl || picture.url" :alt="picture.name || '图片'"
+               @dragstart="interaction.startDrag($event, picture.id)" @dragend="interaction.cancelDrag"
                width="320" height="220" loading="lazy" />
           <span>{{ picture.name || '未命名图片' }}</span>
         </button>
@@ -29,6 +30,8 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useCompanionInteractionStore } from '@/stores/companionInteraction'
+const interaction = useCompanionInteractionStore()
 
 const MAX_MATERIAL_PICTURES = 12
 

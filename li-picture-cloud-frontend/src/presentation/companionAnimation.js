@@ -17,7 +17,8 @@ export function mapCompanionAnimation(presentation) {
 const clips = {
   idle: [{ frame: 0, ms: 4200 }, { frame: 1, ms: 140 }],
   focus: [{ frame: 0, ms: 1600 }, { frame: 0, offsetY: 2, ms: 220 }, { frame: 1, offsetY: 2, ms: 140 }, { frame: 0, ms: 1800 }],
-  attention: [{ frame: 0, ms: 600 }, { frame: 1, ms: 140 }, { frame: 0, ms: 180 }, { frame: 1, ms: 140 }]
+  attention: [{ frame: 0, ms: 600 }, { frame: 1, ms: 140 }, { frame: 0, ms: 180 }, { frame: 1, ms: 140 }],
+  greeting: [{ frame: 0, ms: 160 }, { frame: 1, ms: 140 }, { frame: 0, ms: 160 }]
 }
 
 /** One controller per mounted Home player. Only one pending timeout at any time. */
@@ -29,6 +30,7 @@ export function createCompanionAnimator({ onChange, schedule = setTimeout, cance
   let step = 0
   let identity = null
   let attentionConsumed = false
+  let lastInteraction = 0
 
   function publish() {
     const pose = clips[state]?.[step]
@@ -47,7 +49,7 @@ export function createCompanionAnimator({ onChange, schedule = setTimeout, cance
       step += 1
       if (step === clips[state].length) {
         step = 0
-        if (state === 'attention') state = 'idle'
+        if (state === 'attention' || state === 'greeting') state = 'idle'
       }
       publish()
       next()
@@ -63,15 +65,20 @@ export function createCompanionAnimator({ onChange, schedule = setTimeout, cance
   }
 
   return {
-    update(presentation, playable) {
+    update(presentation, playable, interactionRequest = 0) {
       if (disposed) return
       const intent = mapCompanionAnimation(presentation)
+      const direct = Number.isSafeInteger(interactionRequest) && interactionRequest > lastInteraction
+      lastInteraction = interactionRequest
       const changedIdentity = intent.companionId !== identity
       if (changedIdentity) {
         identity = intent.companionId
         attentionConsumed = false
       }
       let target = playable ? intent.state : 'static'
+      // Ephemeral input has lower priority than R06 facts. Never defer it while
+      // hidden, busy, reduced-motion or showing a proposal; never reset its quota.
+      if (target === 'idle' && (direct || state === 'greeting' && !changedIdentity)) target = 'greeting'
       if (target === 'attention' && attentionConsumed && state !== 'attention') target = 'idle'
       if (changedIdentity || target !== state) start(target)
     },

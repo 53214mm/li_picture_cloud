@@ -75,10 +75,12 @@
               <div class="feeding-heading">
                 <div>
                   <span class="section-index">LIFE / 02</span>
-                  <h2 id="feeding-title">用一张图片喂养伙伴</h2>
+                  <h2 id="feeding-title" tabindex="-1">用一张图片喂养伙伴</h2>
                 </div>
                 <span v-if="privateSpace" class="space-name">{{ privateSpace.spaceName || '我的私有空间' }}</span>
               </div>
+
+              <p v-if="interactionNotice" class="feed-message" role="status">{{ interactionNotice }}</p>
 
               <div v-if="sourceError" class="source-state error" role="alert">
                 <p>{{ sourceError }}</p>
@@ -138,14 +140,16 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useCompanionPresentationStore } from '@/stores/companionPresentation'
 import { getCompanionHome, awakenCompanion, feedCompanion } from '@/api/companion'
-import { listSpaceVOByPage } from '@/api/space'
-import { listPictureVOByPageUncached } from '@/api/picture'
+import { getSpaceVOById, listSpaceVOByPage } from '@/api/space'
+import { getPictureVOById, listPictureVOByPageUncached } from '@/api/picture'
+import { useCompanionInteractionStore } from '@/stores/companionInteraction'
+import { inspectCompanionPicture } from '@/presentation/companionInteraction'
 import CompanionStats from '@/components/companion/CompanionStats.vue'
 import CompanionBody from '@/components/companion/body/CompanionBody.vue'
 import CompanionPicturePicker from '@/components/companion/CompanionPicturePicker.vue'
@@ -169,6 +173,10 @@ import {
 
 const router = useRouter()
 const userStore = useUserStore()
+const interaction = useCompanionInteractionStore()
+const interactionNotice = ref('')
+let selectionGeneration = 0
+onBeforeUnmount(() => { selectionGeneration += 1 })
 const home = ref(null)
 const pageLoading = ref(false)
 const awakenBusy = ref(false)
@@ -210,6 +218,46 @@ const feedButtonLabel = computed(() => {
   if (pendingAttempt.value && feedError.value) return '重试这次喂养'
   return '喂给伙伴'
 })
+
+// Consume a short-lived navigation command, never a feed command. Recheck server
+// visibility/ownership on arrival and preserve any uncertain idempotent attempt.
+watch([() => interaction.destination, () => home.value?.companion?.id, sourceLoading], async () => {
+  if (!interaction.destination || !home.value?.companion) return
+  if (interaction.destination.pictureId !== null && sourceLoading.value) return
+  const command = interaction.takeDestination()
+  const cycle = ++selectionGeneration
+  if (command.actor !== String(userStore.currentUser?.id)) return
+  if (command.pictureId !== null) {
+    if (feedBusy.value || pendingAttempt.value) {
+      interactionNotice.value = '请先完成或重试当前喂养，再选择新图片。当前选择已保留。'
+      return
+    }
+    interactionNotice.value = '正在重新确认图片…'
+    try {
+      const candidate = await inspectCompanionPicture(command.pictureId, command.actor, { readPicture: getPictureVOById, readSpace: getSpaceVOById })
+      if (cycle !== selectionGeneration || command.actor !== String(userStore.currentUser?.id)) return
+      if (feedBusy.value || pendingAttempt.value) {
+        interactionNotice.value = '当前喂养尚未结束，已保留原来的选择。'
+        return
+      }
+      const sameSpace = String(privateSpace.value?.id) === String(candidate.space.id)
+      privateSpace.value = candidate.space
+      pictures.value = [candidate.picture, ...(sameSpace ? pictures.value : []).filter(p => String(p.id) !== String(candidate.picture.id))].slice(0, 12)
+      sourceError.value = ''
+      selectPicture(candidate.picture.id)
+      interactionNotice.value = '已选择这张图片；点击「喂给伙伴」才会开始喂养。'
+    } catch {
+      if (cycle !== selectionGeneration || command.actor !== String(userStore.currentUser?.id)) return
+      interactionNotice.value = '图片已不可用或不在你的私有空间，未更改当前选择。'
+    }
+  }
+  const focusGeneration = selectionGeneration
+  await nextTick()
+  if (focusGeneration !== selectionGeneration || command.actor !== String(userStore.currentUser?.id)) return
+  const target = document.getElementById(command.target === 'chat' ? 'companion-chat-input' : 'feeding-title')
+  target?.scrollIntoView({ block: 'center' })
+  target?.focus({ preventScroll: true })
+}, { flush: 'post' })
 
 onMounted(() => {
   if (!authError.value) loadHome()
@@ -309,6 +357,8 @@ async function loadSources() {
 
 function selectPicture(pictureId) {
   if (feedBusy.value) return
+  selectionGeneration += 1
+  interactionNotice.value = ''
   selectedPictureId.value = String(pictureId)
   // 图片改变意味着业务意图改变，旧图片的幂等 key 绝不能带到新图片上。
   pendingAttempt.value = null
@@ -319,6 +369,8 @@ function selectPicture(pictureId) {
 async function submitFeed() {
   // 按钮 disabled 会在下一次渲染才生效；这里先上函数级门闩，挡住同一事件循环里的连点。
   if (feedBusy.value || !selectedPictureId.value) return
+  selectionGeneration += 1
+  interactionNotice.value = ''
   feedBusy.value = true
   const previousAttempt = pendingAttempt.value
   const attempt = beginFeedAttempt(selectedPictureId.value, previousAttempt)

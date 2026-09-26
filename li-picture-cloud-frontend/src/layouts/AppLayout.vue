@@ -25,7 +25,8 @@
     <nav class="bottom-navigation" aria-label="快捷导航" :inert="legacyOverlay">
       <router-link to="/space/my" :aria-current="route.meta.section === 'spaces' ? 'page' : undefined"><ShellIcon name="spaces" /><span>空间</span></router-link>
       <router-link to="/gallery" :aria-current="route.meta.section === 'gallery' ? 'page' : undefined"><ShellIcon name="gallery" /><span>图库</span></router-link>
-      <router-link v-if="companionEnabled" class="companion-tab" to="/companion" :aria-current="route.meta.section === 'companion' ? 'page' : undefined"><ShellIcon name="companion" /><span>伙伴</span></router-link>
+      <button v-if="companionEnabled" type="button" class="companion-tab" aria-label="和绫页互动" aria-haspopup="dialog"
+              :aria-expanded="panel === 'companion'" @click="interaction.open()"><ShellIcon name="companion" /><span>伙伴</span></button>
       <button type="button" aria-haspopup="dialog" :aria-expanded="panel === 'navigation'" @click="panel = 'navigation'"><ShellIcon name="more" /><span>更多</span></button>
     </nav>
     <ShellDialog :open="panel === 'navigation'" title="导航" :return-focus="focusNavigation" @close="panel = null">
@@ -48,6 +49,10 @@
       </div>
       <p v-if="logoutError" role="alert" class="logout-error">{{ logoutError }}</p>
     </ShellDialog>
+    <ShellDialog v-if="companionEnabled" :open="panel === 'companion'" title="和绫页互动" side="right"
+                 :return-focus="focusCompanion" @close="panel = null">
+      <CompanionInteractionPanel v-if="panel === 'companion'" @close="panel = null" />
+    </ShellDialog>
   </div>
 </template>
 <script setup>
@@ -64,6 +69,9 @@ import SiteFooter from '@/components/shell/SiteFooter.vue'
 import ShellIcon from '@/components/shell/ShellIcon.vue'
 import LpButton from '@/components/ui/LpButton.vue'
 import { useLegacyOverlayIsolation } from '@/composables/useLegacyOverlayIsolation'
+import { useCompanionInteractionStore } from '@/stores/companionInteraction'
+import CompanionInteractionPanel from '@/components/companion/CompanionInteractionPanel.vue'
+const interaction = useCompanionInteractionStore()
 const user = useUserStore()
 const route = useRoute()
 const router = useRouter()
@@ -78,13 +86,31 @@ const accountIdentifier = computed(() => {
   return account && account !== accountName.value ? account : ''
 })
 const accountInitial = computed(() => Array.from(accountName.value)[0]?.toUpperCase() || '用')
-watch(() => route.fullPath, () => { panel.value = null })
+watch(() => route.fullPath, () => {
+  panel.value = null
+  interaction.close()
+  if (route.path !== '/companion') interaction.takeDestination()
+})
+watch(() => interaction.requestNumber, () => {
+  if (!legacyOverlay.value && !document.hidden) panel.value = 'companion'
+  else interaction.close()
+})
+watch(panel, (value, previous) => { if (previous === 'companion' && value !== 'companion') interaction.close() })
 watch(legacyOverlay, active => { if (active) panel.value = null })
+watch(() => user.currentUser?.id, () => { panel.value = null })
 function closeOnLink(event) { if (event.target.closest('a[href]')) panel.value = null }
 function focusNavigation() {
   const menu = document.querySelector('.app-toolbar .menu-button')
   if (menu?.getClientRects().length) menu.focus()
   else document.querySelector('.sidebar .brand')?.focus()
+}
+function focusCompanion() {
+  const trigger = [...document.querySelectorAll('.presence__mark, .companion-tab')].find(el => el.getClientRects().length && !el.closest('dialog:not([open])'))
+  trigger?.focus()
+}
+function onHidden() {
+  interaction.cancelDrag()
+  if (document.hidden && panel.value === 'companion') panel.value = null
 }
 async function logout() {
   loggingOut.value = true
@@ -100,10 +126,17 @@ async function logout() {
 let breakpoints = []
 function onBreakpoint() { if (panel.value === 'navigation') panel.value = null }
 onMounted(() => {
+  document.addEventListener('visibilitychange', onHidden)
+  document.addEventListener('dragend', interaction.cancelDrag)
   breakpoints = [768, 1024].map(width => window.matchMedia(`(min-width: ${width}px)`))
   breakpoints.forEach(query => query.addEventListener('change', onBreakpoint))
 })
-onBeforeUnmount(() => breakpoints.forEach(query => query.removeEventListener('change', onBreakpoint)))
+onBeforeUnmount(() => {
+  breakpoints.forEach(query => query.removeEventListener('change', onBreakpoint))
+  document.removeEventListener('visibilitychange', onHidden)
+  document.removeEventListener('dragend', interaction.cancelDrag)
+  interaction.reset()
+})
 </script>
 <style scoped>
 .app-layout { min-height: 100dvh; display: grid; grid-template-columns: 224px minmax(0, 1fr); }

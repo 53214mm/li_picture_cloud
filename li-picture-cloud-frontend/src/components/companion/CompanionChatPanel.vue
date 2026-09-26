@@ -1,7 +1,9 @@
 <template>
   <section class="chat-card" aria-labelledby="chat-title">
     <header>
-      <CompanionPortrait :presentation="presentation" />
+      <button type="button" class="portrait-interaction" aria-label="和绫页互动" aria-haspopup="dialog" @click="interaction.open()">
+        <CompanionPortrait :presentation="presentation" />
+      </button>
       <div>
         <span class="eyebrow">绫页 · 站内对话</span>
         <h2 id="chat-title">和伙伴说说话</h2>
@@ -52,6 +54,8 @@ import { listCompanionChatHistory } from '@/api/companion'
 import { streamCompanionChat } from '@/utils/companion'
 import CompanionMessageBubble from '@/components/companion/CompanionMessageBubble.vue'
 import CompanionPortrait from '@/components/companion/body/CompanionPortrait.vue'
+import { useCompanionInteractionStore } from '@/stores/companionInteraction'
+const interaction = useCompanionInteractionStore()
 
 defineProps({
   chatPolicy: { type: String, default: null },
@@ -139,6 +143,8 @@ function scrollToBottom() {
 </script>
 
 <style scoped>
+.portrait-interaction { flex: 0 0 auto; border: 0; padding: 0; border-radius: var(--lp-radius-m); background: transparent; }
+.portrait-interaction:hover, .portrait-interaction:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 3px; }
 .chat-card { border: 2px solid var(--black); background: var(--white); }
 .chat-card > header { display: flex; align-items: center; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 2px solid var(--black); }
 .chat-card h2 { font-size: 1.35rem; }
