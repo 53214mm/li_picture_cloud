@@ -48,7 +48,8 @@
               {{ awakenBusy ? '正在唤醒…' : '唤醒我的伙伴' }}
             </button>
           </div>
-          <div class="life-orbit" aria-hidden="true">
+          <CompanionBody v-if="home.companion" :current-stage="home.companion.lifeStage" />
+          <div v-else class="life-orbit" aria-hidden="true">
             <span class="orbit orbit-one"></span>
             <span class="orbit orbit-two"></span>
             <span class="life-core"></span>
@@ -116,7 +117,7 @@
             <CompanionRelationshipPanel :relationship="home.relationship" />
           </div>
 
-          <CompanionChatPanel :chat-policy="home?.chatPolicy" />
+          <CompanionChatPanel :chat-policy="home?.chatPolicy" :current-stage="home.companion.lifeStage" />
 
           <CompanionProposalPanel :refresh-key="panelsRefreshKey" />
 
@@ -143,6 +144,7 @@ import { getCompanionHome, awakenCompanion, feedCompanion } from '@/api/companio
 import { listSpaceVOByPage } from '@/api/space'
 import { listPictureVOByPageUncached } from '@/api/picture'
 import CompanionStats from '@/components/companion/CompanionStats.vue'
+import CompanionBody from '@/components/companion/body/CompanionBody.vue'
 import CompanionPicturePicker from '@/components/companion/CompanionPicturePicker.vue'
 import CompanionGrowthTimeline from '@/components/companion/CompanionGrowthTimeline.vue'
 import CompanionMoodPanel from '@/components/companion/CompanionMoodPanel.vue'

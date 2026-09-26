@@ -1,0 +1,27 @@
+{
+  "firstFrameReadyUpperBoundMs": 1348,
+  "closedDurationMs": 142,
+  "openDurationMs": 4206.5,
+  "resources": [
+    {
+      "url": "http://127.0.0.1:15173/src/assets/companion/lingye/adult-shell-v1.webp?no-inline",
+      "durationMs": 6.300000000745058,
+      "transferBytes": 9144
+    },
+    {
+      "url": "http://127.0.0.1:15173/src/assets/companion/lingye/adult-home-v1.webp?no-inline",
+      "durationMs": 11.200000000186265,
+      "transferBytes": 58416
+    },
+    {
+      "url": "http://127.0.0.1:15173/src/assets/companion/lingye/adult-neutral-v1.webp?no-inline",
+      "durationMs": 4.900000000372529,
+      "transferBytes": 32874
+    },
+    {
+      "url": "http://127.0.0.1:15173/src/assets/companion/lingye/adult-idle-v1.webp?no-inline",
+      "durationMs": 4.400000000372529,
+      "transferBytes": 116176
+    }
+  ]
+}

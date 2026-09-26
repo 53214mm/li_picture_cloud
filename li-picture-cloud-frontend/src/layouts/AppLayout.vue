@@ -31,7 +31,7 @@
     <ShellDialog :open="panel === 'navigation'" title="导航" :return-focus="focusNavigation" @close="panel = null">
       <div @click="closeOnLink"><AppNavigation /></div>
       <div class="drawer-links" @click="closeOnLink">
-        <CompanionPresenceSlot v-if="companionEnabled" :active="route.meta.section === 'companion'" />
+        <CompanionPresenceSlot v-if="companionEnabled && panel === 'navigation'" :active="route.meta.section === 'companion'" />
         <router-link to="/gallery">图库搜索</router-link>
       </div>
     </ShellDialog>

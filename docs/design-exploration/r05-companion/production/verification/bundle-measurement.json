@@ -1,0 +1,16 @@
+{
+  "baseline": {
+    "totalJsBytes": 1051597,
+    "totalGzipBytes": 378714,
+    "homeChunkBytes": 42740,
+    "largestChunkBytes": 395986
+  },
+  "current": {
+    "totalJsBytes": 1058637,
+    "totalGzipBytes": 381355,
+    "homeChunkBytes": 48326,
+    "largestChunkBytes": 395986
+  },
+  "addedJsBytes": 7040,
+  "addedGzipBytes": 2641
+}

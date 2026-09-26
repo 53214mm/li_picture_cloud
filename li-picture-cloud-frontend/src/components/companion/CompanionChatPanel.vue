@@ -1,8 +1,9 @@
 <template>
   <section class="chat-card" aria-labelledby="chat-title">
     <header>
+      <CompanionPortrait :current-stage="currentStage" />
       <div>
-        <span class="eyebrow">站内对话</span>
+        <span class="eyebrow">绫页 · 站内对话</span>
         <h2 id="chat-title">和伙伴说说话</h2>
       </div>
     </header>
@@ -50,9 +51,11 @@ import { nextTick, onMounted, ref } from 'vue'
 import { listCompanionChatHistory } from '@/api/companion'
 import { streamCompanionChat } from '@/utils/companion'
 import CompanionMessageBubble from '@/components/companion/CompanionMessageBubble.vue'
+import CompanionPortrait from '@/components/companion/body/CompanionPortrait.vue'
 
 defineProps({
-  chatPolicy: { type: String, default: null }
+  chatPolicy: { type: String, default: null },
+  currentStage: { type: String, default: null }
 })
 
 const messages = ref([])
@@ -126,7 +129,7 @@ function scrollToBottom() {
 
 <style scoped>
 .chat-card { border: 2px solid var(--black); background: var(--white); }
-.chat-card > header { padding: 1.25rem 1.5rem; border-bottom: 2px solid var(--black); }
+.chat-card > header { display: flex; align-items: center; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 2px solid var(--black); }
 .chat-card h2 { font-size: 1.35rem; }
 .eyebrow { color: var(--blue); font-size: .68rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .chat-state { padding: 2rem 1.5rem; color: var(--gray-600); }

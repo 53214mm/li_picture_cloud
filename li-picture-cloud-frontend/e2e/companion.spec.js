@@ -169,6 +169,44 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
 })
 
+test('rendering Lingye preserves the existing identity, growth, history and contract', async ({ page }) => {
+  await login(page)
+  async function read(path) {
+    const response = await page.request.get(`/api/companion/${path}`)
+    expect(response.ok()).toBeTruthy()
+    return (await response.json()).data
+  }
+  async function snapshot() {
+    const home = await read('me')
+    return {
+      companion: home.companion,
+      recentGrowth: home.recentGrowth,
+      // Mood / recentFeedback are time-decayed views, not persistent identity.
+      relationship: home.relationship && {
+        familiarity: home.relationship.familiarity, trust: home.relationship.trust,
+        closeness: home.relationship.closeness, tacit: home.relationship.tacit
+      },
+      memories: await read('memories'), history: await read('chat/history'),
+      contract: await read('contract'), proposal: await read('proposals/active')
+    }
+  }
+  const before = await snapshot()
+  const writes = []
+  page.on('request', request => {
+    if (request.url().includes('/api/companion/') && request.method() !== 'GET') writes.push(request.url())
+  })
+  await page.goto('/companion')
+  await expect(page.locator('.companion-body')).toHaveAttribute('data-visual-stage', 'adult')
+  await expect(page.locator('#companion-stats-title')).toHaveText('光点')
+  await page.locator('.chat-card').scrollIntoViewIfNeeded()
+  await expect(page.locator('.companion-portrait img')).toHaveJSProperty('naturalWidth', 384)
+  await expect(page.getByLabel('对伙伴说的话')).toBeEditable()
+  await page.reload()
+  await expect(page.locator('.companion-body')).toBeVisible()
+  expect(await snapshot()).toEqual(before)
+  expect(writes).toEqual([])
+})
+
 test('memory lifecycle supports confirm correct ignore and delete', async ({ page }) => {
   await login(page)
   await page.goto('/companion')

@@ -1,0 +1,92 @@
+{
+  "version": "lingye-adult-v1",
+  "generator": "built-in imagegen",
+  "sourceDirectory": "docs/design-exploration/r05-companion/production/lingye-v1",
+  "sourceFrames": [
+    {
+      "left": 0,
+      "top": 0,
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "left": 740,
+      "top": 0,
+      "width": 768,
+      "height": 1024
+    }
+  ],
+  "footAnchor": {
+    "x": 0.495,
+    "y": 0.934
+  },
+  "frameDurationsMs": [
+    4200,
+    140
+  ],
+  "fallback": "adult-home-v1.webp",
+  "assets": [
+    {
+      "filename": "adult-home-v1.webp",
+      "width": 576,
+      "height": 768,
+      "bytes": 58116,
+      "decodedBytes": 1769472,
+      "budgetKiB": 240,
+      "alphaBounds": {
+        "left": 67,
+        "top": 73,
+        "right": 527,
+        "bottom": 720
+      },
+      "sha256": "1ff50de557a0e916c373efc728db3760e7a3aef65c82d259a7f989081157a0b2"
+    },
+    {
+      "filename": "adult-idle-v1.webp",
+      "width": 1152,
+      "height": 768,
+      "bytes": 115876,
+      "decodedBytes": 3538944,
+      "budgetKiB": 480,
+      "alphaBounds": {
+        "left": 67,
+        "top": 22,
+        "right": 1112,
+        "bottom": 748
+      },
+      "sha256": "90ea4abc937336ad4ec5f3f101a55299d4dad9d1722b92f7b64eda62dc647fef"
+    },
+    {
+      "filename": "adult-neutral-v1.webp",
+      "width": 384,
+      "height": 384,
+      "bytes": 32574,
+      "decodedBytes": 589824,
+      "budgetKiB": 120,
+      "alphaBounds": {
+        "left": 11,
+        "top": 3,
+        "right": 368,
+        "bottom": 383
+      },
+      "sha256": "8e2ab288e5697e9cc89269f1b620e21e394ef2849851f5f8d812b5e845183491"
+    },
+    {
+      "filename": "adult-shell-v1.webp",
+      "width": 128,
+      "height": 128,
+      "bytes": 8844,
+      "decodedBytes": 65536,
+      "budgetKiB": 16,
+      "alphaBounds": {
+        "left": 0,
+        "top": 0,
+        "right": 127,
+        "bottom": 127
+      },
+      "sha256": "5ed75d1be1a6f6bb7a4c4f8975edfc13e89d73ad5348d6b22304bd2ad1bc20f2"
+    }
+  ],
+  "totalBytes": 215410,
+  "totalDecodedBytes": 5963776
+}
