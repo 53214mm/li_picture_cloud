@@ -1,17 +1,18 @@
 <template>
-  <figure class="companion-body" :data-visual-stage="visual.visualStage"
+  <figure class="companion-body" :data-visual-stage="visual.visualStage" :data-animation-intent="animationIntent.state"
           :data-presentation-availability="presentation.availability" :data-presentation-activity="presentation.activity"
           :data-presentation-affect="presentation.affect" :data-presentation-attention="presentation.attention"
           :data-presentation-rapport="presentation.rapport" :data-presentation-freshness="presentation.freshness">
     <div class="body-ground">
-      <SpritePlayer v-if="animate && visual.allowIdle" :still="lingyeAssets.home" :atlas="lingyeAssets.idle"
+      <SpritePlayer v-if="animate && animationIntent.state !== 'static'" :still="lingyeAssets.home" :atlas="lingyeAssets.idle"
+                    :key="presentation.companionId" :presentation="presentation"
                     :paused="paused || userPaused" :visible="visible" @availability="availability = $event" />
       <CompanionArtwork v-else class="body-static" :asset="lingyeAssets.home" loading="eager"
                         accessible-label="绫页，纸翼蛾族的成年全身像" />
     </div>
     <figcaption>
       <span><strong>绫页</strong><span class="body-species">纸翼蛾族</span></span>
-      <button v-if="animate && visual.allowIdle && !availability.reducedMotion && !availability.failed"
+      <button v-if="animate && animationIntent.state !== 'static' && !availability.reducedMotion && !availability.failed"
               type="button" class="body-motion" :aria-pressed="userPaused" @click="userPaused = !userPaused">
         {{ userPaused ? '恢复动作' : '暂停动作' }}
       </button>
@@ -24,6 +25,7 @@ import { computed, ref } from 'vue'
 import CompanionArtwork from './CompanionArtwork.vue'
 import SpritePlayer from './SpritePlayer.vue'
 import { lingyeAssets } from './lingyeAssets'
+import { mapCompanionAnimation } from '@/presentation/companionAnimation'
 const props = defineProps({
   presentation: { type: Object, required: true },
   animate: { type: Boolean, default: true },
@@ -31,6 +33,7 @@ const props = defineProps({
   visible: { type: Boolean, default: true }
 })
 const visual = computed(() => props.presentation.appearance)
+const animationIntent = computed(() => mapCompanionAnimation(props.presentation))
 const userPaused = ref(false)
 const availability = ref({ reducedMotion: true, failed: false })
 </script>

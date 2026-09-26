@@ -1,10 +1,11 @@
 <template>
   <div ref="host" class="sprite-player" role="img" :aria-label="accessibleLabel"
-       :data-playback="playing ? 'playing' : 'static'" :data-frame="frame"
+       :data-playback="animation.playing ? 'playing' : 'static'" :data-frame="animation.frame"
+       :data-animation-state="animation.state" :data-animation-offset="animation.offsetY"
        :data-artwork-state="baseFailed ? 'fallback' : 'image'"
        :style="{ aspectRatio: `${still.width} / ${still.height}` }">
     <img v-if="!baseFailed" class="sprite-still" :src="still.src" :width="still.width" :height="still.height"
-         :style="{ visibility: playing ? 'hidden' : 'visible' }"
+         :style="{ visibility: animation.playing ? 'hidden' : 'visible' }"
          alt="" decoding="async" draggable="false" @load="baseReady = true" @error="baseFailed = true" />
     <span v-else class="sprite-placeholder" aria-hidden="true">绫页</span>
     <img v-if="requested && !atlasFailed" class="sprite-atlas" :src="atlas.src"
@@ -14,18 +15,19 @@
 </template>
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { createSpriteClock } from './spriteClock'
+import { createCompanionAnimator } from '@/presentation/companionAnimation'
 import { useSpriteVisibility } from './useSpriteVisibility'
 const props = defineProps({
   still: { type: Object, required: true },
   atlas: { type: Object, required: true },
+  presentation: { type: Object, required: true },
   accessibleLabel: { type: String, default: '绫页，纸翼蛾族的成年全身像' },
   paused: Boolean,
   visible: { type: Boolean, default: true }
 })
 const emit = defineEmits(['availability'])
 const host = ref(null)
-const frame = ref(0)
+const animation = ref({ state: 'static', frame: 0, offsetY: 0, playing: false })
 const baseReady = ref(false)
 const baseFailed = ref(false)
 const requested = ref(false)
@@ -36,16 +38,18 @@ const eligible = computed(() => !props.paused && props.visible && canPlay.value 
 const playing = computed(() => eligible.value && atlasReady.value && !atlasFailed.value)
 const atlasStyle = computed(() => ({
   width: `${props.atlas.columns * 100}%`,
-  transform: `translateX(-${frame.value * 100 / props.atlas.columns}%)`,
-  visibility: playing.value ? 'visible' : 'hidden'
+  transform: `translate(-${animation.value.frame * 100 / props.atlas.columns}%, ${animation.value.offsetY}px)`,
+  visibility: animation.value.playing ? 'visible' : 'hidden'
 }))
-const clock = createSpriteClock({ durations: props.atlas.durations, onFrame: value => { frame.value = value } })
+const animator = createCompanionAnimator({ onChange: value => { animation.value = value } })
 watch(eligible, value => { if (value) requested.value = true })
-watch(playing, value => clock.setPlaying(value), { flush: 'sync' })
+watch([() => props.presentation, playing], ([presentation, playable]) => {
+  animator.update(presentation, playable)
+}, { immediate: true, flush: 'sync' })
 watch([reducedMotion, baseFailed, atlasFailed], () => {
   emit('availability', { reducedMotion: reducedMotion.value, failed: baseFailed.value || atlasFailed.value })
 }, { immediate: true })
-onBeforeUnmount(() => clock.destroy())
+onBeforeUnmount(() => animator.destroy())
 </script>
 <style scoped>
 .sprite-player { position: relative; width: 100%; overflow: hidden; isolation: isolate; }
