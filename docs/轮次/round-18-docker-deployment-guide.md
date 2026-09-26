@@ -307,7 +307,7 @@ docker exec -i lipicturecloud-mysql mysql \
 rm -f /root/prod_seed_users.sql
 ```
 
-更完整的种子账号说明见 `docs/round-17-user-seed-guide.md`。
+更完整的种子账号说明见 `docs/轮次/round-17-user-seed-guide.md`。
 
 ## 9. 数据备份与恢复
 

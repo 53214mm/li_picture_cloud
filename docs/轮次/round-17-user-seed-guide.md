@@ -148,7 +148,7 @@ Remove-Item Env:SEED_TEMP_PASSWORD
 5. 只删除你确实需要执行的那一组语句前面的 `--`。不需要普通用户时，就让普通用户示例继续保持注释。
 6. 确认当前数据库连接后执行插入语句，再执行模板末尾的无密码查询。
 7. 使用临时密码首次登录，立即通过受控流程更换密码。
-8. 按 `docs/round-16-password-ai-security-guide.md` 的说明轮换 Session 命名空间并重启后端，使旧 Session 全部失效。
+8. 按 `docs/轮次/round-16-password-ai-security-guide.md` 的说明轮换 Session 命名空间并重启后端，使旧 Session 全部失效。
 
 如果执行结果显示受影响行数为 `0`，通常不是脚本坏了，而是 `INSERT IGNORE` 发现相同账号已经存在。不要直接删除生产账号；先查询并确认记录归属。
 

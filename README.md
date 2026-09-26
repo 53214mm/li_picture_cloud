@@ -162,7 +162,7 @@ COS、AI 和 MCP 功能还需要自行申请对应服务的合法凭证。请勿
 
 ### 1. 初始化数据库
 
-依次执行 `sql/` 目录中的表结构脚本，并根据本地或生产环境选择正确的种子脚本。详细说明见[用户种子数据教程](docs/round-17-user-seed-guide.md)。
+依次执行 `sql/` 目录中的表结构脚本，并根据本地或生产环境选择正确的种子脚本。详细说明见[用户种子数据教程](docs/轮次/round-17-user-seed-guide.md)。
 
 ### 2. 配置并启动后端
 
@@ -189,7 +189,7 @@ cp .env.example .env
 docker compose --env-file .env up -d --build
 ```
 
-必须先将 `.env` 中的数据库、Redis、COS 和 AI 配置替换为自己的值，并确保 `.env` 不会被提交。生产服务器部署、Nginx 接入、HTTPS、备份和回滚步骤见[OpenCloudOS Docker 部署教程](docs/round-18-docker-deployment-guide.md)。
+必须先将 `.env` 中的数据库、Redis、COS 和 AI 配置替换为自己的值，并确保 `.env` 不会被提交。生产服务器部署、Nginx 接入、HTTPS、备份和回滚步骤见[OpenCloudOS Docker 部署教程](docs/轮次/round-18-docker-deployment-guide.md)。
 
 ## 项目结构
 
@@ -210,14 +210,14 @@ docker compose --env-file .env up -d --build
 
 - [Java 后端校招面试十天冲刺指南](docs/interview/00-冲刺使用指南.md)
 
-- [团队空间与协同编辑使用指南](docs/round-15-team-space-guide.md)
-- [密码与 AI 安全治理指南](docs/round-16-password-ai-security-guide.md)
-- [用户种子数据指南](docs/round-17-user-seed-guide.md)
-- [OpenCloudOS Docker 部署教程](docs/round-18-docker-deployment-guide.md)
-- [图像伙伴生命核心与演示喂养指南](docs/round-19-companion-life-core-guide.md)
-- [伙伴情绪、关系状态与来源化记忆指南](docs/round-20-companion-mood-relationship-memory-guide.md)
-- [伙伴站内对话与主动提案指南](docs/round-21-companion-chat-proposal-guide.md)
-- [当前未决问题](docs/未决问题.md)
+- [团队空间与协同编辑使用指南](docs/轮次/round-15-team-space-guide.md)
+- [密码与 AI 安全治理指南](docs/轮次/round-16-password-ai-security-guide.md)
+- [用户种子数据指南](docs/轮次/round-17-user-seed-guide.md)
+- [OpenCloudOS Docker 部署教程](docs/轮次/round-18-docker-deployment-guide.md)
+- [图像伙伴生命核心与演示喂养指南](docs/轮次/round-19-companion-life-core-guide.md)
+- [伙伴情绪、关系状态与来源化记忆指南](docs/轮次/round-20-companion-mood-relationship-memory-guide.md)
+- [伙伴站内对话与主动提案指南](docs/轮次/round-21-companion-chat-proposal-guide.md)
+- [当前未决问题](docs/轮次/未决问题.md)
 
 ## 已知边界与后续规划
 
