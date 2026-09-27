@@ -1,5 +1,5 @@
 <template>
-  <figure class="companion-body" :data-visual-stage="visual.visualStage" :data-animation-intent="animationIntent.state"
+  <figure class="companion-body" :class="{ 'companion-body--habitat': habitat }" :data-visual-stage="visual.visualStage" :data-animation-intent="animationIntent.state"
           :data-presentation-availability="presentation.availability" :data-presentation-activity="presentation.activity"
           :data-presentation-affect="presentation.affect" :data-presentation-attention="presentation.attention"
           :data-presentation-rapport="presentation.rapport" :data-presentation-freshness="presentation.freshness">
@@ -40,6 +40,7 @@ watch(() => hovered.value || focused.value, (active, previous) => {
 })
 const props = defineProps({
   presentation: { type: Object, required: true },
+  habitat: Boolean,
   animate: { type: Boolean, default: true },
   paused: Boolean,
   visible: { type: Boolean, default: true }
@@ -51,6 +52,9 @@ const availability = ref({ reducedMotion: true, failed: false })
 </script>
 <style scoped>
 .companion-body { width: 100%; margin: 0; align-self: center; padding: 1rem 1rem .75rem; color: var(--lp-text-primary); background: radial-gradient(ellipse at 50% 38%, #faf8ef 0, #ece5d5 70%, #e1d7c4 100%); }
+.companion-body--habitat { padding: 0; background: transparent; }
+.companion-body--habitat figcaption { gap: 4px; padding-inline: 12px; }
+.companion-body--habitat .body-motion { background: #f7f5e5b3; }
 .body-ground { display: block; width: 100%; padding: 0; border: 0; background: transparent; position: relative; max-width: 21rem; margin-inline: auto; border-radius: var(--lp-radius-m); }
 .body-ground:hover, .body-ground:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 2px; }
 .body-ground.is-drop-target { outline: 2px dashed var(--lp-accent); }
