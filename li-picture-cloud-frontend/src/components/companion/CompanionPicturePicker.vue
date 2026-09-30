@@ -3,13 +3,14 @@
     <header>
       <div>
         <span class="eyebrow">成长素材</span>
-        <h2 id="picture-picker-title">选择一张图片</h2>
+        <h2 id="picture-picker-title" tabindex="-1">选择一张图片</h2>
       </div>
       <div class="picker-status">
-        <span class="window-limit">最多 {{ MAX_MATERIAL_PICTURES }} 张</span>
+        <span class="window-limit">最近 {{ MAX_MATERIAL_PICTURES }} 张</span>
         <span v-if="selectedId" class="selection-status" aria-live="polite">已选择 1 张</span>
       </div>
     </header>
+    <p class="picker-guide">点击或用键盘选择，确认后再递给绫页。<router-link :to="spaceId ? `/space/${spaceId}` : '/space/my'">去私有空间挑更多 →</router-link></p>
     <div v-if="loading" class="picker-state" role="status">正在读取你的私有图库…</div>
     <div v-else-if="!visiblePictures.length" class="picker-state">这个空间里暂时没有可用图片。</div>
     <div v-else class="picture-scroll" role="region" aria-label="成长素材列表" tabindex="0">
@@ -19,7 +20,7 @@
                 :aria-pressed="String(picture.id) === String(selectedId)" :disabled="disabled"
                 @click="$emit('select', String(picture.id))">
           <img :src="picture.thumbnailUrl || picture.url" :alt="picture.name || '图片'"
-               @dragstart="interaction.startDrag($event, picture.id)" @dragend="interaction.cancelDrag"
+               :draggable="!disabled" @dragstart="disabled ? $event.preventDefault() : interaction.startDrag($event, picture.id)" @dragend="interaction.cancelDrag"
                width="320" height="220" loading="lazy" />
           <span>{{ picture.name || '未命名图片' }}</span>
         </button>
@@ -37,6 +38,7 @@ const MAX_MATERIAL_PICTURES = 12
 
 const props = defineProps({
   pictures: { type: Array, required: true },
+  spaceId: { type: [String, Number], default: null },
   selectedId: { type: [String, Number], default: null },
   loading: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false }
@@ -48,6 +50,8 @@ const visiblePictures = computed(() => props.pictures.slice(0, MAX_MATERIAL_PICT
 </script>
 
 <style scoped>
+.picker-guide { padding: 14px 16px 0; color: #6a745f; font-size: 12px; line-height: 1.8; }
+.picker-guide a { display: inline-flex; align-items: center; min-height: 44px; color: #47603d; text-decoration: underline; text-underline-offset: 3px; }
 .picker { border: 2px solid var(--black); background: var(--white); }
 .picker header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.25rem; border-bottom: 2px solid var(--black); }
 .picker h2 { font-size: 1.25rem; }

@@ -78,24 +78,18 @@
               <template v-else>
                 <CompanionPicturePicker
                   :pictures="pictures"
+                  :space-id="privateSpace?.id"
                   :selected-id="selectedPictureId"
                   :loading="sourceLoading"
-                  :disabled="feedBusy"
+                  :disabled="feedLocked"
                   @select="selectPicture"
                 />
                 <div v-if="!sourceLoading && privateSpace && !pictures.length" class="upload-link">
-                  <router-link to="/upload">上传一张图片到这个空间 →</router-link>
-                </div>
-                <div class="feed-actions">
-                  <button class="btn btn-primary feed-button" type="button"
-                          :disabled="feedBusy || !selectedPictureId" @click="submitFeed">
-                    {{ feedButtonLabel }}
-                  </button>
-                  <p v-if="feedError" class="feed-message error" role="alert">{{ feedError }}</p>
-                  <p v-else-if="feedNotice" class="feed-message notice" aria-live="polite">{{ feedNotice }}</p>
-                  <p v-else class="feed-helper">一次只选择一张。遇到网络中断时，可以安全重试同一次喂养。</p>
+                  <router-link :to="{ path: '/upload', query: { spaceId: privateSpace.id } }">上传一张图片到这个空间 →</router-link>
                 </div>
               </template>
+              <CompanionFeedingCard :state="feedState" :picture="selectedPicture" :home-fresh="homeFresh" :refreshing="homeSyncBusy"
+                                    @submit="submitFeed" @clear="clearSelection" @visit-growth="visitGrowth" />
             </section>
                 <aside class="desk-note"><section class="nutrition-banner" aria-label="当前图片营养分析模式">
           <div>
@@ -161,6 +155,8 @@ import { inspectCompanionPicture } from '@/presentation/companionInteraction'
 import CompanionStats from '@/components/companion/CompanionStats.vue'
 import CompanionHabitat from '@/components/companion/CompanionHabitat.vue'
 import CompanionPicturePicker from '@/components/companion/CompanionPicturePicker.vue'
+import CompanionFeedingCard from '@/components/companion/CompanionFeedingCard.vue'
+import { createFeedingSession, emptyFeedingState } from '@/presentation/companionFeeding'
 import CompanionGrowthTimeline from '@/components/companion/CompanionGrowthTimeline.vue'
 import CompanionMoodPanel from '@/components/companion/CompanionMoodPanel.vue'
 import CompanionRelationshipPanel from '@/components/companion/CompanionRelationshipPanel.vue'
@@ -173,10 +169,8 @@ import CompanionProposalPanel from '@/components/companion/CompanionProposalPane
 import {
   adoptAuthoritativeHome,
   applyFeedResult,
-  beginFeedAttempt,
   buildCompanionPictureQuery,
-  selectOldestPrivateSpace,
-  shouldRetrySameFeedKey
+  selectOldestPrivateSpace
 } from '@/utils/companion'
 
 const router = useRouter()
@@ -184,7 +178,12 @@ const userStore = useUserStore()
 const interaction = useCompanionInteractionStore()
 const interactionNotice = ref('')
 let selectionGeneration = 0
-onBeforeUnmount(() => { selectionGeneration += 1 })
+let sourceGeneration = 0
+let pageActive = true
+let pageActor = userStore.currentUser?.id == null ? null : String(userStore.currentUser.id)
+const isCurrentPage = () => pageActive && pageActor === String(userStore.currentUser?.id)
+let feedingSession = null
+onBeforeUnmount(() => { pageActive = false; selectionGeneration += 1; sourceGeneration += 1; feedingSession?.destroy() })
 const home = ref(null)
 const pageLoading = ref(false)
 const awakenBusy = ref(false)
@@ -194,11 +193,13 @@ const privateSpace = ref(null)
 const pictures = ref([])
 const sourceLoading = ref(false)
 const sourceError = ref('')
-const selectedPictureId = ref(null)
-const pendingAttempt = ref(null)
-const feedBusy = ref(false)
-const feedError = ref('')
-const feedNotice = ref('')
+const feedState = ref(emptyFeedingState())
+const selectedPictureId = computed(() => feedState.value.pictureId)
+const pendingAttempt = computed(() => feedState.value.attempt)
+const homeSyncBusy = ref(false)
+const feedBusy = computed(() => feedState.value.phase === 'submitting' || homeSyncBusy.value)
+const feedLocked = computed(() => feedBusy.value || feedState.value.phase === 'uncertain')
+const feedError = computed(() => feedState.value.error || (feedState.value.phase === 'uncertain' ? '结果待确认' : ''))
 const panelsRefreshKey = ref(0)
 const homeFresh = ref(true)
 const chatSignal = ref({})
@@ -222,6 +223,28 @@ watchEffect(() => presentationSource.publish({
 
 const authError = computed(() => userStore.authBootstrapError)
 const selectedPicture = computed(() => pictures.value.find(picture => String(picture.id) === selectedPictureId.value) || null)
+watch(() => userStore.currentUser?.id, id => {
+  // Authentication-bootstrap retry may populate the actor for the first time.
+  if (pageActor === null && id != null) { pageActor = String(id); return }
+  if (isCurrentPage()) return
+  pageActive = false
+  feedingSession?.destroy({ clearRecovery: true })
+  home.value = null
+  pictures.value = []
+  feedState.value = emptyFeedingState()
+}, { flush: 'sync' })
+
+function initializeFeeding() {
+  if (feedingSession || !home.value?.companion || !isCurrentPage()) return
+  let storage
+  try { storage = window.sessionStorage } catch { /* Same-page retry still works. */ }
+  feedingSession = createFeedingSession({ actor: pageActor, companionId: home.value.companion.id, storage,
+    send: feedCompanion, onChange: state => {
+      if (!isCurrentPage()) return
+      feedState.value = state
+      if (state.phase === 'uncertain') homeFresh.value = false
+    } })
+}
 function visitHabitat(area) {
   const ids = { home: 'habitat-title', chat: 'companion-chat-input', feed: 'feeding-title', journal: 'journal-title', growth: 'habitat-growth-title' }
   let target = document.getElementById(ids[area])
@@ -229,11 +252,11 @@ function visitHabitat(area) {
   target?.scrollIntoView({ block: 'start', behavior: 'instant' })
   target?.focus({ preventScroll: true })
 }
-const feedButtonLabel = computed(() => {
-  if (feedBusy.value) return '伙伴正在吸收…'
-  if (pendingAttempt.value && feedError.value) return '重试这次喂养'
-  return '喂给伙伴'
-})
+function visitGrowth() {
+  const target = document.getElementById('growth-title')
+  target?.scrollIntoView({ block: 'start', behavior: 'instant' })
+  target?.focus({ preventScroll: true })
+}
 
 // Consume a short-lived navigation command, never a feed command. Recheck server
 // visibility/ownership on arrival and preserve any uncertain idempotent attempt.
@@ -300,10 +323,14 @@ async function loadHome() {
   loadError.value = ''
   featureUnavailable.value = false
   try {
-    home.value = await getCompanionHome()
+    const result = await getCompanionHome()
+    if (!isCurrentPage()) return
+    home.value = result
     homeFresh.value = true
+    initializeFeeding()
     if (home.value?.companion) await loadSources()
   } catch (error) {
+    if (!isCurrentPage()) return
     if (Number(error.status) === 404) featureUnavailable.value = true
     else loadError.value = error.message || '伙伴状态加载失败，请稍后重试。'
   } finally {
@@ -318,9 +345,11 @@ async function loadHome() {
 async function refreshAuthoritativeHome() {
   try {
     const authoritative = await getCompanionHome()
+    if (!isCurrentPage()) return
     home.value = adoptAuthoritativeHome(home.value, authoritative)
     homeFresh.value = Boolean(authoritative?.companion)
   } catch (error) {
+    if (!isCurrentPage()) return
     // 不把刷新失败误报成喂养失败：成长与记忆已经展示，下一次读取会补上最新情绪/关系。
     homeFresh.value = false
     console.warn('[companion] 喂养后权威主页刷新失败，情绪与关系面板可能停留在旧值', error)
@@ -332,8 +361,11 @@ async function awaken() {
   awakenBusy.value = true
   loadError.value = ''
   try {
-    home.value = await awakenCompanion()
+    const result = await awakenCompanion()
+    if (!isCurrentPage()) return
+    home.value = result
     homeFresh.value = true
+    initializeFeeding()
     await loadSources()
   } catch (error) {
     loadError.value = error.message || '唤醒失败，请稍后再试。'
@@ -343,6 +375,8 @@ async function awaken() {
 }
 
 async function loadSources() {
+  if (sourceLoading.value) return
+  const cycle = ++sourceGeneration
   sourceLoading.value = true
   sourceError.value = ''
   privateSpace.value = null
@@ -357,71 +391,65 @@ async function loadSources() {
       sortField: 'createTime',
       sortOrder: 'ascend'
     })
+    if (!isCurrentPage() || cycle !== sourceGeneration) return
     privateSpace.value = selectOldestPrivateSpace(spacesPage.records || [], userStore.currentUser.id)
     if (privateSpace.value) {
       const picturePage = await listPictureVOByPageUncached(
         buildCompanionPictureQuery(privateSpace.value.id)
       )
+      if (!isCurrentPage() || cycle !== sourceGeneration) return
       pictures.value = picturePage.records || []
     }
+    // Recovery stores no image data. A picture outside the recent window must
+    // pass the same R08 owner/private-space check before its preview is shown.
+    if (pendingAttempt.value && !selectedPicture.value) {
+      try {
+        const candidate = await inspectCompanionPicture(selectedPictureId.value, pageActor, { readPicture: getPictureVOById, readSpace: getSpaceVOById })
+        if (!isCurrentPage() || cycle !== sourceGeneration) return
+        const sameSpace = String(privateSpace.value?.id) === String(candidate.space.id)
+        privateSpace.value = candidate.space
+        pictures.value = [candidate.picture, ...(sameSpace ? pictures.value : [])].slice(0, 12)
+      } catch { /* A missing preview does not lose the key; Feed rechecks permission. */ }
+    }
   } catch (error) {
+    if (!isCurrentPage() || cycle !== sourceGeneration) return
     sourceError.value = error.message || '读取私有图库失败，请稍后重试。'
   } finally {
-    sourceLoading.value = false
+    if (isCurrentPage() && cycle === sourceGeneration) sourceLoading.value = false
   }
 }
 
 function selectPicture(pictureId) {
-  if (feedBusy.value) return
+  if (feedLocked.value || !feedingSession?.select(pictureId)) return
   selectionGeneration += 1
   interactionNotice.value = ''
-  selectedPictureId.value = String(pictureId)
-  // 图片改变意味着业务意图改变，旧图片的幂等 key 绝不能带到新图片上。
-  pendingAttempt.value = null
-  feedError.value = ''
-  feedNotice.value = ''
+}
+
+async function clearSelection() {
+  if (feedLocked.value || !feedingSession?.clear()) return
+  selectionGeneration += 1
+  interactionNotice.value = ''
+  await nextTick()
+  if (!isCurrentPage()) return
+  const target = document.getElementById('picture-picker-title') || document.getElementById('feeding-title')
+  target?.scrollIntoView({ block: 'start', behavior: 'instant' })
+  target?.focus({ preventScroll: true })
 }
 
 async function submitFeed() {
-  // 按钮 disabled 会在下一次渲染才生效；这里先上函数级门闩，挡住同一事件循环里的连点。
-  if (feedBusy.value || !selectedPictureId.value) return
+  if (feedBusy.value || !feedingSession) return
   selectionGeneration += 1
   interactionNotice.value = ''
-  feedBusy.value = true
-  const previousAttempt = pendingAttempt.value
-  const attempt = beginFeedAttempt(selectedPictureId.value, previousAttempt)
-  const wasRetry = attempt === previousAttempt
-  pendingAttempt.value = attempt
-  feedError.value = ''
-  feedNotice.value = ''
-  try {
-    const result = await feedCompanion(pendingAttempt.value)
-    // applyFeedResult 会合并回放记录，同时按 revision 防止旧回放把当前伙伴显示倒退。
-    home.value = applyFeedResult(home.value, result)
-    // The receipt has no Mood/Relationship; do not perform an optimistic emotion update.
-    homeFresh.value = false
-    // 喂养可能产生新的记忆候选/机会，通知面板按新状态刷新。
-    panelsRefreshKey.value += 1
-    feedNotice.value = wasRetry
-      ? '这次喂养已安全完成，没有重复成长。'
-      : result.outcome === 'FAMILIARITY'
-        ? '伙伴认出了这张图片，只获得了一点熟悉感。'
-        : '伙伴完成了这次喂养。'
-    pendingAttempt.value = null
-    // 情绪与关系面板直接读取 home.mood / home.relationship：喂养成功后重取权威主页，
-    // 用户无需手动刷新页面即可看到本次喂养后的最新情绪与关系。
-    await refreshAuthoritativeHome()
-  } catch (error) {
-    // 结果不确定时留下 key，下一次重试由后端决定回放还是继续处理，前端绝不猜测是否已成长。
-    const retrySameKey = shouldRetrySameFeedKey(error)
-    if (retrySameKey) homeFresh.value = false
-    if (!retrySameKey) pendingAttempt.value = null
-    feedError.value = error.status == null
-      ? '响应不确定，请用同一请求重试这次喂养'
-      : error.message || '喂养失败'
-  } finally {
-    feedBusy.value = false
-  }
+  const result = await feedingSession.submit()
+  if (!result || !isCurrentPage()) return
+  // Feed receipts contain no Mood/Relationship. Preserve the revision guard and
+  // serialize Home refresh before another feed can start.
+  homeSyncBusy.value = true
+  home.value = applyFeedResult(home.value, result)
+  homeFresh.value = false
+  panelsRefreshKey.value += 1
+  try { await refreshAuthoritativeHome() }
+  finally { if (isCurrentPage()) homeSyncBusy.value = false }
 }
 </script>
 
@@ -440,7 +468,7 @@ async function submitFeed() {
 .habitat-navigation a:hover, .habitat-footer a:hover { color: #45644e; text-decoration: underline; text-underline-offset: 5px; }
 .habitat-content { display: grid; gap: 56px; margin-top: 48px; }
 .home-zone { min-width: 0; display: grid; gap: 20px; scroll-margin-top: 24px; }
-:deep(#companion-chat-input), :deep(#habitat-title), #window-title, #feeding-title, #journal-title, #habitat-growth-title { scroll-margin-top: 96px; }
+:deep(#companion-chat-input), :deep(#habitat-title), :deep(#picture-picker-title), :deep(#growth-title), #window-title, #feeding-title, #journal-title, #habitat-growth-title { scroll-margin-top: 96px; }
 .zone-heading { display: flex; justify-content: space-between; gap: 24px; align-items: flex-end; }
 .zone-heading > div > span { display: block; font-size: 9px; color: #6f7e63; letter-spacing: .16em; margin-bottom: 10px; }
 .zone-heading h2 { font-family: 'Noto Serif SC', 'Songti SC', SimSun, serif; font-size: 25px; font-weight: 500; letter-spacing: .06em; }
@@ -464,12 +492,7 @@ async function submitFeed() {
 .source-state.error { border-color: #b07d68; color: #8d4c35; }
 .source-state .btn { margin-top: 16px; }
 .upload-link { font-size: 12px; text-align: right; text-decoration: underline; }
-.feed-actions { padding: 16px; border: 1px solid #d5d9c9; border-radius: 6px; background: #fffdf8; }
-.feed-button { min-height: 48px; width: 100%; }
-.feed-message, .feed-helper { margin-top: 10px; font-size: 12px; line-height: 1.7; }
-.feed-helper { color: #6d7662; }
-.feed-message.error { color: #94553f; }
-.feed-message.notice { color: #386148; }
+.feed-message { margin-top: 10px; font-size: 12px; line-height: 1.7; }
 .habitat-content .home-zone :deep(.chat-card), .habitat-content .home-zone :deep(.proposal-card), .habitat-content .home-zone :deep(.memory-card), .habitat-content .home-zone :deep(.story-card), .habitat-content .home-zone :deep(.emoji-card), .habitat-content .home-zone :deep(.fusion-card), .habitat-content .home-zone :deep(.mood-card), .habitat-content .home-zone :deep(.relationship-card), .habitat-content .home-zone :deep(.stats-card), .habitat-content .home-zone :deep(.timeline-card), .habitat-content .home-zone :deep(.picker) { min-width: 0; border: 1px solid #d5d9c9; border-radius: 7px; overflow: hidden; }
 .habitat-content .home-zone :deep(section > header) { border-bottom: 1px solid #e1e3d6; }
 .habitat-content .home-zone :deep(section > header h2) { font-size: 17px; font-weight: 500; }

@@ -3,7 +3,7 @@
     <header>
       <div>
         <span class="eyebrow">成长档案</span>
-        <h2 id="growth-title">最近发生的变化</h2>
+        <h2 id="growth-title" tabindex="-1">最近发生的变化</h2>
       </div>
       <span v-if="visibleRecords.length" class="archive-limit">最近 {{ visibleRecords.length }} / 最多 {{ MAX_ARCHIVE_RECORDS }} 条</span>
     </header>

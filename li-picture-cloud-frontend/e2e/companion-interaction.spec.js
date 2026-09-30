@@ -213,7 +213,12 @@ test('uncertain feed retains its key and selection when another picture is hande
   await page.getByRole('button', { name: /候选图片/ }).click()
   await page.getByRole('button', { name: '喂给伙伴', exact: true }).click()
   await expect(page.getByRole('button', { name: '重试这次喂养' })).toBeVisible()
-  await ticketDrop(page, page.getByRole('button', { name: /另一张图片/ }).locator('img'), '.body-ground')
+  // R10 locks local selection during an uncertain request. A fresh R08 handoff
+  // from Gallery must also preserve that request when Home restores it.
+  await expect(page.getByRole('button', { name: /另一张图片/ })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /另一张图片/ }).locator('img')).toHaveAttribute('draggable', 'false')
+  await page.locator('.app-toolbar a[href="/gallery"]').click()
+  await ticketDrop(page, page.locator('.gallery-card').nth(1))
   await expect(panel(page).getByRole('button', { name: '在伙伴空间选择这张' })).toBeVisible()
   await panel(page).getByRole('button', { name: '在伙伴空间选择这张' }).click()
   await expect(page.getByText('请先完成或重试当前喂养，再选择新图片。当前选择已保留。')).toBeVisible()

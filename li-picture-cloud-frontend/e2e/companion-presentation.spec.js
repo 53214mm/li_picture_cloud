@@ -229,7 +229,7 @@ test('Feed refresh cannot resurrect a proposal after a concurrent scold has comp
   await page.getByRole('button', { name: '喂给伙伴' }).click()
   await page.getByTestId('proposal-scold').click()
   feedGate.release()
-  await expect(page.getByRole('button', { name: '喂给伙伴' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: '再选一张' })).toBeEnabled()
   actionGate.release()
   await expect(page.getByText('伙伴安静了，这次提议已被止住。')).toBeVisible()
   readGate.release()
