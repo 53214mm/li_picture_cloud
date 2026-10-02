@@ -69,3 +69,7 @@ See R14-API-VALIDATION.md for the reusable owner-process runner and actual HTTP 
 ## Subsequent Recipe timestamp fix verification
 
 The R14 creation HTTP round found and fixed RecipeExecution terminal transitions overwriting createdTime. A new clean verify compiled the modified code and passed 728 tests total: 724 passed, 4 skipped, 0 failures/errors. Original branch gates remain 88.69%/86.42%. Six newly added domain cases failed before the fix and passed afterward. The original 722-run evidence above is preserved separately. See R14-CREATION-API-VALIDATION.md for exact current evidence paths and HTTP replay coverage.
+
+## Subsequent batch cache fix verification
+
+The batch-edit cache round adds one post-success invalidation call and six controller cases. New clean verify: 734 total, 730 passed, 4 skipped, 0 failures/errors; 144 XML reports, both original branch gates passed at 88.69%/86.42%. Targeted tests failed in two successful-refresh cases before the fix and passed 6/6 afterward. Previous 722/728 evidence is retained separately. See R14-CACHE-VALIDATION.md.

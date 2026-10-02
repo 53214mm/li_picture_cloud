@@ -98,3 +98,16 @@
 27个真实HTTP阶段与独立复跑通过（4协议+4父容器另计，TAP35）；前端286/286、lint、双build/budget通过。后端新clean verify728项（724通过、4跳过）及原覆盖门通过，旧722项证据单独保留。111/142浏览器仍仅收集，验收pending。只读fetch核对远端对象父链/tree后，再追加docs-only状态提交并force=false快进唯一专用分支。
 
 原源状态保留在新检查点 `nexus/checkpoint-r14-creation-local-state`，不覆盖此前源分支；增量bundle需要已发布7953141基线。活动本地只在干净且完整tree相同后对齐发布父链；恢复优先远端，不使用源备份继续开发。状态提交从git历史定位，不自引用自身SHA。
+
+
+## R14 批量编辑缓存检查点（2026-10-02）
+
+从已发布165070ed9d84dfaa5b9451f4125df263dbbc063c继续；仅补一行成功批量编辑后的既有缓存失效，并增加针对性回归。
+
+| 原本地源 SHA | 对应远端 commit 对象 | 完全相同的 tree SHA |
+|---|---|---|
+| `a220a02d8429e2ca99364882f306917437a59ccf` | `bf13623d1d72367dba1b9f915c34cea0f6bbe0b0` | `abf615cf36a0054fb4aa2169ddd868ab858375a3` |
+
+HTTP同查询红绿实证、6项控制器红绿及完整新clean verify734项（730通过、4跳过）、前端286/286和双模式build/budget通过。原27业务阶段计数不增加，浏览器111/142仅收集。只读fetch核对tree和父链后，追加docs-only状态提交并只force=false快进专用分支。
+
+源状态用新检查点nexus/checkpoint-r14-cache-local-state，不覆盖既有源备份。增量bundle需要已发布165070e基线；活动分支仅在干净且tree完全相同后对齐远端。状态提交从git历史定位，不自引用，恢复仍优先远端长期分支。
