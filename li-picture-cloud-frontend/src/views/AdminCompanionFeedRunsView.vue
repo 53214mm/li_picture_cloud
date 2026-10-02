@@ -24,15 +24,15 @@
         <button class="btn btn-outline" type="button" @click="resetFilters">重置</button>
       </form>
 
-      <div v-if="error" class="notice error-notice">{{ error }}</div>
+      <div v-if="error" class="notice error-notice" role="alert">{{ error }}</div>
       <div class="result-meta">共 {{ total }} 次喂养运行 <span>· 失败位置依据已保存的安全状态推导</span></div>
 
       <div v-if="loading" class="loading">加载中…</div>
-      <div v-else-if="!runs.length" class="empty-state">
+      <div v-else-if="!error && !runs.length" class="empty-state">
         <strong>还没有匹配的喂养记录</strong>
         <span>可以先清空筛选条件，或者等待用户完成一次伙伴喂养。</span>
       </div>
-      <table v-else class="observation-table">
+      <table v-else-if="runs.length" class="observation-table">
         <thead>
           <tr>
             <th>时间</th>
@@ -80,10 +80,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { listCompanionFeedRuns } from '@/api/companionObservation'
+import { exactEntityId } from '@/utils/entityId'
 import {
   displayActualNutrition,
   displayPicture,
@@ -100,6 +101,9 @@ const runs = ref([])
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
+let readGeneration = 0
+let disposed = false
+onBeforeUnmount(() => { disposed = true; readGeneration += 1 })
 const query = reactive({ current: 1, pageSize: 10, userKeyword: '', pictureId: '', correlationId: '', status: '' })
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / query.pageSize)))
 
@@ -120,23 +124,39 @@ async function initialize() {
 }
 
 async function loadRuns() {
-  loading.value = true
+  const read = ++readGeneration
+  const actor = userStore.currentUser?.id
+  const active = () => !disposed && read === readGeneration && actor === userStore.currentUser?.id && userStore.isAdmin
+  const input = typeof query.pictureId === 'string' ? query.pictureId.trim() : query.pictureId
+  const pictureId = input === '' ? null : exactEntityId(input)
   error.value = ''
+  if (!userStore.isAdmin || !exactEntityId(actor)) {
+    loading.value = false
+    error.value = '无法确认管理员身份，请重新登录。'
+    return
+  }
+  if (input !== '' && !pictureId) {
+    loading.value = false
+    error.value = '请输入有效的图片 ID（正整数）。'
+    return
+  }
+  loading.value = true
   try {
     const result = await listCompanionFeedRuns({
       current: query.current,
       pageSize: query.pageSize,
       userKeyword: query.userKeyword.trim() || null,
-      pictureId: query.pictureId ? Number(query.pictureId) : null,
+      pictureId,
       correlationId: query.correlationId.trim() || null,
       status: query.status || null
     })
+    if (!active()) return
     runs.value = result?.records || []
     total.value = result?.total || 0
   } catch (e) {
-    error.value = e.message || '加载喂养记录失败'
+    if (active()) error.value = e.message || '加载喂养记录失败'
   } finally {
-    loading.value = false
+    if (active()) loading.value = false
   }
 }
 

@@ -7,22 +7,26 @@
           <p class="subtitle">查看自己创建的私有空间和团队空间，管理容量与基础信息。</p>
         </div>
         <div class="header-right">
+          <button class="btn btn-outline btn-sm" :disabled="loading" @click="reloadSpaces">重新加载空间</button>
           <router-link to="/space/my" class="btn btn-outline btn-sm">我的空间</router-link>
           <router-link to="/space/create" class="btn btn-primary btn-sm">+ 创建空间</router-link>
         </div>
       </div>
 
-      <!-- 加载中 -->
-      <div v-if="loading" class="loading">加载中…</div>
+      <p v-if="loading" class="loading" role="status">正在加载空间…</p>
+      <div v-if="loadError" class="read-error" role="alert">{{ loadError }}</div>
+      <p v-if="loaded && requestedPage !== current && (loading || loadError)" class="page-status" role="status">
+        第 {{ requestedPage }} 页尚未加载，当前显示第 {{ current }} 页。
+      </p>
 
-      <!-- 空状态 -->
-      <div v-else-if="spaces.length === 0" class="empty-state">
-        <p>暂无空间，创建第一个吧！</p>
+      <!-- 只有成功读取的空列表才显示创建引导 -->
+      <div v-if="loaded && !loading && !loadError && spaces.length === 0" class="empty-state">
+        <p>还没有空间，可以创建一个。</p>
         <router-link to="/space/create" class="btn btn-primary">创建空间</router-link>
       </div>
 
       <!-- 空间列表 -->
-      <div v-else class="space-list">
+      <div v-if="spaces.length" class="space-list">
         <div v-for="sp in spaces" :key="sp.id" class="space-card">
           <div class="card-left">
             <div class="space-info">
@@ -78,9 +82,9 @@
 
       <!-- 分页 -->
       <div class="pagination" v-if="total > pageSize">
-        <button :disabled="current <= 1" @click="goPage(current - 1)">上一页</button>
+        <button :disabled="loading || current <= 1" @click="goPage(current - 1)">上一页</button>
         <span>第 {{ current }} / {{ totalPages }} 页 (共 {{ total }} 条)</span>
-        <button :disabled="current >= totalPages" @click="goPage(current + 1)">下一页</button>
+        <button :disabled="loading || current >= totalPages" @click="goPage(current + 1)">下一页</button>
       </div>
     </div>
 
@@ -121,7 +125,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { listSpaceVOByPage, editSpace, updateSpace, deleteSpace } from '@/api/space'
 import { spaceLevelText, spaceTypeText, formatSize, formatDate } from '@/constants/space'
@@ -130,6 +134,11 @@ const userStore = useUserStore()
 
 const spaces = ref([])
 const loading = ref(false)
+const loaded = ref(false)
+const loadError = ref('')
+const requestedPage = ref(1)
+let listRequest = 0
+let accountGeneration = 0
 const current = ref(1)
 const total = ref(0)
 const pageSize = 12
@@ -140,27 +149,56 @@ const showEditModal = ref(false)
 const editError = ref('')
 const editForm = ref({ id: null, spaceName: '', spaceLevel: 0, maxCount: null, maxSize: null })
 
-onMounted(loadSpaces)
+watch(() => userStore.currentUser?.id, (userId) => {
+  accountGeneration++
+  listRequest++
+  spaces.value = []
+  total.value = 0
+  current.value = 1
+  requestedPage.value = 1
+  loaded.value = false
+  loading.value = false
+  loadError.value = ''
+  showEditModal.value = false
+  if (userId == null || userId === '') {
+    loadError.value = '请先登录后查看空间。'
+    return
+  }
+  loadSpaces()
+}, { immediate: true, flush: 'sync' })
 
-async function loadSpaces() {
+onBeforeUnmount(() => { accountGeneration++; listRequest++ })
+
+async function loadSpaces(page = requestedPage.value) {
+  const userId = userStore.currentUser?.id
+  if (userId == null || userId === '') return
+  const request = ++listRequest
+  const isCurrent = () => request === listRequest && userId === userStore.currentUser?.id
+  requestedPage.value = page
   loading.value = true
+  loadError.value = ''
   try {
-    // 只查询当前用户自己的空间
-    const res = await listSpaceVOByPage({
-      current: current.value,
-      pageSize,
-      userId: userStore.currentUser?.id
-    })
+    // Keep the displayed page and its controls until the requested read succeeds.
+    const res = await listSpaceVOByPage({ current: page, pageSize, userId })
+    if (!isCurrent()) return
     spaces.value = res.records || []
     total.value = res.total || 0
-  } catch (e) {
-    console.error('加载空间失败', e)
+    current.value = page
+    loaded.value = true
+  } catch (error) {
+    if (isCurrent()) loadError.value = error?.message || '加载空间失败，请重新加载。'
   } finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
 }
 
-function goPage(p) { current.value = p; loadSpaces() }
+function reloadSpaces() {
+  if (!loading.value) loadSpaces()
+}
+
+function goPage(page) {
+  if (!loading.value) loadSpaces(page)
+}
 
 function countPercent(sp) {
   return sp.maxCount ? Math.min(100, Math.round((sp.totalCount / sp.maxCount) * 100)) : 0
@@ -185,6 +223,7 @@ function openEdit(sp) {
 function closeEditModal() { showEditModal.value = false }
 
 async function handleEditSave() {
+  const generation = accountGeneration
   editError.value = ''
   try {
     const data = { id: editForm.value.id, spaceName: editForm.value.spaceName.trim() }
@@ -196,21 +235,24 @@ async function handleEditSave() {
     } else {
       await editSpace(data)
     }
+    if (generation !== accountGeneration) return
     showEditModal.value = false
-    loadSpaces()
+    loadSpaces(current.value)
   } catch (e) {
-    editError.value = e.message || '保存失败'
+    if (generation === accountGeneration) editError.value = e.message || '保存失败'
   }
 }
 
 // ===== 删除 =====
 async function handleDelete(sp) {
   if (!confirm(`确定删除空间"${sp.spaceName}"吗？空间内的图片不会被删除。`)) return
+  const generation = accountGeneration
   try {
     await deleteSpace(sp.id)
-    loadSpaces()
+    if (generation !== accountGeneration) return
+    loadSpaces(current.value)
   } catch (e) {
-    alert(e.message || '删除失败')
+    if (generation === accountGeneration) alert(e.message || '删除失败')
   }
 }
 </script>
@@ -220,10 +262,11 @@ async function handleDelete(sp) {
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
 .page-header h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.04em; }
 .subtitle { color: var(--gray-600); font-size: 0.9375rem; margin-top: 0.25rem; }
-.header-right { display: flex; gap: 0.5rem; }
+.header-right { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .btn-sm { padding: 0.5rem 1.25rem; font-size: 0.75rem; }
 
-.loading { text-align: center; padding: 4rem 0; color: var(--gray-400); }
+.loading, .page-status { padding: 1rem 0; color: var(--gray-600); }
+.read-error { margin-bottom: 1rem; padding: 1rem; background: #fff0ef; color: var(--red); }
 .empty-state { text-align: center; padding: 5rem 0; color: var(--gray-400); }
 .empty-state p { margin-bottom: 1rem; font-size: 1.125rem; }
 

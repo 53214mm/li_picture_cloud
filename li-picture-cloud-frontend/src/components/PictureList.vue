@@ -36,15 +36,20 @@
     </div>
 
     <!-- 加载中 -->
-    <div v-if="loading" class="loading">加载中…</div>
+    <div v-if="loading" class="loading" role="status">正在加载图片…</div>
+    <div v-if="error" class="list-error" role="alert">
+      <p>{{ error }}</p>
+      <p v-if="pictures.length">正在显示上次成功加载的图片。</p>
+      <button type="button" class="btn btn-outline btn-sm" :disabled="loading" @click="$emit('retry')">重新加载图片</button>
+    </div>
 
     <!-- 空状态 -->
-    <div v-else-if="pictures.length === 0" class="empty-state">
+    <div v-if="!loading && !error && pictures.length === 0" class="empty-state">
       <p>{{ emptyText }}</p>
     </div>
 
     <!-- 图片网格 -->
-    <div v-else class="gallery-grid">
+    <div v-if="pictures.length" class="gallery-grid">
       <div
         v-for="pic in pictures"
         :key="pic.id"
@@ -121,6 +126,7 @@ const interaction = useCompanionInteractionStore()
 const props = defineProps({
   pictures: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
+  error: { type: String, default: '' },
   total: { type: Number, default: 0 },
   current: { type: Number, default: 1 },
   pageSize: { type: Number, default: 12 },
@@ -132,7 +138,7 @@ const props = defineProps({
   selectedIds: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['search', 'filter-change', 'page-change', 'jump', 'toggle-select'])
+const emit = defineEmits(['search', 'filter-change', 'page-change', 'jump', 'toggle-select', 'retry'])
 
 const router = useRouter()
 
@@ -190,6 +196,8 @@ function formatDate(d) {
 .loading { text-align: center; padding: 4rem 0; color: var(--gray-400); font-size: 1.125rem; }
 .empty-state { text-align: center; padding: 5rem 0; color: var(--gray-400); }
 .empty-state p { font-size: 1.125rem; }
+.list-error { margin-block: 1rem; padding: 1rem; color: var(--red); border: 1px solid currentColor; }
+.list-error .btn { margin-top: .5rem; }
 
 /* 图片网格 */
 .gallery-grid {

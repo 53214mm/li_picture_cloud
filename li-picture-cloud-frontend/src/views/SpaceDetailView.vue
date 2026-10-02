@@ -2,15 +2,19 @@
   <div class="space-detail-page">
     <div class="container">
       <!-- 加载中 -->
-      <div v-if="loading" class="loading">加载中…</div>
+      <div v-if="loading" class="loading" role="status">正在加载空间…</div>
+      <div v-if="spaceError" class="form-error" role="alert">
+        <p>{{ spaceError }}</p>
+        <button type="button" class="btn btn-outline btn-sm" :disabled="loading" @click="loadSpace">重新加载空间</button>
+      </div>
 
       <!-- 空间不存在 -->
-      <div v-else-if="!space" class="empty-state">
-        <p>空间不存在或已被删除</p>
+      <div v-if="!loading && !spaceError && !space" class="empty-state">
+        <p>未找到空间信息</p>
         <router-link to="/spaces" class="btn btn-outline">返回空间列表</router-link>
       </div>
 
-      <template v-else>
+      <template v-if="space">
         <!-- 空间信息头 -->
         <div class="space-header">
           <div class="space-top">
@@ -63,7 +67,10 @@
         </div>
 
         <!-- 上传面板 -->
-        <div v-if="permissionError" class="permission-error">{{ permissionError }}</div>
+        <div v-if="permissionError" class="permission-error" role="alert">
+          <p>{{ permissionError }}</p>
+          <button type="button" class="btn btn-outline btn-sm" :disabled="loading" @click="loadSpace">重新加载空间权限</button>
+        </div>
         <div v-if="showUpload && canUploadPictures" class="upload-panel">
           <div class="upload-tabs">
             <button
@@ -117,7 +124,7 @@
           <input v-model="batchForm.category" class="input" placeholder="分类" style="max-width:120px" />
           <input v-model="batchForm.tagsStr" class="input" placeholder="标签（逗号分隔）" style="max-width:200px" />
           <input v-model="batchForm.nameRule" class="input" placeholder="命名规则（图片{序号}）" style="max-width:200px" />
-          <button class="btn btn-primary btn-sm" @click="handleBatchEdit">应用</button>
+          <button class="btn btn-primary btn-sm" :disabled="batchSaving" @click="handleBatchEdit">{{ batchSaving ? '正在应用…' : '应用' }}</button>
           <button class="btn btn-outline btn-sm" @click="selectedIds = []">取消选择</button>
           <span v-if="batchError" class="batch-error">{{ batchError }}</span>
         </div>
@@ -132,6 +139,9 @@
 
         <!-- 图片列表（复用组件） -->
         <PictureList
+          v-if="canViewPictures"
+          :error="pictureError"
+          @retry="loadPictures"
           :pictures="pictures"
           :loading="picLoading"
           :total="total"
@@ -230,7 +240,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getSpaceVOById } from '@/api/space'
@@ -244,16 +254,24 @@ import SpaceMemberPanel from '@/components/space/SpaceMemberPanel.vue'
 import { getMySpacePermissions, listMyTeamSpaces } from '@/api/spaceUser'
 import { SPACE_ROLE, SPACE_TYPE, spaceLevelText, spaceRoleText, spaceTypeText, formatSize, formatDate } from '@/constants/space'
 import { hasPermission } from '@/utils/spaceAccess'
+import { exactEntityId } from '@/utils/entityId'
 
 const route = useRoute()
 const userStore = useUserStore()
 
 // 空间 ID 是 Snowflake 长整型，必须保持 String 避免 JS 精度丢失
-const spaceId = computed(() => route.params.id)
+const spaceId = computed(() => exactEntityId(route.params.id))
+const actorId = computed(() => exactEntityId(userStore.currentUser?.id))
+let viewGeneration = 0
+let spaceReadGeneration = 0
+let pictureReadGeneration = 0
+let disposed = false
+const ownsView = generation => !disposed && generation === viewGeneration
 
 // 空间信息
 const space = ref(null)
 const loading = ref(true)
+const spaceError = ref('')
 const permissions = ref([])
 const permissionError = ref('')
 const currentRole = ref('')
@@ -267,6 +285,7 @@ const canManageMembers = computed(() => hasPermission(permissions.value, 'spaceU
 // 图片列表
 const pictures = ref([])
 const picLoading = ref(false)
+const pictureError = ref('')
 const total = ref(0)
 const currentPage = ref(1)
 const categoryList = ref([])
@@ -302,6 +321,7 @@ const sharePic = ref(null)
 const batchMode = ref(false)
 const selectedIds = ref([])
 const batchError = ref('')
+const batchSaving = ref(false)
 const batchForm = reactive({ category: '', tagsStr: '', nameRule: '' })
 
 function toggleBatchMode() {
@@ -329,24 +349,40 @@ function toggleAll() {
 }
 
 async function handleBatchEdit() {
+  if (batchSaving.value) return
   batchError.value = ''
   if (!selectedIds.value.length) return
+  const id = spaceId.value
+  const pictureIds = selectedIds.value.map(exactEntityId)
+  if (!id || pictureIds.some(value => !value)) {
+    batchError.value = '空间或图片 ID 无效，请重新加载后再试。'
+    return
+  }
+  if (!canEditPictures.value) {
+    batchError.value = '当前没有图片编辑权限。'
+    return
+  }
+  const generation = viewGeneration
   const tags = batchForm.tagsStr ? batchForm.tagsStr.split(',').map(t => t.trim()).filter(Boolean) : null
+  batchSaving.value = true
   try {
     await editPictureByBatch({
-      pictureIdList: selectedIds.value,
-      spaceId: Number(spaceId.value),
+      pictureIdList: pictureIds,
+      spaceId: id,
       category: batchForm.category || undefined,
       tags: tags || undefined,
       nameRule: batchForm.nameRule || undefined
     })
+    if (!ownsView(generation)) return
     selectedIds.value = []
     batchForm.category = ''
     batchForm.tagsStr = ''
     batchForm.nameRule = ''
     loadPictures()
   } catch (e) {
-    batchError.value = e.message || '批量编辑失败'
+    if (ownsView(generation)) batchError.value = e.message || '批量编辑失败'
+  } finally {
+    if (ownsView(generation)) batchSaving.value = false
   }
 }
 const editError = ref('')
@@ -361,34 +397,117 @@ const sizePercent = computed(() => {
   return space.value.maxSize ? Math.min(100, Math.round((space.value.totalSize / space.value.maxSize) * 100)) : 0
 })
 
-onMounted(async () => {
-  try {
-    const meta = await getPictureTagCategory()
-    categoryList.value = meta.categoryList || []
-  } catch { /* ignore */ }
-
-  try {
-    space.value = await getSpaceVOById(spaceId.value)
-    permissions.value = await getMySpacePermissions(spaceId.value)
-    if (space.value.spaceType === SPACE_TYPE.TEAM) {
-      if (String(space.value.userId) === String(userStore.currentUser?.id)) {
-        currentRole.value = SPACE_ROLE.ADMIN
-      } else {
-        const memberships = await listMyTeamSpaces()
-        currentRole.value = memberships.find((item) => String(item.spaceId) === String(spaceId.value))?.spaceRole || ''
-      }
-    }
-  } catch (e) {
-    permissionError.value = e.message || '加载空间权限失败'
-  } finally {
-    loading.value = false
-  }
-
-  if (canViewPictures.value) loadPictures()
+onMounted(() => {
+  const generation = viewGeneration
+  getPictureTagCategory().then(meta => {
+    if (ownsView(generation)) categoryList.value = meta.categoryList || []
+  }).catch(() => {})
+  loadSpace()
 })
 
+watch([spaceId, actorId], () => {
+  viewGeneration += 1
+  spaceReadGeneration += 1
+  pictureReadGeneration += 1
+  space.value = null
+  permissions.value = []
+  currentRole.value = ''
+  pictures.value = []
+  total.value = 0
+  currentPage.value = 1
+  searchText.value = ''
+  currentCategory.value = ''
+  currentFormat.value = ''
+  currentSort.value = 'descend'
+  pictureError.value = ''
+  picLoading.value = false
+  selectedIds.value = []
+  batchMode.value = false
+  batchSaving.value = false
+  batchError.value = ''
+  showUpload.value = false
+  showMembers.value = false
+  showShare.value = false
+  showEditDialog.value = false
+  uploading.value = false
+  uploadError.value = ''
+  uploadSuccess.value = false
+  clearFile()
+  loadSpace()
+}, { flush: 'sync' })
+
+onBeforeUnmount(() => {
+  disposed = true
+  viewGeneration += 1
+  spaceReadGeneration += 1
+  pictureReadGeneration += 1
+})
+
+async function loadSpace() {
+  const generation = viewGeneration
+  const read = ++spaceReadGeneration
+  pictureReadGeneration += 1
+  picLoading.value = false
+  const id = spaceId.value
+  loading.value = true
+  spaceError.value = ''
+  permissionError.value = ''
+  permissions.value = []
+  currentRole.value = ''
+  const active = () => ownsView(generation) && read === spaceReadGeneration
+  try {
+    if (!id || !actorId.value) throw new Error('空间或账号 ID 无效，请返回空间列表重新进入。')
+    const result = await getSpaceVOById(id)
+    if (!active()) return
+    space.value = result || null
+    if (!space.value) {
+      pictures.value = []
+      total.value = 0
+      return
+    }
+    try {
+      const granted = await getMySpacePermissions(id)
+      if (!active()) return
+      permissions.value = granted || []
+    } catch (error) {
+      if (!active()) return
+      permissionError.value = error.message || '空间权限加载失败，请重新加载。'
+      pictures.value = []
+      total.value = 0
+      selectedIds.value = []
+      return
+    }
+    if (canViewPictures.value) loadPictures()
+    else {
+      pictures.value = []
+      total.value = 0
+      selectedIds.value = []
+    }
+    if (space.value.spaceType === SPACE_TYPE.TEAM) {
+      if (String(space.value.userId) === actorId.value) currentRole.value = SPACE_ROLE.ADMIN
+      else {
+        try {
+          const memberships = await listMyTeamSpaces()
+          if (active()) currentRole.value = memberships.find(item => String(item.spaceId) === id)?.spaceRole || ''
+        } catch (error) {
+          if (active()) permissionError.value = error.message || '空间成员身份加载失败，请重新加载。'
+        }
+      }
+    }
+  } catch (error) {
+    if (active()) spaceError.value = error.message || '空间加载失败，请重新加载。'
+  } finally {
+    if (active()) loading.value = false
+  }
+}
+
 async function loadPictures() {
+  if (!canViewPictures.value || !spaceId.value || !actorId.value) return
+  const generation = viewGeneration
+  const read = ++pictureReadGeneration
+  const active = () => ownsView(generation) && read === pictureReadGeneration
   picLoading.value = true
+  pictureError.value = ''
   try {
     const res = await listPictureVOByPage({
       current: currentPage.value,
@@ -400,12 +519,13 @@ async function loadPictures() {
       sortField: 'createTime',
       sortOrder: currentSort.value
     })
+    if (!active()) return
     pictures.value = res.records || []
     total.value = res.total || 0
-  } catch (e) {
-    console.error('加载图片失败', e)
+  } catch (error) {
+    if (active()) pictureError.value = error.message || '图片加载失败，请重新加载。'
   } finally {
-    picLoading.value = false
+    if (active()) picLoading.value = false
   }
 }
 
@@ -441,6 +561,9 @@ function onFileEditSave(blob) {
 }
 
 async function handleUpload() {
+  if (uploading.value || !canUploadPictures.value || !spaceId.value) return
+  const generation = viewGeneration
+  const targetSpaceId = spaceId.value
   uploadError.value = ''
   uploadSuccess.value = false
   uploading.value = true
@@ -448,28 +571,30 @@ async function handleUpload() {
     if (uploadMode.value === 'file') {
       const fd = new FormData()
       fd.append('file', uploadFile.value)
-      fd.append('spaceId', spaceId.value)
+      fd.append('spaceId', targetSpaceId)
       if (uploadName.value.trim()) fd.append('picName', uploadName.value.trim())
       await uploadPicture(fd)
     } else {
       await request.post('/picture/upload/url', {
         fileUrl: urlInput.value.trim(),
         picName: uploadName.value.trim() || undefined,
-        spaceId: spaceId.value
+        spaceId: targetSpaceId
       })
     }
+    if (!ownsView(generation)) return
     uploadSuccess.value = true
     clearFile()
     urlInput.value = ''
     uploadName.value = ''
-    setTimeout(() => { uploadSuccess.value = false }, 3000)
+    setTimeout(() => { if (ownsView(generation)) uploadSuccess.value = false }, 3000)
     loadPictures()
     // 更新空间用量（重新加载空间信息）
-    space.value = await getSpaceVOById(spaceId.value)
+    const refreshed = await getSpaceVOById(targetSpaceId)
+    if (ownsView(generation)) space.value = refreshed
   } catch (e) {
-    uploadError.value = e.message || '上传失败'
+    if (ownsView(generation)) uploadError.value = e.message || '上传失败'
   } finally {
-    uploading.value = false
+    if (ownsView(generation)) uploading.value = false
   }
 }
 
@@ -506,6 +631,8 @@ function openEditDialog(pic) {
 }
 
 async function handleEditSave() {
+  if (!canEditPictures.value) return
+  const generation = viewGeneration
   editError.value = ''
   try {
     const tags = editForm.tagsStr
@@ -518,10 +645,11 @@ async function handleEditSave() {
       category: editForm.category || undefined,
       tags
     })
+    if (!ownsView(generation)) return
     showEditDialog.value = false
     loadPictures()
   } catch (e) {
-    editError.value = e.message || '保存失败'
+    if (ownsView(generation)) editError.value = e.message || '保存失败'
   }
 }
 
@@ -532,14 +660,19 @@ function openShare(pic) {
 }
 
 async function handleDeletePic(pic) {
+  if (!canDeletePictures.value || !spaceId.value) return
+  const generation = viewGeneration
+  const targetSpaceId = spaceId.value
   if (!confirm(`确定删除图片"${pic.name || '未命名'}"吗？`)) return
   try {
     await deletePicture(pic.id)
+    if (!ownsView(generation)) return
     loadPictures()
     // 更新空间用量
-    space.value = await getSpaceVOById(spaceId.value)
+    const refreshed = await getSpaceVOById(targetSpaceId)
+    if (ownsView(generation)) space.value = refreshed
   } catch (e) {
-    alert(e.message || '删除失败')
+    if (ownsView(generation)) alert(e.message || '删除失败')
   }
 }
 </script>
