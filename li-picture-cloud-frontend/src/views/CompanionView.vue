@@ -117,10 +117,10 @@
             <section id="habitat-growth" class="home-zone" aria-labelledby="habitat-growth-title">
               <header class="zone-heading"><div><span>04 / GROWING TOGETHER</span><h2 id="habitat-growth-title" tabindex="-1">相处，慢慢有了痕迹</h2></div><p>此刻的状态，与一路积累的成长。</p></header>
               <div class="state-grid">
-                <CompanionMoodPanel :mood="home.mood" />
-                <CompanionRelationshipPanel :relationship="home.relationship" />
+                <CompanionMoodPanel :presentation="presentation" />
+                <CompanionRelationshipPanel :presentation="presentation" />
               </div>
-              <CompanionStats :companion="home.companion" />
+              <CompanionStats :companion="home.companion" :presentation="presentation" />
               <CompanionGrowthTimeline :records="home.recentGrowth || []" />
             </section>
           </div>

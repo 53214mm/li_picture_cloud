@@ -7,6 +7,10 @@
             aria-label="和绫页互动" aria-haspopup="dialog" title="和绫页互动"
             @click="interaction.open()" @pointerenter="hovered = $event.pointerType === 'mouse'" @pointerleave="hovered = false"
             @focus="focused = true" @blur="focused = false" @dragover="interaction.dragOver" @drop.stop="interaction.drop">
+      <span v-if="showDisposition" class="body-atmosphere" aria-hidden="true"
+            :data-affect="presentation.affect" :data-rapport="presentation.rapport">
+        <span v-if="animationIntent.idleTone === 'inspired'" class="body-inspiration">✧</span>
+      </span>
       <SpritePlayer v-if="animate && animationIntent.state !== 'static'" :still="lingyeAssets.home" :atlas="lingyeAssets.idle"
                     :key="presentation.companionId" :presentation="presentation"
                     :interaction-request="interactionRequest"
@@ -22,6 +26,7 @@
       </button>
       <span v-else class="body-static-label">静态立绘</span>
     </figcaption>
+    <p v-if="showDisposition" class="body-disposition">{{ presentation.disposition.mood.label }}</p>
   </figure>
 </template>
 <script setup>
@@ -47,6 +52,8 @@ const props = defineProps({
 })
 const visual = computed(() => props.presentation.appearance)
 const animationIntent = computed(() => mapCompanionAnimation(props.presentation))
+const showDisposition = computed(() => props.presentation.availability === 'ready' && props.presentation.freshness === 'fresh' &&
+  props.presentation.activity === 'idle' && props.presentation.disposition?.mood?.status === 'known')
 const userPaused = ref(false)
 const availability = ref({ reducedMotion: true, failed: false })
 </script>
@@ -59,6 +66,16 @@ const availability = ref({ reducedMotion: true, failed: false })
 .body-ground:hover, .body-ground:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 2px; }
 .body-ground.is-drop-target { outline: 2px dashed var(--lp-accent); }
 .body-ground::before { content: ''; position: absolute; bottom: 6%; left: 27%; width: 46%; height: 3%; border-radius: 50%; background: #70695824; filter: blur(3px); }
+.body-atmosphere { position: absolute; inset: 15% 10% 7%; pointer-events: none; border-radius: 50%; background: radial-gradient(ellipse, #e1e5d53b, transparent 70%); }
+.body-atmosphere[data-affect="cheerful"] { background: radial-gradient(ellipse, #f4dda94d, transparent 70%); }
+.body-atmosphere[data-affect="energetic"] { background: radial-gradient(ellipse, #d3e0b94d, transparent 70%); }
+.body-atmosphere[data-affect="lonely"] { background: radial-gradient(ellipse, #dce2ef4d, transparent 70%); }
+.body-atmosphere[data-affect="inspired"] { background: radial-gradient(ellipse, #e6dcf24d, transparent 70%); }
+.body-atmosphere[data-affect="irritated"] { background: radial-gradient(ellipse, #e8dace3b, transparent 70%); }
+.body-atmosphere[data-rapport="familiar"] { box-shadow: inset 0 -2px 0 #7d8d6426; }
+.body-atmosphere[data-rapport="close"] { box-shadow: inset 0 -3px 0 #7d8d6440; }
+.body-inspiration { position: absolute; right: 7%; top: 23%; color: #877598; font-size: 1.2rem; }
+.body-disposition { margin: 0; padding: 0 .75rem .25rem; color: var(--lp-text-secondary); font-size: .72rem; text-align: center; }
 .body-static { aspect-ratio: 3 / 4; position: relative; }
 figcaption { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .25rem .75rem; min-height: 44px; padding-inline: .25rem; }
 figcaption strong { font-size: .95rem; }

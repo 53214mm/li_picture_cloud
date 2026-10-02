@@ -54,7 +54,7 @@ test('renders only the server-provided nutrition label and safe provenance field
   assert.match(timeline, /overflow-y:\s*auto/)
 })
 
-test('mood relationship and memory panels reuse the shared message bubble language', async () => {
+test('state panels consume the shared presentation while memory keeps message bubble language', async () => {
   const mood = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionMoodPanel.vue', import.meta.url)), 'utf8')
   const relationship = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionRelationshipPanel.vue', import.meta.url)), 'utf8')
   const memory = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionMemoryPanel.vue', import.meta.url)), 'utf8')
@@ -62,16 +62,14 @@ test('mood relationship and memory panels reuse the shared message bubble langua
   const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/companion.js', import.meta.url)), 'utf8')
   const constants = await readFile(fileURLToPath(new globalThis.URL('../src/constants/companion.js', import.meta.url)), 'utf8')
 
-  // 情绪面板展示服务端摘要，不自行解释数值。
-  assert.match(mood, /MOOD_AXES/)
-  assert.match(mood, /mood\.summary/)
-  assert.match(mood, /CompanionMessageBubble/)
-  assert.match(mood, /:message="mood\.summary"/)
-  assert.match(mood, /随时间自然回落/)
+  // 情绪面板消费统一协议，不解析后端摘要或自行推导情绪。
+  assert.match(mood, /presentation\.disposition\.mood/)
+  assert.match(mood, /<details[^>]+mood\.status/)
+  assert.match(mood, /axis\.value/)
   // 关系面板支持近期反馈的负向展示。
-  assert.match(relationship, /RELATIONSHIP_AXES/)
+  assert.match(relationship, /presentation\.disposition\.relationship/)
   assert.match(relationship, /recentFeedback/)
-  assert.match(relationship, /negative/)
+  assert.match(relationship, /axis\.position/)
   // 记忆面板：五个接口、状态机操作与失效隐藏内容。
   assert.match(memory, /CompanionMessageBubble/)
   assert.match(memory, /MEMORY_STATUS/)
@@ -87,8 +85,8 @@ test('mood relationship and memory panels reuse the shared message bubble langua
   assert.match(page, /CompanionMoodPanel/)
   assert.match(page, /CompanionRelationshipPanel/)
   assert.match(page, /CompanionMemoryPanel/)
-  assert.match(page, /:mood="home\.mood"/)
-  assert.match(page, /:relationship="home\.relationship"/)
+  assert.match(page, /CompanionMoodPanel :presentation="presentation"/)
+  assert.match(page, /CompanionRelationshipPanel :presentation="presentation"/)
   // API 与常量契约。
   assert.match(api, /\/companion\/memories/)
   assert.match(constants, /MOOD_AXES/)
@@ -170,10 +168,10 @@ test('feed success path refetches the authoritative home so mood and relationshi
   assert.match(page, /const authoritative = await getCompanionHome\(\)/)
   assert.match(page, /home\.value = adoptAuthoritativeHome\(home\.value, authoritative\)/)
   assert.match(utils, /export function adoptAuthoritativeHome\(previous, authoritative\)/)
-  // 情绪与关系面板直接由 home.mood / home.relationship 驱动，快照替换即面板更新。
-  assert.match(page, /:mood="home\.mood"/)
-  assert.match(page, /:relationship="home\.relationship"/)
-  assert.match(mood, /mood\.summary/)
+  // R11 两面板消费同一个权威快照的 presentation；不再独立解释数值。
+  assert.match(page, /CompanionMoodPanel :presentation="presentation"/)
+  assert.match(page, /CompanionRelationshipPanel :presentation="presentation"/)
+  assert.match(mood, /presentation\.disposition\.mood/)
   assert.match(relationship, /recentFeedback/)
 })
 

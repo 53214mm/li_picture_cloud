@@ -1,3 +1,4 @@
+import { mapCompanionDisposition, numericCompanionAxis as numericAxis } from './companionDisposition.js'
 import { resolveCompanionVisual } from '../components/companion/body/companionVisual.js'
 
 // Presentation policy, not new domain rules. Keep numeric mood tie order aligned
@@ -5,12 +6,6 @@ import { resolveCompanionVisual } from '../components/companion/body/companionVi
 const moodAxes = ['energy', 'joy', 'loneliness', 'inspiration', 'irritation']
 const moodAffects = ['energetic', 'cheerful', 'lonely', 'inspired', 'irritated']
 const relationshipAxes = ['familiarity', 'trust', 'closeness', 'tacit', 'recentFeedback']
-
-function numericAxis(value, min = 0) {
-  if (typeof value !== 'number' && !(typeof value === 'string' && /^\d+(\.\d+)?$|^-\d+(\.\d+)?$/.test(value))) return null
-  const number = Number(value)
-  return Number.isFinite(number) && number >= min && number <= 100 ? number : null
-}
 
 function affectFor(mood) {
   const values = moodAxes.map(axis => numericAxis(mood?.[axis]))
@@ -70,16 +65,21 @@ export function mapCompanionPresentation(input = {}) {
       : chat.phase === 'waiting' ? 'thinking'
         : feed.pending === true ? 'feeding'
           : proposal.busy === true ? 'acknowledging' : 'idle'
+  const freshness = ready ? fresh ? 'fresh' : 'stale' : 'unknown'
+  const affect = fresh ? affectFor(home.mood) : 'neutral'
+  const rapport = fresh ? rapportFor(home.relationship) : 'neutral'
+  const disposition = mapCompanionDisposition(home, { availability, freshness, affect, rapport })
   return Object.freeze({
     version: 1,
     availability,
     companionId: ready ? id : null,
     lifeStage,
-    freshness: ready ? fresh ? 'fresh' : 'stale' : 'unknown',
+    freshness,
     activity,
     attention: ready && proposal.status === 'PENDING' && proposal.loading !== true && proposal.error !== true ? 'proposal' : 'none',
-    affect: fresh ? affectFor(home.mood) : 'neutral',
-    rapport: fresh ? rapportFor(home.relationship) : 'neutral',
+    affect,
+    rapport,
+    disposition,
     issues: Object.freeze(issues),
     appearance: Object.freeze({ assetKey: visual.assetKey, visualStage: visual.visualStage, allowIdle: ready && visual.allowIdle })
   })
