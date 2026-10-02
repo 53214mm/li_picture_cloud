@@ -14,7 +14,8 @@
     "build": "vite build",
     "check:bundle": "node scripts/check-bundle-size.mjs",
     "test:e2e": "playwright test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:api:e2e": "node scripts/run-api-e2e.mjs"
   },
   "dependencies": {
     "axios": "^1.7.2",
