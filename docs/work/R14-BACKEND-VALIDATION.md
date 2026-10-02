@@ -55,9 +55,13 @@ All directories above are relative to /workspace/shared/nexus-tooling/r14-valida
 
 - R14 remains V3 and requires frontend validation plus existing browser E2E/real API paths; a backend verify pass alone does not complete it
 - Real API/browser E2E uses test,e2e profiles with in-memory H2 fixtures; no MySQL, COS or real AI credentials are needed (external calls are stubbed)
-- Requires isolated Redis 7 at 127.0.0.1:6380, no password, database 15; no Redis runtime is installed or running here
+- Requires isolated Redis 7 at 127.0.0.1:6380, no password, database 15. At the original verify checkpoint Redis was absent; the subsequent R14-API-VALIDATION round prepared official Redis7.2.11 and passed all3 opt-in tests plus the HTTP story. Every test-owned instance is shut down afterward
 - Separate Redis collaboration gate defaults to 127.0.0.1:6379 and is enabled by -Dredis.integration.enabled=true; override redis.port only when intentionally targeting an isolated test Redis
 - Node 22/frontend dependencies, functioning Chromium runtime with permitted IPC, and available localhost ports 18124/backend and 15173/frontend
 - Existing frontend command npm run test:e2e starts the backend through scripts/start-e2e-backend.mjs and the strict-port Vite server; reuseExistingServer is false
 - Harmless IPv4 localhost socket/bind/listen passed; Unix-domain socket creation returned EPERM.
 - apt-cache reported permission denied on its apt retry configuration; no apt install or retry was attempted
+
+## Subsequent isolated HTTP round
+
+See R14-API-VALIDATION.md for the reusable owner-process runner and actual HTTP evidence. The original 722/718/4 counts above remain the original full verify result; additional Redis 3/3 and HTTP stages are separate runs. Browser acceptance remains pending.

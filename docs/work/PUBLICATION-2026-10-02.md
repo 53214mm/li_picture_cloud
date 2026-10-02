@@ -72,3 +72,16 @@
 最终源代码独立审核与281/281、lint、双模式build/budget通过；111项浏览器仅收集。额外完成后端clean verify（718通过、4预期跳过、0失败/错误），打包与原覆盖率门通过；后端源码和POM未改，命令及边界见R14-BACKEND-VALIDATION。当前浏览器IPC实际权限拒绝，R14 V3及此前pending验收仍未完成。
 
 远端对象经只读fetch核对tree与父链后，随后创建包含本节的docs-only状态提交，再以force=false发布。源状态提交保留在 `nexus/checkpoint-r14-local-state`；源增量bundle必须已有基线 `ff09c2fed69393e69e764ddb817e95ba95ea6188`，不作为独立全量恢复包。活动分支仅在干净且完整tree一致时对齐发布父链。状态提交仍通过git历史定位，不自引用自己的SHA；恢复和继续开发首选远端长期分支，不使用源备份父链。
+
+
+## R14 Redis / HTTP 验证检查点（2026-10-02）
+
+从已发布 `377ab3deecb05fb8779bf49b7fba643de36c5bbe` 继续；本轮只增加测试入口、测试及文档，产品和后端源码/POM未改。
+
+| 原本地源 SHA | 对应远端 commit 对象 | 完全相同的 tree SHA |
+|---|---|---|
+| `a0a4922cb122bce016a424c1bc42ba2871df411f` | `5d0aef4039be57d816637394a33e9bea3404c284` | `376dff18c26989216a75b50227455a7c3531d10e` |
+
+源代码review与独立真实HTTP复跑通过：8个业务阶段、4项纯协议（TAP13包含父容器）；Redis3/3另有独立复跑，前端284/284、lint、双模式build/budget通过。111/142浏览器仅收集，完整验收pending。只读fetch已核对上述远端对象的tree与父链，随后创建docs-only提交，并仅force=false快进专用分支。
+
+源状态检查点使用独立 `nexus/checkpoint-r14-api-local-state`，不覆盖上一轮空间增量源检查点；增量bundle需已发布基线377ab3，不是完整备份。活动工作区仅在干净且完整tree相同后对齐远端，恢复首选已发布长期分支。docs-only状态提交仍由git历史定位，避免内容自引用SHA。
