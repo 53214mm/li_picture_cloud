@@ -45,3 +45,16 @@
 源提交已独立审核：Node22全前端173/173、lint、功能开/关build/budget通过；64项浏览器仅收集，R11/R12/R13未验收项保留。GitHub创建结果与只读fetch再次确认上述tree/父链，之后只快进 `nexus/mainline-r11`；不得推其他分支、创建PR、merge/deploy。
 
 状态证据为随后追加的 docs-only 提交（含本节）；发布后源状态提交保存在本地专用 `nexus/checkpoint-r13-local-state`，活动分支按完整tree相同条件对齐远端。状态提交不自引用哈希；通过 `git log -- STATE.md docs/work/PUBLICATION-2026-10-02.md` 可查到其已发布版本。新的恢复应优先clone远端长期分支，源备份只用于核查，不能混入后续主线父链。
+
+
+## R16 后续检查点（2026-10-02）
+
+从 R13 已发布 `7da6afbeaa05059f6c9c41ffcfea7f2e2b079000` 继续，仅发布原专用分支。保留相同 tree、原提交 message 和顺序；connector 的 author/date 差异继续产生不同 SHA。
+
+| 原本地源 SHA | 对应远端 commit 对象 | 完全相同的 tree SHA |
+|---|---|---|
+| `ff634e4addc2e44e14a7ae9bf9516608f90b1e1a` | `6f81e7286004d766169855ed953bf7422f895bcf` | `3343d313f4c269d761f3b7cf5a64860007b010d9` |
+
+源代码独立review通过：204/204、lint、功能开/关build/budget及分块检查通过；70项前端模拟和11项真实后端故事线仅收集。上述远端对象已由只读fetch核对完整tree与父链。随后创建包含本节的docs-only状态提交，再以force=false快进长期分支；不会创建PR、merge/deploy或触碰其他分支。
+
+本轮源状态提交保存在本地专用 `nexus/checkpoint-r16-local-state`，并保留增量bundle作作者/时间/SHA核查。增量bundle需要已发布基线 `7da6afbeaa05059f6c9c41ffcfea7f2e2b079000`，不是独立完整备份。状态提交通过 `git log -- STATE.md docs/work/PUBLICATION-2026-10-02.md` 定位，不在自己的内容中自引用。活动分支在工作区干净、完整tree相同后对齐远端；新的恢复首选远端主线，不从源检查点继续开发。
