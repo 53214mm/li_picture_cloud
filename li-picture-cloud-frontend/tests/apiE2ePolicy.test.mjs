@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { API_E2E_OPT_IN, API_E2E_URL, backendArguments, fixtureEnvironment } from '../scripts/lib/api-e2e-policy.mjs'
+import { API_E2E_OPT_IN, API_E2E_URL, apiE2eFiles, backendArguments, fixtureEnvironment } from '../scripts/lib/api-e2e-policy.mjs'
 
 test('API fixture environment excludes inherited credentials and runtime overrides', () => {
   const source = {
@@ -41,4 +41,22 @@ test('API fixture rejects database names that can inject H2 connection options',
   for (const name of ['production', 'lpc_api_0123456789abcdef;INIT=RUNSCRIPT', '', null]) {
     assert.throws(() => backendArguments('cp', name), /Invalid fixture database name/)
   }
+})
+
+
+test('API suite inventory is deterministic and includes each real business story', () => {
+  assert.deepEqual(apiE2eFiles([
+    'story.api.js', 'http-fixture.js', 'recipe.api.js', 'protocol.api.js', 'gateway.api.js', 'companion.api.js'
+  ]), [
+    'e2e/api/companion.api.js', 'e2e/api/gateway.api.js', 'e2e/api/protocol.api.js',
+    'e2e/api/recipe.api.js', 'e2e/api/story.api.js'
+  ])
+})
+
+test('API suite rejects every missing required story rather than reporting a partial green', () => {
+  const names = ['companion.api.js', 'gateway.api.js', 'protocol.api.js', 'recipe.api.js', 'story.api.js']
+  for (const missing of names) {
+    assert.throws(() => apiE2eFiles(names.filter(name => name !== missing)), { message: `Required API check is missing: ${missing}` })
+  }
+  assert.throws(() => apiE2eFiles(['protocol.api.js']), /Required API check is missing/)
 })

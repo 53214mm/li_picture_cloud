@@ -153,40 +153,43 @@ public record RecipeExecution(
                 .collect(java.util.stream.Collectors.joining(",", "[", "]"));
     }
 
-    /** 确认执行并产生真实创作任务（DRY_RUN/PENDING_CONFIRM → EXECUTED，终态）。 */
+    /** 确认执行并产生真实创作任务（DRY_RUN/PENDING_CONFIRM → EXECUTED，终态）；保留原记录创建时间。 */
     public RecipeExecution complete(long taskId, String matchedSnapshot, String quoteSnapshot,
                                     Instant now) {
         requireConfirmable("complete");
+        Objects.requireNonNull(now, "now");
         return new RecipeExecution(id, recipeId, recipeVersion, subjectId,
                 RecipeExecutionStatus.EXECUTED, triggeredTime,
                 checkText(matchedSnapshot, MAX_JSON_CODE_POINTS, "matchedJson"),
                 checkText(quoteSnapshot, MAX_QUOTE_CODE_POINTS, "quoteJson"),
                 sourcePictureIdsJson, opportunityKey,
-                requirePositiveTaskId(taskId), null, Objects.requireNonNull(now, "now"));
+                requirePositiveTaskId(taskId), null, createdTime);
     }
 
     /** 执行失败（DRY_RUN/PENDING_CONFIRM → FAILED，终态），只携带安全错误码。 */
     public RecipeExecution fail(String errorCode, String matchedSnapshot, String quoteSnapshot,
                                 Instant now) {
         requireConfirmable("fail");
+        Objects.requireNonNull(now, "now");
         return new RecipeExecution(id, recipeId, recipeVersion, subjectId,
                 RecipeExecutionStatus.FAILED, triggeredTime,
                 checkText(matchedSnapshot, MAX_JSON_CODE_POINTS, "matchedJson"),
                 checkText(quoteSnapshot, MAX_QUOTE_CODE_POINTS, "quoteJson"),
                 sourcePictureIdsJson, opportunityKey,
-                null, checkErrorCode(errorCode), Objects.requireNonNull(now, "now"));
+                null, checkErrorCode(errorCode), createdTime);
     }
 
     /** 条件未命中/守门拒绝（DRY_RUN/PENDING_CONFIRM → REJECTED，终态）。 */
     public RecipeExecution reject(String errorCode, String matchedSnapshot, String quoteSnapshot,
                                   Instant now) {
         requireConfirmable("reject");
+        Objects.requireNonNull(now, "now");
         return new RecipeExecution(id, recipeId, recipeVersion, subjectId,
                 RecipeExecutionStatus.REJECTED, triggeredTime,
                 checkText(matchedSnapshot, MAX_JSON_CODE_POINTS, "matchedJson"),
                 checkText(quoteSnapshot, MAX_QUOTE_CODE_POINTS, "quoteJson"),
                 sourcePictureIdsJson, opportunityKey,
-                null, checkErrorCode(errorCode), Objects.requireNonNull(now, "now"));
+                null, checkErrorCode(errorCode), createdTime);
     }
 
     public boolean isTerminal() {

@@ -1,6 +1,8 @@
 package com.li.lipicturecloud.domain.recipe;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.Instant;
 import java.util.List;
@@ -76,8 +78,58 @@ class RecipeExecutionTest {
         assertThat(rejected.safeErrorCode()).isEqualTo("CONDITION_UNMATCHED");
     }
 
+    private static RecipeExecution confirmable(RecipeExecutionStatus status) {
+        return (status == RecipeExecutionStatus.DRY_RUN ? dryRun()
+                : RecipeExecution.pending(9L, 1, 7L, TRIGGERED, "{}", "{}", SNAPSHOT,
+                        "WEEKLY_REVIEW-2026-W33", NOW)).withId(5L);
+    }
+
+    private static void assertOriginalIdentityAndTimes(RecipeExecution before, RecipeExecution after) {
+        assertThat(after.id()).isEqualTo(before.id());
+        assertThat(after.recipeId()).isEqualTo(before.recipeId());
+        assertThat(after.recipeVersion()).isEqualTo(before.recipeVersion());
+        assertThat(after.subjectId()).isEqualTo(before.subjectId());
+        assertThat(after.sourcePictureIdsJson()).isEqualTo(before.sourcePictureIdsJson());
+        assertThat(after.opportunityKey()).isEqualTo(before.opportunityKey());
+        assertThat(after.triggeredTime()).isEqualTo(TRIGGERED);
+        assertThat(after.createdTime()).isEqualTo(NOW);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = RecipeExecutionStatus.class, names = {"DRY_RUN", "PENDING_CONFIRM"})
+    void completionPreservesOriginalCreationTime(RecipeExecutionStatus status) {
+        RecipeExecution before = confirmable(status);
+        RecipeExecution after = before.complete(102L, "{}", "{}", NOW.plusSeconds(3600));
+        assertOriginalIdentityAndTimes(before, after);
+        assertThat(after.status()).isEqualTo(RecipeExecutionStatus.EXECUTED);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = RecipeExecutionStatus.class, names = {"DRY_RUN", "PENDING_CONFIRM"})
+    void failurePreservesOriginalCreationTime(RecipeExecutionStatus status) {
+        RecipeExecution before = confirmable(status);
+        RecipeExecution after = before.fail("UPSTREAM_TIMEOUT", "{}", "{}", NOW.plusSeconds(3600));
+        assertOriginalIdentityAndTimes(before, after);
+        assertThat(after.status()).isEqualTo(RecipeExecutionStatus.FAILED);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = RecipeExecutionStatus.class, names = {"DRY_RUN", "PENDING_CONFIRM"})
+    void rejectionPreservesOriginalCreationTime(RecipeExecutionStatus status) {
+        RecipeExecution before = confirmable(status);
+        RecipeExecution after = before.reject("CONDITION_UNMATCHED", "{}", "{}", NOW.plusSeconds(3600));
+        assertOriginalIdentityAndTimes(before, after);
+        assertThat(after.status()).isEqualTo(RecipeExecutionStatus.REJECTED);
+    }
+
     @Test
     void rejectsInvalidTransitionsAndPayloads() {
+        assertThatThrownBy(() -> dryRun().complete(102L, "{}", "{}", null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> dryRun().fail("UPSTREAM", "{}", "{}", null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> dryRun().reject("CONDITION", "{}", "{}", null))
+                .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> dryRun().complete(0L, "{}", "{}", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> dryRun().fail("bad code!", "{}", "{}", NOW))

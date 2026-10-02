@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
-import { API_E2E_OPT_IN, API_E2E_URL, backendArguments, fixtureEnvironment } from './lib/api-e2e-policy.mjs'
+import { API_E2E_OPT_IN, API_E2E_URL, apiE2eFiles, backendArguments, fixtureEnvironment } from './lib/api-e2e-policy.mjs'
 
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repository = resolve(frontend, '..')
@@ -15,6 +15,7 @@ const children = []
 let stopping = false
 let stopPromise
 let output
+let testFiles = []
 const startedAt = new Date().toISOString()
 const portChecks = []
 
@@ -101,6 +102,8 @@ try {
   }
   output = await mkdtemp(join(tmpdir(), 'lpc-api-e2e-'))
   console.log(`API-only fixture evidence: ${output}`)
+  // A partial checkout must fail before any backend or test mutations start.
+  testFiles = apiE2eFiles(await readdir(join(frontend, 'e2e/api')))
   const env = fixtureEnvironment(process.env, javaHome, mavenHome)
   await ensureUnused(6380)
   await ensureUnused(18124)
@@ -126,9 +129,7 @@ try {
     return response?.ok === true
   }, 180_000)
   if (redis.closed) throw new Error('Owned Redis exited before API checks')
-  const files = (await readdir(join(frontend, 'e2e/api'))).filter(name => name.endsWith('.api.js')).map(name => `e2e/api/${name}`)
-  if (!files.includes('e2e/api/companion.api.js')) throw new Error('Required real Companion HTTP checks are missing')
-  const checks = launch('checks', process.execPath, ['--test', '--test-concurrency=1', ...files], {
+  const checks = launch('checks', process.execPath, ['--test', '--test-concurrency=1', ...testFiles], {
     ...env, LPC_API_E2E: API_E2E_OPT_IN, LPC_API_E2E_BASE_URL: API_E2E_URL
   }, frontend)
   await Promise.race([checks.done, delay(120_000, undefined, { ref: false }).then(() => { throw new Error('API checks timed out') })])
@@ -144,7 +145,7 @@ try {
   if (output) await writeFile(join(output, 'run.json'), JSON.stringify({
     startedAt, finishedAt: new Date().toISOString(), api: API_E2E_URL,
     profile: 'test,e2e', fixtures: 'fresh in-memory H2 and owned localhost Redis',
-    portChecks, exitCode: process.exitCode || 0,
+    testFiles, portChecks, exitCode: process.exitCode || 0,
     children: children.map(({ label, child, closed, code, error }) => ({
       label, pid: child.pid, closed, exitCode: code, error: error?.message || null
     }))
