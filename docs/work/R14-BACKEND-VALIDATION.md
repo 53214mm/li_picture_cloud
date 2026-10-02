@@ -65,3 +65,7 @@ All directories above are relative to /workspace/shared/nexus-tooling/r14-valida
 ## Subsequent isolated HTTP round
 
 See R14-API-VALIDATION.md for the reusable owner-process runner and actual HTTP evidence. The original 722/718/4 counts above remain the original full verify result; additional Redis 3/3 and HTTP stages are separate runs. Browser acceptance remains pending.
+
+## Subsequent Recipe timestamp fix verification
+
+The R14 creation HTTP round found and fixed RecipeExecution terminal transitions overwriting createdTime. A new clean verify compiled the modified code and passed 728 tests total: 724 passed, 4 skipped, 0 failures/errors. Original branch gates remain 88.69%/86.42%. Six newly added domain cases failed before the fix and passed afterward. The original 722-run evidence above is preserved separately. See R14-CREATION-API-VALIDATION.md for exact current evidence paths and HTTP replay coverage.

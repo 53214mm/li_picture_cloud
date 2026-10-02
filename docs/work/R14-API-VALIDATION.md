@@ -66,4 +66,8 @@ DB0用于该专项，DB15用于HTTP测试；每次都是自有临时Redis并正�
 - Redis专项原始成功及独立成功在 `/workspace/shared/nexus-tooling/r14-validation/redis-optin/{isolated-success,independent-review}`；原覆盖率及143份报告哈希不变
 - 独立安全探针：已占用端口拒绝且不关闭已有监听，无显式开关时首个HTTP前失败，重定向目标接收0次请求；SIGTERM中断返回130、三个已启动子进程全部关闭，两个端口可在同一调用重新绑定。位于 `/workspace/shared/nexus-tooling/r14-validation/api-independent-review`
 - Node22全前端284/284、lint、双模式build/budget通过，最大390035bytes，CompanionView仅开启时存在；111项重点和142项默认浏览器用例仅收集，HTTP测试没有混入浏览器集
-- 当前应用后端源码和POM仍未改；本轮没有将专项或HTTP执行数据追加到原JaCoCo全量结果。独立review通过，浏览器和V3整体状态仍pending
+- 该HTTP首轮未改应用后端源码和POM，未将专项或HTTP数据追加到原JaCoCo全量结果。独立review通过，浏览器和V3整体状态仍pending
+
+## 后续扩展
+
+从7953141开始的模型网关/Story/Recipe扩展与Recipe创建时间一致性修复，见R14-CREATION-API-VALIDATION。当前入口共27个真实HTTP阶段，4项协议加4个父容器，TAP35；本文8阶段/13项及722项verify属于首轮历史证据。
