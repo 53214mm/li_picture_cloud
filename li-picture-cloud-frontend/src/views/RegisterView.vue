@@ -8,7 +8,7 @@
       <form @submit.prevent="handleRegister" class="auth-form">
         <div v-if="error" class="form-error">{{ error }}</div>
         <div v-if="success" class="form-success">
-          注册成功！正在跳转登录…
+          注册成功，正在前往登录页…
         </div>
         <label class="field">
           <span>账号</span>
@@ -48,7 +48,7 @@ const loading = ref(false)
 async function handleRegister() {
   error.value = ''
   if (!form.userAccount || !form.userPassword || !form.checkPassword) {
-    error.value = '请填写所有字段'
+    error.value = '请填写账号、密码和确认密码'
     return
   }
   if (form.userAccount.length < 4) {
@@ -60,7 +60,7 @@ async function handleRegister() {
     return
   }
   if (form.userPassword !== form.checkPassword) {
-    error.value = '两次密码不一致'
+    error.value = '两次输入的密码不一致，请重新输入'
     return
   }
   loading.value = true

@@ -70,7 +70,7 @@ test('fusion panel shows the explicit not-open notice and no model driving UI', 
 
   // 真实多图融合能力未开放：面板明示原因，且没有选图/生成/保存等引导动作。
   assert.match(panel, /data-testid="fusion-unavailable"/)
-  assert.match(panel, /真实多图融合能力尚未开放/)
+  assert.match(panel, /多图融合暂未开放/)
   assert.doesNotMatch(panel, /开始融合创作/)
   assert.doesNotMatch(panel, /生成融合图/)
   assert.doesNotMatch(panel, /createFusion/)

@@ -33,10 +33,10 @@ test('shows the explicit fusion not-open notice and never calls the generator', 
       await expect(page.getByText('光点', { exact: true })).toBeVisible()
     }
 
-    // 面板明示"真实多图融合能力尚未开放"，且不提供任何创建/生成/保存入口。
-    await expect(page.getByText('把多张图片融合成一张新作品')).toBeVisible()
+    // 面板明示"多图融合暂未开放"，且不提供任何创建/生成/保存入口。
+    await expect(page.getByRole('heading', { name: '多图融合', exact: true })).toBeVisible()
     await expect(page.getByTestId('fusion-unavailable')).toBeVisible()
-    await expect(page.getByText(/真实多图融合能力尚未开放/)).toBeVisible()
+    await expect(page.getByText(/多图融合暂未开放/)).toBeVisible()
     await expect(page.getByRole('button', { name: '开始融合创作' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: '生成融合图' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: '保存到图库' })).toHaveCount(0)

@@ -188,7 +188,7 @@ test('proposal action is bounded by its request and suppressed proposal never im
   await allSurfaces(page, 'activity', 'idle')
   await allSurfaces(page, 'attention', 'none')
   await allSurfaces(page, 'affect', 'cheerful')
-  await expect(page.getByText('伙伴安静了，这次提议已被止住。')).toBeVisible()
+  await expect(page.getByText('已停止这次提议。')).toBeVisible()
   expect(state.errors).toEqual([])
 })
 
@@ -235,7 +235,7 @@ test('Feed refresh cannot resurrect a proposal after a concurrent scold has comp
   feedGate.release()
   await expect(page.getByRole('button', { name: '再选一张' })).toBeEnabled()
   actionGate.release()
-  await expect(page.getByText('伙伴安静了，这次提议已被止住。')).toBeVisible()
+  await expect(page.getByText('已停止这次提议。')).toBeVisible()
   readGate.release()
   if (reads) await expect.poll(() => readReturned).toBe(true)
   await allSurfaces(page, 'attention', 'none')

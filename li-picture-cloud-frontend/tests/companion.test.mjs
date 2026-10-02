@@ -330,8 +330,8 @@ test('proposal panel gates by contract and supports accept ignore scold', async 
   assert.match(panel, /SIMILAR_STORY/)
   // 契约保存后立即按新契约重新评估提案；反馈用正向语气而非错误样式。
   assert.match(panel, /await loadProposal\(\)/)
-  assert.match(panel, /伙伴安静了，这次提议已被止住。/)
-  assert.match(panel, /已忽略，伙伴不会再提这件事。/)
+  assert.match(panel, /已停止这次提议。/)
+  assert.match(panel, /已忽略这次提议。/)
   // 喂养成功后通过 refreshKey 通知面板刷新。
   assert.match(panel, /refreshKey/)
   assert.match(memory, /refreshKey/)

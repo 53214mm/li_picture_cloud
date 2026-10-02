@@ -20,7 +20,7 @@
       <template v-else>
         <label class="contract-row">
           <input v-model="contractDraft.active" type="checkbox" :disabled="contractSaving" />
-          <span>允许伙伴主动提议（默认关闭；契约优先于伙伴性格）</span>
+          <span>允许伙伴主动提议（默认关闭，伙伴性格不会改变这些限制）</span>
         </label>
         <div class="contract-row contract-times">
           <label>安静时段
@@ -29,7 +29,7 @@
             <input v-model="contractDraft.quietEnd" type="time" :disabled="contractSaving" />
           </label>
         </div>
-        <label class="contract-row">提案频率上限（小时，0 = 完全关闭）
+        <label class="contract-row">提议最短间隔（小时，0 表示关闭主动提议）
           <input v-model.number="contractDraft.maxFrequencyHours" type="number" min="0" max="720"
                  :disabled="contractSaving" />
         </label>
@@ -46,9 +46,9 @@
       <p>{{ loadError }}</p>
       <button class="btn btn-outline" type="button" @click="loadProposal">重试</button>
     </div>
-    <div v-else-if="loading" class="proposal-state">伙伴正在想有没有话想对你说…</div>
+    <div v-else-if="loading" class="proposal-state">正在加载伙伴提议…</div>
     <div v-else-if="!proposal" class="proposal-state">
-      伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。
+      目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。
     </div>
     <div v-else class="proposal-body">
       <CompanionMessageBubble :message="proposal.content" />
@@ -197,11 +197,11 @@ async function react(kind) {
         : await scoldCompanionProposal(proposal.value.id)
     proposal.value = null
     if (kind === 'scold' && updated?.status === 'SUPPRESSED') {
-      actionNoticeText.value = '伙伴安静了，这次提议已被止住。'
+      actionNoticeText.value = '已停止这次提议。'
     } else if (kind === 'accept' && updated?.status === 'DONE') {
-      actionNoticeText.value = '好呀，伙伴已经记下了。'
+      actionNoticeText.value = '已接受这次提议。'
     } else if (kind === 'ignore' && updated?.status === 'IGNORED') {
-      actionNoticeText.value = '已忽略，伙伴不会再提这件事。'
+      actionNoticeText.value = '已忽略这次提议。'
     }
   } catch (error) {
     actionError.value = error.message || '操作失败，请稍后重试。'

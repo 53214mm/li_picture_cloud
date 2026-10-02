@@ -2,19 +2,18 @@
   <section class="emoji-card" aria-labelledby="emoji-title">
     <header>
       <div>
-        <span class="eyebrow">表情草稿</span>
-        <h2 id="emoji-title">让伙伴从图片里挑一句俏皮话</h2>
+        <h2 id="emoji-title">文字表情草稿</h2>
       </div>
     </header>
 
     <div v-if="error" class="panel-error" role="alert">{{ error }}</div>
 
     <p class="panel-notice" role="status" data-testid="emoji-unavailable">
-      文字表情草稿暂未开放：生成候选需要先对授权图片做视觉理解，提取其中的人物、动作、
-      表情或物体元素。在视觉理解能力落地前不会生成候选，也不会调用任何模型。
+      文字表情草稿暂未开放。此功能需要先进行视觉理解，目前不会生成候选或调用模型。
     </p>
 
-    <ul v-if="tasks.length" class="emoji-list" data-testid="emoji-list">
+    <p v-if="loading" class="empty-state" role="status">正在加载作品记录…</p>
+    <ul v-else-if="tasks.length" class="emoji-list" data-testid="emoji-list">
       <li v-for="task in tasks" :key="task.id" class="emoji-row" :data-status="task.status">
         <div class="emoji-main">
           <span class="emoji-status" :class="{ done: task.status === 'SAVED' }">
@@ -38,7 +37,7 @@
         </div>
       </li>
     </ul>
-    <p v-else class="empty-state">还没有表情草稿。视觉理解能力开放后，选一张图片即可生成第一批候选。</p>
+    <p v-else-if="!error" class="empty-state">暂无表情草稿记录。</p>
   </section>
 </template>
 
@@ -53,6 +52,7 @@ const props = defineProps({
 })
 
 const tasks = ref([])
+const loading = ref(true)
 const candidates = reactive({})
 const error = ref('')
 
@@ -60,6 +60,7 @@ onMounted(loadTasks)
 watch(() => props.refreshKey, loadTasks)
 
 async function loadTasks() {
+  loading.value = true
   try {
     tasks.value = ((await listEmojiTasks()) ?? []).filter(task => task.kind === 'EMOJI_DRAFT')
     for (const task of tasks.value) {
@@ -70,6 +71,8 @@ async function loadTasks() {
     error.value = ''
   } catch (failure) {
     error.value = extractMessage(failure, '表情草稿加载失败')
+  } finally {
+    loading.value = false
   }
 }
 

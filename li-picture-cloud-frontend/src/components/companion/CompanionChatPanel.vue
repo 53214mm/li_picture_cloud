@@ -15,9 +15,9 @@
       <p>{{ state.loadError }}</p>
       <button class="btn btn-outline" type="button" @click="chat.reload">重试</button>
     </div>
-    <div v-else-if="state.loading && !state.messages.length" class="chat-state">正在读取我们的对话…</div>
+    <div v-else-if="state.loading && !state.messages.length" class="chat-state">正在加载对话记录…</div>
     <div v-else-if="!state.messages.length" class="chat-state">
-      伙伴还在这里。你可以问问它记得什么，或者聊聊今天想喂它哪张图片。
+      还没有对话记录。可以聊聊图片，或问问伙伴记得什么。
     </div>
     <div v-else ref="scroller" class="chat-scroll" role="log" aria-label="伙伴对话记录" tabindex="0">
       <div class="chat-list">
@@ -30,7 +30,7 @@
             <p class="message-bubble user-bubble">{{ message.content }}</p>
           </div>
         </template>
-        <div v-if="sending" class="chat-state streaming" role="status">伙伴正在想怎么回…</div>
+        <div v-if="sending" class="chat-state streaming" role="status">正在处理这条消息…</div>
       </div>
     </div>
 

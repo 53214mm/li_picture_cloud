@@ -86,7 +86,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByTestId('relationship-value-recentFeedback')).toHaveText('5')
   // 站内对话与主动提案面板：Demo 档聊天不调模型，契约默认关闭所以没有主动提案。
   await expect(page.getByText('和伙伴说说话')).toBeVisible()
-  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。')).toBeVisible()
+  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。')).toBeVisible()
   // Demo 档对话：发送一条消息收到确定性回复，用户气泡与伙伴气泡都在。
   await page.getByLabel('对伙伴说的话').fill('你好呀')
   await page.getByRole('button', { name: '发送' }).click()
@@ -252,7 +252,7 @@ test('enabling the contract produces a gated weekly review proposal', async ({ p
   await expect(page).toHaveURL(/\/companion$/)
 
   // 默认契约关闭：没有主动提案。
-  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。'))
     .toBeVisible()
 
   // 开启契约：全天允许（起止相同 = 不设安静时段），频率保持 72 小时。
@@ -268,14 +268,14 @@ test('enabling the contract produces a gated weekly review proposal', async ({ p
 
   // 接受提案 → 终态并给出正向反馈，提案消失。
   await page.getByTestId('proposal-accept').click()
-  await expect(page.getByText('好呀，伙伴已经记下了。')).toBeVisible()
-  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+  await expect(page.getByText('已接受这次提议。')).toBeVisible()
+  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。'))
     .toBeVisible()
 
   // 关闭契约后刷新，保持关闭。
   await page.getByRole('button', { name: '主动设置' }).click()
   await page.getByRole('checkbox', { name: /允许伙伴主动提议/ }).uncheck()
   await page.getByRole('button', { name: '保存主动设置' }).click()
-  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。'))
     .toBeVisible()
 })

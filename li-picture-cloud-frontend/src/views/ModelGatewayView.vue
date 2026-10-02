@@ -3,19 +3,20 @@
     <div class="container">
       <header class="gateway-hero">
         <div>
-          <span class="eyebrow">模型与 MCP 控制中心</span>
-          <h1>你的模型连接，由你决定</h1>
-          <p>在这里管理 API Key、模型连接与任务路由。明文密钥只在提交时出现一次，服务端只保存加密密文；BYOK 调用失败绝不静默改扣平台钱包。</p>
+          <h1>模型连接</h1>
+          <p>添加模型连接，并为不同任务配置使用的模型。</p>
         </div>
       </header>
 
       <p v-if="error" class="page-error" role="alert">{{ error }}</p>
+      <p v-if="listStatus === 'loading'" class="read-state" role="status">正在加载模型连接…</p>
+      <p v-else-if="listStatus === 'error'" class="page-error" role="alert">{{ listError }}</p>
 
       <section class="gateway-card" aria-labelledby="credential-title">
         <header>
           <div>
-            <span class="eyebrow">凭据保险库</span>
-            <h2 id="credential-title">API Key 加密存放</h2>
+            <h2 id="credential-title">API Key</h2>
+            <p class="section-helper">保存 API Key 后，可将它绑定到同一供应商的连接。密钥会加密保存，保存后仅显示尾号。</p>
           </div>
         </header>
         <form class="credential-form" @submit.prevent="submitCredential">
@@ -33,27 +34,31 @@
                    placeholder="sk-…">
           </label>
           <button class="btn" type="submit" :disabled="credentialBusy">
-            {{ credentialBusy ? '正在加密保存…' : '保存凭据' }}
+            {{ credentialBusy ? '正在保存…' : '保存 API Key' }}
           </button>
         </form>
         <ul v-if="credentials.length" class="credential-list" data-testid="credential-list">
           <li v-for="credential in credentials" :key="credential.id">
             <span class="credential-provider">{{ providerLabel(credential.provider) }}</span>
             <code>尾号 {{ credential.tail4 }}</code>
-            <span class="credential-meta">{{ credential.algorithm }} · 版本 {{ credential.revision }}</span>
+            <details class="credential-meta">
+              <summary>存储详情</summary>
+              <span>加密算法 {{ credential.algorithm }} · 版本 {{ credential.revision }}</span>
+            </details>
             <button class="btn btn-sm btn-outline" type="button"
                     :disabled="credentialBusy"
                     @click="removeCredential(credential.id)">删除</button>
           </li>
         </ul>
-        <p v-else class="empty-state">还没有保存凭据。添加后，连接才能绑定它。</p>
+        <p v-else-if="listStatus === 'ready'" class="empty-state">还没有 API Key。填写供应商和密钥后保存。</p>
+        <p v-if="credentials.length" class="section-note">删除 API Key 后，仍绑定它的连接将无法调用。</p>
       </section>
 
       <section class="gateway-card" aria-labelledby="connection-title">
         <header>
           <div>
-            <span class="eyebrow">模型连接</span>
-            <h2 id="connection-title">HTTPS 端点 + 平台白名单</h2>
+            <h2 id="connection-title">连接配置</h2>
+            <p class="section-helper">使用平台白名单内的 HTTPS 端点。连接绑定同一供应商的 API Key 后才能启用。</p>
           </div>
         </header>
         <form class="connection-form" @submit.prevent="submitConnection">
@@ -80,7 +85,7 @@
                    placeholder="deepseek-chat">
           </label>
           <label>
-            <span>绑定凭据（可选）</span>
+            <span>绑定 API Key（可选）</span>
             <select v-model="connectionForm.credentialId">
               <option :value="null">暂不绑定</option>
               <option v-for="credential in credentials" :key="credential.id" :value="credential.id">
@@ -99,8 +104,12 @@
               <span class="connection-endpoint">{{ connection.endpointUri }}</span>
               <span class="connection-meta">
                 {{ providerLabel(connection.provider) }} / {{ connection.modelCode }}
-                · {{ connection.enabled ? '已启用' : '已停用' }} · 版本 {{ connection.revision }}
+                · {{ connection.enabled ? '已启用' : '已停用' }}
               </span>
+              <details class="connection-meta">
+                <summary>连接详情</summary>
+                <span>版本 {{ connection.revision }}</span>
+              </details>
               <span v-if="connection.probeResult" class="probe-result"
                     :class="{ failed: !connection.probeResult.reachable }">
                 {{ probeLabel(connection.probeResult) }}
@@ -120,26 +129,26 @@
               <button class="btn btn-sm btn-outline" type="button"
                       :disabled="!connection.enabled || probingId === connection.id"
                       @click="probeConnection(connection)">
-                {{ probingId === connection.id ? '探测中…' : '测试连接' }}
+                {{ probingId === connection.id ? '正在测试…' : '测试连接' }}
               </button>
               <button class="btn btn-sm btn-outline" type="button"
-                      @click="rotateCredentialFor(connection)">轮换凭据</button>
+                      @click="rotateCredentialFor(connection)">更换 API Key</button>
               <button class="btn btn-sm btn-danger-outline" type="button"
                       @click="removeConnection(connection.id)">删除</button>
             </div>
           </li>
         </ul>
-        <p v-else class="empty-state">还没有模型连接。添加连接后才能启用与测试。</p>
+        <p v-else-if="listStatus === 'ready'" class="empty-state">还没有模型连接。填写端点和模型信息，添加后可启用并测试。</p>
 
-        <div v-if="rotating" class="rotate-panel" role="form" aria-label="轮换凭据">
-          <p>为「{{ rotating.displayName }}」轮换凭据：新密钥加密保存后立即绑定，旧密钥不再使用。</p>
+        <div v-if="rotating" class="rotate-panel" role="form" aria-label="更换 API Key">
+          <p>为「{{ rotating.displayName }}」保存并绑定新 API Key，成功后此连接将使用新密钥。旧密钥仍会保留，其他连接不受影响。</p>
           <label>
             <span>新 API Key</span>
             <input v-model="rotateForm.apiKey" type="password" autocomplete="off" required>
           </label>
           <div class="rotate-actions">
             <button class="btn btn-sm" type="button" :disabled="connectionBusy"
-                    @click="confirmRotate">确认轮换</button>
+                    @click="confirmRotate">确认更换</button>
             <button class="btn btn-sm btn-outline" type="button" @click="rotating = null">取消</button>
           </div>
         </div>
@@ -148,14 +157,14 @@
       <section class="gateway-card" aria-labelledby="routing-title">
         <header>
           <div>
-            <span class="eyebrow">任务路由</span>
-            <h2 id="routing-title">每个任务绑定一条连接</h2>
+            <h2 id="routing-title">任务模型</h2>
+            <p class="section-helper">为每类任务选择要使用的连接。</p>
           </div>
         </header>
-        <ul v-if="MODEL_TASKS.length" class="routing-list">
+        <ul v-if="hasLoadedLists && MODEL_TASKS.length" class="routing-list">
           <li v-for="task in MODEL_TASKS" :key="task.code" class="routing-row">
             <span class="routing-task">{{ task.label }}</span>
-            <select :aria-label="`${task.label}路由`"
+            <select :aria-label="`${task.label}使用的连接`"
                     :value="routingSelection(task.code)"
                     :disabled="routingBusy"
                     @change="saveRouting(task.code, $event.target.value)">
@@ -169,17 +178,19 @@
                     @click="clearRouting(task.code)">清除规则</button>
           </li>
         </ul>
-        <p class="routing-note">选择"平台默认"表示显式走平台钱包；一旦绑定用户连接，连接不可用时对话会直接报错，绝不静默回退扣费。</p>
+        <p class="routing-note">选择“平台默认”或清除规则后，将使用平台钱包。使用自带密钥（BYOK）的连接失败时，任务会报错，不会自动使用平台额度。</p>
       </section>
 
       <section v-if="userStore.isAdmin" class="gateway-card" aria-labelledby="mcp-title"
                data-testid="mcp-section">
         <header>
           <div>
-            <span class="eyebrow">MCP 白名单（平台管理）</span>
-            <h2 id="mcp-title">只开放审核过的服务与工具</h2>
+            <h2 id="mcp-title">MCP 白名单</h2>
+            <p class="section-helper">仅平台管理员可管理。只开放已登记并启用的服务和白名单工具，不支持未登记的服务地址。</p>
           </div>
         </header>
+        <p v-if="mcpStatus === 'loading'" class="read-state" role="status">正在加载 MCP 服务…</p>
+        <p v-else-if="mcpStatus === 'error'" class="page-error" role="alert">{{ mcpError }}</p>
         <form class="connection-form" @submit.prevent="submitMcpService">
           <label>
             <span>服务代码</span>
@@ -206,8 +217,8 @@
               <span class="connection-meta">
                 {{ service.endpointUri }} · {{ service.enabled ? '已启用' : '已停用' }}
               </span>
-              <span v-if="!service.tools || service.tools.length === 0" class="mcp-note">
-                未登记任何工具：fail-closed，伙伴能力目录不会出现该服务工具。
+              <span v-if="mcpStatus === 'ready' && (!service.tools || service.tools.length === 0)" class="mcp-note">
+                还没有白名单工具，此服务的工具不会出现在伙伴能力列表中。
               </span>
             </div>
             <div class="connection-actions">
@@ -223,13 +234,13 @@
                   <input v-model="service.newToolName" required maxlength="128"
                          placeholder="例如 generate_image">
                 </label>
-                <button class="btn btn-sm" type="submit" :disabled="mcpBusy">加白名单</button>
+                <button class="btn btn-sm" type="submit" :disabled="mcpBusy">加入白名单</button>
               </form>
               <ul class="mcp-tool-list">
                 <li v-for="tool in service.tools" :key="tool.id" class="mcp-tool-row">
                   <code>{{ tool.toolName }}</code>
                   <span :class="tool.enabled ? 'usage-success' : 'usage-failure'">
-                    {{ tool.enabled ? '启用中' : '已停用' }}
+                    {{ tool.enabled ? '已启用' : '已停用' }}
                   </span>
                   <button class="btn btn-sm btn-outline" type="button" :disabled="mcpBusy"
                           @click="toggleMcpTool(service, tool, !tool.enabled)">
@@ -242,16 +253,17 @@
             </div>
           </li>
         </ul>
-        <p v-else class="empty-state">还没有登记的 MCP 服务。未登记即不可达，任意 URL 不开放。</p>
+        <p v-else-if="mcpStatus === 'ready'" class="empty-state">还没有 MCP 服务。登记服务后，再添加允许使用的工具。</p>
       </section>
 
       <section class="gateway-card" aria-labelledby="usage-title">
         <header>
           <div>
-            <span class="eyebrow">使用记录</span>
-            <h2 id="usage-title">最近调用（只含安全字段）</h2>
+            <h2 id="usage-title">最近调用</h2>
           </div>
         </header>
+        <p v-if="usageStatus === 'loading'" class="read-state" role="status">正在加载调用记录…</p>
+        <p v-else-if="usageStatus === 'error'" class="page-error" role="alert">{{ usageError }}</p>
         <table v-if="usage.length" class="usage-table" data-testid="usage-table">
           <thead>
             <tr>
@@ -277,7 +289,7 @@
             </tr>
           </tbody>
         </table>
-        <p v-else class="empty-state">还没有模型调用记录。测试连接或开启模型对话后会出现在这里。</p>
+        <p v-else-if="usageStatus === 'ready'" class="empty-state">还没有调用记录。测试连接或使用模型后，可在这里查看。</p>
       </section>
     </div>
   </div>
@@ -324,6 +336,13 @@ import {
 
 const userStore = useUserStore()
 const error = ref('')
+const listStatus = ref('loading')
+const hasLoadedLists = ref(false)
+const listError = ref('')
+const usageStatus = ref('loading')
+const usageError = ref('')
+const mcpStatus = ref('loading')
+const mcpError = ref('')
 const credentials = ref([])
 const connections = ref([])
 const routing = ref([])
@@ -350,6 +369,10 @@ const mcpServiceForm = reactive({ code: '', displayName: '', endpointUri: '' })
 onMounted(loadAll)
 
 async function loadAll() {
+  listStatus.value = 'loading'
+  listError.value = ''
+  usageStatus.value = 'loading'
+  usageError.value = ''
   try {
     const tasks = [
       listModelCredentials(),
@@ -365,19 +388,33 @@ async function loadAll() {
     connections.value = connectionList ?? []
     routing.value = routingList ?? []
     usage.value = usageList ?? []
+    hasLoadedLists.value = true
+    listStatus.value = 'ready'
+    usageStatus.value = 'ready'
     error.value = ''
   } catch (failure) {
-    error.value = extractMessage(failure, '加载控制中心失败，请刷新重试')
+    listStatus.value = 'error'
+    usageStatus.value = 'error'
+    listError.value = extractMessage(failure, '模型连接加载失败，请刷新重试')
+    usageError.value = '调用记录未完成加载，请刷新重试'
   }
 }
 
 async function loadMcpServices() {
-  const services = await listMcpServices()
-  const withTools = await Promise.all((services ?? []).map(async service => ({
-    ...service,
-    tools: (await listMcpTools(service.code)) ?? []
-  })))
-  mcpServices.value = withTools
+  mcpStatus.value = 'loading'
+  mcpError.value = ''
+  try {
+    const services = await listMcpServices()
+    const withTools = await Promise.all((services ?? []).map(async service => ({
+      ...service,
+      tools: (await listMcpTools(service.code)) ?? []
+    })))
+    mcpServices.value = withTools
+    mcpStatus.value = 'ready'
+  } catch (failure) {
+    mcpStatus.value = 'error'
+    mcpError.value = extractMessage(failure, 'MCP 服务加载失败，请刷新重试')
+  }
 }
 
 async function submitCredential() {
@@ -390,7 +427,7 @@ async function submitCredential() {
     credentialForm.apiKey = ''
     await loadAll()
   } catch (failure) {
-    error.value = extractMessage(failure, '凭据保存失败')
+    error.value = extractMessage(failure, 'API Key 保存失败')
   } finally {
     credentialBusy.value = false
   }
@@ -402,7 +439,7 @@ async function removeCredential(id) {
     await deleteModelCredential(id)
     await loadAll()
   } catch (failure) {
-    error.value = extractMessage(failure, '凭据删除失败')
+    error.value = extractMessage(failure, 'API Key 删除失败')
   } finally {
     credentialBusy.value = false
   }
@@ -478,7 +515,7 @@ async function confirmRotate() {
     rotateForm.apiKey = ''
     await loadAll()
   } catch (failure) {
-    error.value = extractMessage(failure, '凭据轮换失败')
+    error.value = extractMessage(failure, 'API Key 更换失败')
   } finally {
     connectionBusy.value = false
   }
@@ -509,7 +546,7 @@ async function saveRouting(task, rawValue) {
     await upsertModelRouting(task, connectionId)
     await loadAll()
   } catch (failure) {
-    error.value = extractMessage(failure, '路由保存失败')
+    error.value = extractMessage(failure, '任务模型保存失败')
   } finally {
     routingBusy.value = false
   }
@@ -521,23 +558,27 @@ async function clearRouting(task) {
     await deleteModelRouting(task)
     await loadAll()
   } catch (failure) {
-    error.value = extractMessage(failure, '路由清除失败')
+    error.value = extractMessage(failure, '任务规则清除失败')
   } finally {
     routingBusy.value = false
   }
 }
 
 async function loadUsageOnly() {
+  usageStatus.value = 'loading'
+  usageError.value = ''
   try {
     const response = await listModelUsage()
     usage.value = response ?? []
+    usageStatus.value = 'ready'
   } catch (failure) {
-    error.value = extractMessage(failure, '使用记录加载失败')
+    usageStatus.value = 'error'
+    usageError.value = extractMessage(failure, '调用记录加载失败，请刷新重试')
   }
 }
 
 function probeLabel(result) {
-  return result.reachable ? '探测通过' : `探测失败：${safeErrorLabel(result.safeErrorCode)}`
+  return result.reachable ? '连接测试通过' : `连接测试失败：${safeErrorLabel(result.safeErrorCode)}`
 }
 
 async function submitMcpService() {
@@ -578,7 +619,7 @@ async function submitMcpTool(service) {
     service.newToolName = ''
     await loadMcpServices()
   } catch (failure) {
-    error.value = extractMessage(failure, '白名单新增失败')
+    error.value = extractMessage(failure, '工具加入白名单失败')
   } finally {
     mcpBusy.value = false
   }
@@ -591,7 +632,7 @@ async function toggleMcpTool(service, tool, enabled) {
       : disableMcpTool(service.code, tool.toolName))
     await loadMcpServices()
   } catch (failure) {
-    error.value = extractMessage(failure, '白名单切换失败')
+    error.value = extractMessage(failure, '工具状态更新失败')
   } finally {
     mcpBusy.value = false
   }
@@ -603,7 +644,7 @@ async function removeMcpToolFor(service, tool) {
     await removeMcpTool(service.code, tool.toolName)
     await loadMcpServices()
   } catch (failure) {
-    error.value = extractMessage(failure, '白名单移除失败')
+    error.value = extractMessage(failure, '工具移出白名单失败')
   } finally {
     mcpBusy.value = false
   }
@@ -635,12 +676,16 @@ function extractMessage(failure, fallback) {
 .gateway-hero { padding: 1.25rem 1.5rem; border: 2px solid var(--black); background: var(--black); color: var(--white); }
 .gateway-hero h1 { margin-top: .25rem; }
 .gateway-hero p { margin-top: .5rem; max-width: 46rem; color: var(--gray-300); font-size: .9rem; }
-.eyebrow { color: #075d2a; font-size: .68rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-.gateway-hero .eyebrow { color: #4aa16d; }
 .page-error { padding: .7rem .9rem; border-left: 4px solid var(--red); background: var(--white); color: var(--red); font-size: .85rem; }
 .gateway-card { border: 2px solid var(--black); background: var(--white); }
 .gateway-card > header { padding: 1.25rem 1.5rem; border-bottom: 2px solid var(--black); }
 .gateway-card h2 { font-size: 1.35rem; }
+.section-helper { margin-top: .45rem; color: var(--gray-600); font-size: .85rem; }
+.section-note { margin: 1rem 1.5rem; color: var(--gray-600); font-size: .8rem; }
+.read-state { padding: 1rem 1.5rem; color: var(--gray-600); font-size: .85rem; }
+summary { cursor: pointer; }
+summary:focus-visible { outline: 2px solid var(--black); outline-offset: 3px; }
+.credential-meta[open] summary, .connection-meta[open] summary { margin-bottom: .3rem; }
 .empty-state { padding: 1.5rem; color: var(--gray-600); font-size: .9rem; }
 .credential-form, .connection-form { display: grid; gap: .9rem; padding: 1.25rem 1.5rem; }
 label { display: grid; gap: .3rem; font-size: .82rem; font-weight: 600; }
