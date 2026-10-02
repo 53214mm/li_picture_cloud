@@ -6,6 +6,7 @@
       <div v-if="spaceError" class="form-error" role="alert">
         <p>{{ spaceError }}</p>
         <button type="button" class="btn btn-outline btn-sm" :disabled="loading" @click="loadSpace">重新加载空间</button>
+        <router-link to="/spaces" class="btn btn-outline btn-sm">返回空间列表</router-link>
       </div>
 
       <!-- 空间不存在 -->
@@ -138,6 +139,9 @@
         </div>
 
         <!-- 图片列表（复用组件） -->
+        <p v-if="canViewPictures && requestedPage !== currentPage && (picLoading || pictureError)" class="picture-page-status" role="status">
+          第 {{ requestedPage }} 页尚未加载，当前显示第 {{ currentPage }} 页。
+        </p>
         <PictureList
           v-if="canViewPictures"
           :error="pictureError"
@@ -288,6 +292,7 @@ const picLoading = ref(false)
 const pictureError = ref('')
 const total = ref(0)
 const currentPage = ref(1)
+const requestedPage = ref(1)
 const categoryList = ref([])
 const searchText = ref('')
 const currentCategory = ref('')
@@ -415,6 +420,7 @@ watch([spaceId, actorId], () => {
   pictures.value = []
   total.value = 0
   currentPage.value = 1
+  requestedPage.value = 1
   searchText.value = ''
   currentCategory.value = ''
   currentFormat.value = ''
@@ -432,6 +438,15 @@ watch([spaceId, actorId], () => {
   uploading.value = false
   uploadError.value = ''
   uploadSuccess.value = false
+  uploadMode.value = 'file'
+  urlInput.value = ''
+  uploadName.value = ''
+  batchForm.category = ''
+  batchForm.tagsStr = ''
+  batchForm.nameRule = ''
+  Object.assign(editForm, { id: null, name: '', introduction: '', category: '', tagsStr: '' })
+  editError.value = ''
+  sharePic.value = null
   clearFile()
   loadSpace()
 }, { flush: 'sync' })
@@ -506,11 +521,12 @@ async function loadPictures() {
   const generation = viewGeneration
   const read = ++pictureReadGeneration
   const active = () => ownsView(generation) && read === pictureReadGeneration
+  const page = requestedPage.value
   picLoading.value = true
   pictureError.value = ''
   try {
     const res = await listPictureVOByPage({
-      current: currentPage.value,
+      current: page,
       pageSize: 12,
       spaceId: spaceId.value,
       searchText: searchText.value || undefined,
@@ -522,6 +538,7 @@ async function loadPictures() {
     if (!active()) return
     pictures.value = res.records || []
     total.value = res.total || 0
+    currentPage.value = page
   } catch (error) {
     if (active()) pictureError.value = error.message || '图片加载失败，请重新加载。'
   } finally {
@@ -601,7 +618,7 @@ async function handleUpload() {
 // ===== 搜索筛选 =====
 function onSearch(text) {
   searchText.value = text
-  currentPage.value = 1
+  requestedPage.value = 1
   loadPictures()
 }
 
@@ -609,12 +626,12 @@ function onFilterChange(filters) {
   currentCategory.value = filters.category
   currentFormat.value = filters.picFormat
   currentSort.value = filters.sortOrder
-  currentPage.value = 1
+  requestedPage.value = 1
   loadPictures()
 }
 
 function onPageChange(page) {
-  currentPage.value = page
+  requestedPage.value = page
   loadPictures()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -679,6 +696,7 @@ async function handleDeletePic(pic) {
 
 <style scoped>
 .space-detail-page { padding: 3rem 0 5rem; }
+.picture-page-status { margin-block: 1rem; color: var(--gray-600); }
 .loading { text-align: center; padding: 4rem 0; color: var(--gray-400); }
 .empty-state { text-align: center; padding: 5rem 0; color: var(--gray-400); }
 .empty-state p { margin-bottom: 1rem; font-size: 1.125rem; }

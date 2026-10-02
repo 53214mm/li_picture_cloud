@@ -113,9 +113,10 @@ async function initialize() {
   try {
     await userStore.ensureCurrentUser()
   } catch (e) {
-    error.value = e.message || '无法确认登录状态，请稍后重试'
+    if (!disposed) error.value = e.message || '无法确认登录状态，请稍后重试'
     return
   }
+  if (disposed) return
   if (!userStore.isAdmin) {
     await router.replace('/login')
     return
@@ -124,6 +125,7 @@ async function initialize() {
 }
 
 async function loadRuns() {
+  if (disposed) return
   const read = ++readGeneration
   const actor = userStore.currentUser?.id
   const active = () => !disposed && read === readGeneration && actor === userStore.currentUser?.id && userStore.isAdmin

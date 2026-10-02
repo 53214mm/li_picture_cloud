@@ -36,15 +36,19 @@ let sequence = 0
 // They are deliberately not a browser/document implementation.
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'Document')
 const originalShadowRoot = Object.getOwnPropertyDescriptor(globalThis, 'ShadowRoot')
+const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
 test.before(() => {
   if (!globalThis.Document) globalThis.Document = class Document {}
   if (!globalThis.ShadowRoot) globalThis.ShadowRoot = class ShadowRoot {}
+  if (!globalThis.window) globalThis.window = { scrollTo() {} }
 })
 test.after(() => {
   if (originalDocument) Object.defineProperty(globalThis, 'Document', originalDocument)
   else delete globalThis.Document
   if (originalShadowRoot) Object.defineProperty(globalThis, 'ShadowRoot', originalShadowRoot)
   else delete globalThis.ShadowRoot
+  if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow)
+  else delete globalThis.window
 })
 
 async function compileFixture(path, overrides = {}, routeId = spaceId) {
@@ -81,6 +85,19 @@ async function compileFixture(path, overrides = {}, routeId = spaceId) {
     ...overrides
   })
   const stubUrl = moduleUrl(`export default { name: 'ModalBoundary', inheritAttrs: false, render() { return null; } };`)
+  const shareStubUrl = moduleUrl(`
+    import { h } from ${JSON.stringify(import.meta.resolve('vue'))};
+    export default {
+      name: 'ShareModalBoundary', inheritAttrs: false,
+      props: ['visible', 'pictureId', 'title', 'imageUrl', 'thumbnailUrl'],
+      emits: ['close'],
+      setup(props, { emit }) {
+        return () => h('share-boundary', { ...props }, props.visible
+          ? [h('button', { onClick: () => emit('close') }, '关闭分享')]
+          : []);
+      }
+    };
+  `)
   async function compile(path) {
     const filename = new URL(`../src/${path}`, import.meta.url)
     const { descriptor, errors } = parse(await readFile(filename, 'utf8'), { filename: filename.pathname })
@@ -88,7 +105,7 @@ async function compileFixture(path, overrides = {}, routeId = spaceId) {
     const aliases = {
       vue: import.meta.resolve('vue'),
       'vue-router': boundaryUrl,
-      '@/components/ShareModal.vue': stubUrl,
+      '@/components/ShareModal.vue': shareStubUrl,
       '@/components/ImageEditModal.vue': stubUrl,
       '@/components/space/SpaceMemberPanel.vue': stubUrl
     }
@@ -673,4 +690,201 @@ test('R14 admin unmount ignores a pending read response', async t => {
   assert.equal(fixture.root.children.length, 0)
   assert.equal(fixture.calls.length, before)
   assertNoWrites(fixture)
+})
+
+test('R14 a pending or failed page change retains the last successful page and retries the requested page', async t => {
+  const fixture = await mount(t, detailPath, {
+    listPictureVOByPage: async () => ({ records: [savedPicture], total: 25 })
+  })
+  await flush()
+  const card = findClass(fixture.root, 'gallery-card')
+  assert.match(text(findClass(fixture.root, 'pagination')), /第 1 \/ 3 页/)
+  const pageTwo = deferred()
+  fixture.handlers.listPictureVOByPage = () => pageTwo.promise
+  await click(button(fixture.root, '下一页'))
+  assert.equal(calls(fixture, 'listPictureVOByPage').at(-1).args[0].current, 2)
+  assert.equal(findClass(fixture.root, 'gallery-card') === card, true)
+  assert.match(text(findClass(fixture.root, 'pagination')), /第 1 \/ 3 页/)
+  assert.match(text(fixture.root), /第 2 页尚未加载，当前显示第 1 页/)
+  pageTwo.reject(new Error('第二页读取失败'))
+  await flush()
+  assert.match(text(fixture.root), /第二页读取失败/)
+  assert.equal(findClass(fixture.root, 'gallery-card') === card, true)
+  assert.match(text(findClass(fixture.root, 'pagination')), /第 1 \/ 3 页/)
+  assert.match(text(fixture.root), /第 2 页尚未加载，当前显示第 1 页/)
+  const retry = deferred()
+  fixture.handlers.listPictureVOByPage = () => retry.promise
+  await click(button(fixture.root, '重新加载图片'))
+  assert.equal(calls(fixture, 'listPictureVOByPage').at(-1).args[0].current, 2)
+  assert.equal(findClass(fixture.root, 'gallery-card') === card, true)
+  assert.match(text(findClass(fixture.root, 'pagination')), /第 1 \/ 3 页/)
+  retry.resolve({ records: [{ ...savedPicture, id: otherPictureId, name: '第二页图片' }], total: 25 })
+  await flush()
+  assert.match(text(findClass(fixture.root, 'pagination')), /第 2 \/ 3 页/)
+  assert.match(text(fixture.root), /第二页图片/)
+  assert.doesNotMatch(text(fixture.root), /第二页读取失败|尚未加载|保留的图片名称/)
+  assertNoWrites(fixture)
+})
+
+test('R14 searches and filters request page one without relabeling retained page-two records', async t => {
+  for (const control of ['search', 'filter']) {
+    await t.test(control, async t => {
+      const fixture = await mount(t, detailPath, {
+        listPictureVOByPage: async query => ({
+          records: [{ ...savedPicture, name: query.current === 2 ? '第二页原有图片' : '第一页原有图片' }], total: 25
+        })
+      })
+      await flush()
+      await click(button(fixture.root, '下一页'))
+      assert.match(text(findClass(fixture.root, 'pagination')), /第 2 \/ 3 页/)
+      const retained = findClass(fixture.root, 'gallery-card')
+      const firstPage = deferred()
+      fixture.handlers.listPictureVOByPage = () => firstPage.promise
+      if (control === 'search') {
+        await fill(input(fixture.root, '搜索图片名称或简介…'), '新的搜索条件')
+        await click(button(fixture.root, '搜索'))
+      } else {
+        const category = descendants(fixture.root).find(node => node.tag === 'select' && node.options.some(option => option.value === '风景'))
+        assert.ok(category)
+        category.value = '风景'
+        for (const option of category.options) option.selected = option.value === '风景'
+        category.dispatch('change')
+        await invoke(category, 'onChange')
+        await flush()
+      }
+      const requested = calls(fixture, 'listPictureVOByPage').at(-1).args[0]
+      assert.equal(requested.current, 1)
+      if (control === 'search') assert.equal(requested.searchText, '新的搜索条件')
+      else assert.equal(requested.category, '风景')
+      assert.equal(findClass(fixture.root, 'gallery-card') === retained, true)
+      assert.match(text(fixture.root), /第二页原有图片/)
+      assert.match(text(findClass(fixture.root, 'pagination')), /第 2 \/ 3 页/)
+      assert.match(text(fixture.root), /第 1 页尚未加载，当前显示第 2 页/)
+      firstPage.reject(new Error('第一页条件读取失败'))
+      await flush()
+      assert.match(text(findClass(fixture.root, 'pagination')), /第 2 \/ 3 页/)
+      assert.equal(findClass(fixture.root, 'gallery-card') === retained, true)
+      const retry = deferred()
+      fixture.handlers.listPictureVOByPage = () => retry.promise
+      await click(button(fixture.root, '重新加载图片'))
+      assert.deepEqual(calls(fixture, 'listPictureVOByPage').at(-1).args[0], requested)
+      assert.match(text(findClass(fixture.root, 'pagination')), /第 2 \/ 3 页/)
+      retry.resolve({ records: [{ ...savedPicture, id: otherPictureId, name: '第一页新条件结果' }], total: 25 })
+      await flush()
+      assert.match(text(findClass(fixture.root, 'pagination')), /第 1 \/ 3 页/)
+      assert.match(text(fixture.root), /第一页新条件结果/)
+      assert.doesNotMatch(text(fixture.root), /第二页原有图片|第一页条件读取失败|尚未加载/)
+      assertNoWrites(fixture)
+    })
+  }
+})
+
+test('R14 route and account changes clear upload, batch, edit and share drafts before reopening', async t => {
+  for (const ownership of ['route', 'account']) {
+    await t.test(ownership, async t => {
+      const fixture = await mount(t, detailPath, {
+        getMySpacePermissions: async () => editPermissions,
+        listPictureVOByPage: async () => ({ records: [savedPicture], total: 1 }),
+        post: async () => { throw new Error('旧上传错误') },
+        editPicture: async () => { throw new Error('旧编辑错误') },
+        editPictureByBatch: async () => true
+      })
+      await flush()
+      await click(button(fixture.root, '+ 上传图片'))
+      await click(button(fixture.root, '🔗 URL 上传'))
+      await fill(input(fixture.root, 'https://example.com/image.jpg'), 'https://example.com/old-private-draft.jpg')
+      await fill(input(fixture.root, '图片名称（可选）'), '旧上传名称草稿')
+      await click(button(fixture.root, '上传到空间'))
+      assert.match(text(fixture.root), /旧上传错误/)
+      await selectAll(fixture)
+      await fill(input(fixture.root, '分类'), '旧批量分类')
+      await fill(input(fixture.root, '标签（逗号分隔）'), '旧批量标签一, 旧批量标签二')
+      await fill(input(fixture.root, '命名规则（图片{序号}）'), '旧批量名称{序号}')
+      await click(button(fixture.root, '退出批量'))
+      const shareButton = descendants(fixture.root).find(node => node.tag === 'button' && node.props.title === '分享')
+      await click(shareButton)
+      let share = descendants(fixture.root).find(node => node.tag === 'share-boundary')
+      assert.equal(share.props.pictureId, pictureId)
+      assert.equal(share.props.visible, true)
+      await click(button(fixture.root, '关闭分享'))
+      assert.equal(share.props.visible, false)
+      assert.equal(share.props.pictureId, pictureId, 'closing the old modal keeps a draft that ownership change must clear')
+      const editButton = descendants(fixture.root).find(node => node.tag === 'button' && node.props.title === '编辑')
+      await click(editButton)
+      const oldDialog = findClass(fixture.root, 'modal-card')
+      const oldFields = descendants(oldDialog).filter(node => node.tag === 'input')
+      await fill(oldFields[0], '旧编辑名称草稿')
+      await fill(descendants(oldDialog).find(node => node.tag === 'textarea'), '旧编辑简介草稿')
+      await fill(oldFields[1], '旧编辑标签草稿')
+      await click(button(oldDialog, '保存'))
+      assert.match(text(fixture.root), /旧编辑错误/)
+      fixture.handlers.listPictureVOByPage = async () => ({
+        records: [{ id: otherPictureId, name: '新归属图片', url: '/new-owner.webp' }], total: 1
+      })
+      fixture.handlers.editPicture = async () => true
+      if (ownership === 'route') fixture.route.params.id = otherSpaceId
+      else fixture.userStore.currentUser = { id: '43' }
+      await flush()
+      assert.equal(findClass(fixture.root, 'upload-panel'), undefined)
+      assert.equal(findClass(fixture.root, 'batch-toolbar'), undefined)
+      assert.equal(findClass(fixture.root, 'modal-card'), undefined)
+      assert.doesNotMatch(text(fixture.root), /旧上传错误|旧编辑错误|旧编辑名称草稿|旧批量/)
+      share = descendants(fixture.root).find(node => node.tag === 'share-boundary')
+      assert.equal(share.props.visible, false)
+      assert.equal(share.props.pictureId, undefined)
+      assert.equal(share.props.title, undefined)
+      assert.equal(share.props.imageUrl, undefined)
+      assert.equal(share.props.thumbnailUrl, undefined)
+      await click(button(fixture.root, '+ 上传图片'))
+      assert.ok(findClass(fixture.root, 'upload-drop-zone'), 'new ownership resets upload mode to file')
+      assert.equal(findClass(fixture.root, 'url-row'), undefined)
+      assert.equal(input(fixture.root, '图片名称（可选）').value, '')
+      await click(button(fixture.root, '🔗 URL 上传'))
+      assert.equal(input(fixture.root, 'https://example.com/image.jpg').value, '')
+      assert.equal(button(fixture.root, '上传到空间').props.disabled, true)
+      assert.equal(calls(fixture, 'post').length, 1, 'no old URL draft may upload under the new ownership')
+      await selectAll(fixture)
+      for (const placeholder of ['分类', '标签（逗号分隔）', '命名规则（图片{序号}）']) {
+        assert.equal(input(fixture.root, placeholder).value, '')
+      }
+      await click(button(fixture.root, '应用'))
+      const batch = calls(fixture, 'editPictureByBatch').at(-1).args[0]
+      assert.equal(batch.spaceId, ownership === 'route' ? otherSpaceId : spaceId)
+      assert.deepEqual(batch.pictureIdList, [otherPictureId])
+      assert.equal(batch.category, undefined)
+      assert.equal(batch.tags, undefined)
+      assert.equal(batch.nameRule, undefined)
+      await click(button(fixture.root, '退出批量'))
+      await click(descendants(fixture.root).find(node => node.tag === 'button' && node.props.title === '编辑'))
+      const newDialog = findClass(fixture.root, 'modal-card')
+      const newFields = descendants(newDialog).filter(node => node.tag === 'input')
+      assert.equal(newFields[0].value, '新归属图片')
+      assert.equal(newFields[1].value, '')
+      assert.equal(descendants(newDialog).find(node => node.tag === 'textarea').value, '')
+      assert.equal(descendants(newDialog).find(node => node.tag === 'select').value, '')
+      assert.doesNotMatch(text(newDialog), /旧编辑错误/)
+      await click(button(newDialog, '保存'))
+      assert.deepEqual(calls(fixture, 'editPicture').at(-1).args[0], {
+        id: otherPictureId, name: '新归属图片', introduction: undefined, category: undefined, tags: []
+      })
+    })
+  }
+})
+
+test('R14 admin initialization cannot start a read or redirect after unmount', async () => {
+  for (const isAdmin of [true, false]) {
+    const fixture = await compileFixture(adminPath)
+    const auth = deferred()
+    fixture.userStore.ensureCurrentUser = () => auth.promise
+    fixture.userStore.isAdmin = isAdmin
+    const root = hostNode('root')
+    const app = renderer.createApp(fixture.component)
+    app.component('RouterLink', { props: ['to'], setup: (props, { slots }) => () => h('a', { href: props.to }, slots.default?.()) })
+    app.mount(root)
+    app.unmount()
+    auth.resolve({ id: '42' })
+    await flush()
+    assert.equal(calls(fixture, 'listCompanionFeedRuns').length, 0)
+    assert.equal(calls(fixture, 'replace').length, 0)
+  }
 })

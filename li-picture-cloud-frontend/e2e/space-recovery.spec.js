@@ -26,14 +26,14 @@ async function fixture(page, overrides = {}, user = member) {
     else if (path === '/api/space/get/vo') data = space
     else if (path === '/api/spaceUser/permissions') data = ['picture:view', 'picture:edit', 'picture:upload']
     else if (path === '/api/space/list/page/vo') data = { records: [space], total: 1 }
-    else if (path === '/api/picture/list/page/vo') data = { records: [picture], total: 1 }
+    else if (path === '/api/picture/list/page/vo/cache') data = { records: [picture], total: 1 }
     else if (path === '/api/picture/tag_category') data = { categoryList: [], tagList: [] }
     else if (path === '/api/admin/companion/feed-runs/page') data = { records: [], total: 0 }
     return success(route, data)
   })
   return calls
 }
-const reads = new Set(['/api/space/list/page/vo', '/api/picture/list/page/vo', '/api/spaceUser/permissions', '/api/spaceUser/list/my', '/api/admin/companion/feed-runs/page'])
+const reads = new Set(['/api/space/list/page/vo', '/api/picture/list/page/vo/cache', '/api/spaceUser/permissions', '/api/spaceUser/list/my', '/api/admin/companion/feed-runs/page'])
 const writes = calls => calls.filter(call => call.method !== 'GET' && !reads.has(call.path))
 
 test('batch editing keeps exact long space and picture IDs in the real HTTP payload', async ({ page }) => {
@@ -56,7 +56,7 @@ test('a failed space read is recoverable and is not described as deletion', asyn
   await page.goto(`/space/${id}`)
   await expect(page.getByRole('alert')).toContainText('空间读取暂不可用')
   await expect(page.getByText('空间不存在或已被删除')).toHaveCount(0)
-  expect(calls.some(call => call.path === '/api/picture/list/page/vo')).toBe(false)
+  expect(calls.some(call => call.path === '/api/picture/list/page/vo/cache')).toBe(false)
   broken = false
   await page.getByRole('button', { name: '重新加载空间', exact: true }).click()
   await expect(page.getByRole('heading', { name: '原有空间', exact: true })).toBeVisible()
@@ -66,7 +66,7 @@ test('a failed space read is recoverable and is not described as deletion', asyn
 
 test('picture read errors do not claim an empty space and keyboard retry restores results', async ({ page }) => {
   let broken = true
-  const calls = await fixture(page, { '/api/picture/list/page/vo': route => broken ? failure(route, '图片读取暂不可用') : success(route, { records: [picture], total: 1 }) })
+  const calls = await fixture(page, { '/api/picture/list/page/vo/cache': route => broken ? failure(route, '图片读取暂不可用') : success(route, { records: [picture], total: 1 }) })
   await page.goto(`/space/${id}`)
   await expect(page.getByRole('alert')).toContainText('图片读取暂不可用')
   await expect(page.getByText(/空间暂无图片/)).toHaveCount(0)
@@ -129,4 +129,31 @@ test('admin picture-ID filters preserve exact decimals and reject invalid text w
   await page.getByRole('button', { name: '查询', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('请输入有效的图片 ID')
   expect(calls.filter(call => call.path === '/api/admin/companion/feed-runs/page').length).toBe(count)
+})
+
+test('failed picture pagination keeps the displayed page accurate and retries the requested page', async ({ page }) => {
+  let broken = true
+  const nextPicture = { ...picture, id: '9223372036854775804', name: '第二页图片' }
+  const calls = await fixture(page, {
+    '/api/picture/list/page/vo/cache': route => {
+      const requested = route.request().postDataJSON().current
+      return requested === 2 && broken
+        ? failure(route, '第二页读取失败')
+        : success(route, { records: [requested === 2 ? nextPicture : picture], total: 24 })
+    }
+  })
+  await page.goto(`/space/${id}`)
+  const pagination = page.locator('.picture-list .pagination')
+  await expect(page.getByRole('link', { name: '查看图片：原有图片' })).toBeVisible()
+  await pagination.getByRole('button', { name: '下一页', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('第二页读取失败')
+  await expect(pagination).toContainText('第 1 / 2 页')
+  await expect(page.getByRole('status').filter({ hasText: '第 2 页尚未加载' })).toContainText('当前显示第 1 页')
+  await expect(page.getByRole('link', { name: '查看图片：原有图片' })).toBeVisible()
+  broken = false
+  await page.getByRole('button', { name: '重新加载图片', exact: true }).click()
+  await expect(page.getByRole('link', { name: '查看图片：第二页图片' })).toBeVisible()
+  await expect(pagination).toContainText('第 2 / 2 页')
+  expect(calls.filter(call => call.path === '/api/picture/list/page/vo/cache').map(call => call.body.current)).toEqual([1, 2, 2])
+  expect(writes(calls)).toEqual([])
 })
