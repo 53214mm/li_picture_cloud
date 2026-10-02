@@ -1,5 +1,5 @@
 <template>
-  <figure class="companion-body" :class="{ 'companion-body--habitat': habitat }" :data-visual-stage="visual.visualStage" :data-animation-intent="animationIntent.state"
+  <figure class="companion-body" :class="{ 'companion-body--habitat': habitat }" :data-render-mode="renderPolicy.compact ? 'compact' : 'full'" :data-motion-policy="renderPolicy.reason" :data-visual-stage="visual.visualStage" :data-animation-intent="animationIntent.state"
           :data-presentation-availability="presentation.availability" :data-presentation-activity="presentation.activity"
           :data-presentation-affect="presentation.affect" :data-presentation-attention="presentation.attention"
           :data-presentation-rapport="presentation.rapport" :data-presentation-freshness="presentation.freshness">
@@ -14,7 +14,7 @@
       <SpritePlayer v-if="animate && animationIntent.state !== 'static'" :still="lingyeAssets.home" :atlas="lingyeAssets.idle"
                     :key="presentation.companionId" :presentation="presentation"
                     :interaction-request="interactionRequest"
-                    :paused="paused || userPaused" :visible="visible" @availability="availability = $event" />
+                    :paused="paused || userPaused || !renderPolicy.allowMotion" :visible="visible" @availability="availability = $event" />
       <CompanionArtwork v-else class="body-static" :asset="lingyeAssets.home" loading="eager"
                         accessible-label="绫页，纸翼蛾族的成年全身像" />
     </button>
@@ -22,11 +22,11 @@
     <CompanionProposalHint :presentation="presentation" />
     <figcaption>
       <span><strong>绫页</strong><span class="body-species">纸翼蛾族</span></span>
-      <button v-if="animate && animationIntent.state !== 'static' && !availability.reducedMotion && !availability.failed"
+      <button v-if="animate && renderPolicy.allowMotion && animationIntent.state !== 'static' && !availability.reducedMotion && !availability.failed"
               type="button" class="body-motion" :aria-pressed="userPaused" @click="userPaused = !userPaused">
         {{ userPaused ? '恢复动作' : '暂停动作' }}
       </button>
-      <span v-else class="body-static-label">静态立绘</span>
+      <span v-else class="body-static-label">{{ !renderPolicy.allowMotion ? renderPolicy.label : '静态立绘' }}</span>
     </figcaption>
   </figure>
 </template>
@@ -38,7 +38,9 @@ import SpritePlayer from './SpritePlayer.vue'
 import { lingyeAssets } from './lingyeAssets'
 import { mapCompanionAnimation } from '@/presentation/companionAnimation'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
+import { useCompanionRenderPolicy } from '@/composables/useCompanionRenderPolicy'
 const interaction = useCompanionInteractionStore()
+const { policy: renderPolicy } = useCompanionRenderPolicy()
 const hovered = ref(false)
 const focused = ref(false)
 const interactionRequest = ref(0)
@@ -86,5 +88,12 @@ figcaption strong { font-size: .95rem; }
 .body-motion { min-height: 44px; padding: .25rem .5rem; border: 1px solid var(--lp-border-strong); border-radius: var(--lp-radius-s); color: var(--lp-text-primary); background: #ffffff80; font-size: .75rem; cursor: pointer; }
 .body-motion:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 2px; }
 .body-static-label { color: var(--lp-text-secondary); font-size: .7rem; }
-@media (width < 768px) { .body-ground { max-width: 17rem; } }
+@media (width < 768px) {
+  .body-ground { width: 96px; max-width: 100%; }
+  .companion-body--habitat figcaption { justify-content: center; padding-inline: 0; gap: 2px 6px; }
+  .companion-body--habitat .body-species { display: none; }
+  .companion-body > :deep(.proposal-hint) { position: static; width: 100%; margin-top: 4px; padding-inline: 4px; }
+  .body-disposition { padding-inline: 0; font-size: .7rem; }
+  .body-static-label { font-size: .65rem; }
+}
 </style>
