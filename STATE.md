@@ -3,75 +3,82 @@
 ## 概览
 
 - 仓库：https://github.com/53214mm/li_picture_cloud
-- 唯一工作分支：`nexus/mainline-r11`（长期主线，不随 Rxx 改名）
-- 当前 Rxx：R16 产品文案与真实状态收口；首个实现增量已独立审核
-- 验收状态：R11浏览器、R12 V3真实API、R13浏览器、R16页面手测/布局仍pending，不标DONE
+- 唯一工作分支：`nexus/mainline-r11`（长期主线，不随Rxx改名）
+- 当前Rxx：R14空间/管理筛选兼容回归增量，代码已独立审核；后端clean verify通过
+- 验收状态：R14完整V3、R11浏览器、R12真实API故事线、R13浏览器、R16页面/布局仍pending，不标DONE
 - 上一完整确认完成需求：R10（用户确认，main `d49fd06`）
 - 共同基线：`d49fd06645995e6f2c0a67a6f230ae6704afb2e4`
-- R16本轮起点：已发布 `7da6afbeaa05059f6c9c41ffcfea7f2e2b079000`
-- 最近有效代码 / 已核对远端对象：`6f81e7286004d766169855ed953bf7422f895bcf`（tree `3343d313f4c269d761f3b7cf5a64860007b010d9`；等价于已审源 `ff634e4addc2e44e14a7ae9bf9516608f90b1e1a`）
-- 历史已审代码：R13 `2e05d6dd328da59060f0cd01ba373527d96d32f2`；R12 `7135e120b8b46e0cc95bb81ddabb49f772446ef7`；R11 `6a96f92a6ce299a3eabeecf48f68ff0b4de82bb1`
-- 状态证据为随后docs-only提交；用 `git log -- STATE.md` 定位，避免自引用自己的hash
-- 开工先读DECISIONS、根需求清单、最新STATE与远端历史；附件旧进度表不覆盖实际实现。源/发布SHA映射见 `docs/work/PUBLICATION-2026-10-02.md`
+- R14本轮起点：已发布 `ff09c2fed69393e69e764ddb817e95ba95ea6188`
+- 最近有效代码 / 已核对远端对象：`e8d96eafd896aa4182fcf4157702a6fe7f06dec8`（tree `f6862c6bda3e7903d0bc70432d6c75ba2a8f56f6`；等价于已审源 `f734708fed3b4746828f969b2ac0f4836e648d3c`）
+- 本轮首个实现：远端对象 `68911f9a70fe01d5257d133cfd4513b192b7774a` / 源 `2bddf43`；上一条追加review修复
+- 历史已审代码：R16 `6f81e7286004d766169855ed953bf7422f895bcf`；R13 `2e05d6d`；R12 `7135e12`；R11 `6a96f92`
+- 状态证据为随后docs-only提交，用 `git log -- STATE.md` 定位，避免自引用自己的hash
+- 开工先读DECISIONS、根需求清单、最新STATE和远端历史；原附件进度不覆盖实际实现。源/发布SHA见 `docs/work/PUBLICATION-2026-10-02.md`
 
 ## Phase 看板
 
 | Phase | 目标 | 状态 | 证据 |
 |---|---|---|---|
-| R11 P1/P2 | 情绪/关系/性格表现 | 代码review通过 | docs/work/R11.md；6a96f92 |
-| R11 P3 | V2验收 | 自动证据通过 / 浏览器待执行 | 本轮全回归包含；未DONE |
-| R12 P1/P2 | 共享轻量聊天、已观察提案预览 | 代码review通过 | docs/work/R12.md；7135e12 |
-| R12 P3 | V3完整验收 | 前端证据通过 / 真实API故事线待执行 | Home/history/SSE/后端验收未运行 |
-| R13 P1/P2 | 渲染预算、手机紧凑布局 | 代码review通过 | docs/work/R13.md；2e05d6d |
-| R13 P3 | V2验收 | 自动/组件证据通过 / 浏览器待执行 | 前轮173/173；本轮包含 |
-| R16 P1/P2 | 文案事实与读取状态 | 首个增量代码review通过 | docs/work/R16.md；6f81e72 |
-| R16 P3 | V2页面/文案/布局验收 | 204/204和静态检查通过 / 浏览器待执行 | 70+11项仅收集；未DONE |
+| R11 P1/P2 | 情绪/关系/性格表现 | 代码review通过 | R11.md；6a96f92 |
+| R11 P3 | V2验收 | 自动证据通过 / 浏览器待执行 | 当前全回归包含；未DONE |
+| R12 P1/P2 | 共享轻量聊天、已观察提案 | 代码review通过 | R12.md；7135e12 |
+| R12 P3 | V3完整验收 | 前端证据通过 / 真实Home/history/SSE故事线待执行 | 后端verify不替代故事线 |
+| R13 P1/P2/P3 | 渲染预算、手机布局 | 代码review与组件验证通过 / 浏览器待执行 | R13.md；2e05d6d |
+| R16 P1/P2/P3 | 文案与读取状态 | 首增量review通过 / 页面手测待执行 | R16.md；6f81e72 |
+| R14 P1/P2 | 空间精度与读取恢复 | 首增量review通过 | R14.md；e8d96ea |
+| R14 P3 | V3完整回归 | 前端281/281、后端clean verify通过 / Redis与浏览器API验收待执行 | 111项浏览器仅收集 |
 
 ## 本轮完成
 
-- 模型连接去掉口号与首屏实现自证，技术元数据下沉原生详情；保留费用来源、无自动扣平台额度回退、白名单和密钥影响说明。明确更换密钥只影响当前连接。
-- 配方说明符合实际手动确认、记录版本与图片快照；移除不存在的直接创建操作和自动执行承诺。空间不再宣传无限配额。
-- 对话/提案的系统提示不冒充角色台词；接受/忽略/停止只描述本次结果。提议频率字段改为实际的最短间隔；未开放创作说明保留能力边界。
-- 模型/配方及未开放创作的读取状态区分loading/error/empty；错误不诱导重复添加数据。配方明确重读按钮只发原有读取请求。
-- Review修复刷新时的节点重建：保留已有配方行/查看按钮、模型路由选择器与清除按钮；初次读取失败仍不伪造可用列表。业务规则、API、权限、账本和真实伙伴内容未改。
+- 修复两个将Snowflake ID转Number的路径：空间批量编辑、管理员喂养日志图片筛选。准确字符串原样保留；不安全Number/无效表示拒绝，不舍入或变成无条件筛选。
+- 空间管理、我的空间、空间详情、图片列表区分未知/失败/真正为空；重试只读取原有API，失败不误报空间已删除或诱导重复创建。
+- 已有卡片、筛选控件、同账号编辑/AI草稿在刷新时保留；显示页与请求页分离，失败翻页不把旧图片标成新页。
+- 路由/账号切换与卸载使旧读取、写入后的UI回调失效；清空旧账号上传URL/名称、批量、编辑和分享草稿。缺少具体用户ID不发无范围查询。
+- 独立review发现的缓存端点mock错误、失败页码和草稿跨归属残留均修复，并有回归测试。后台API、领域权限、配额与业务规则未修改。
 
 ## 验证证据
 
-- Node **22.23.3** 全前端 **204/204**；新增29项实际Vue SFC自定义renderer测试和2项模型页源码约束
-- 实际模板/事件/生命周期测试覆盖延迟、失败、重读、已存内容、未开放动作、手动试运行/确认与来源快照，以及刷新成功/失败的节点身份
-- lint通过；Companion开启/关闭production build与两组bundle budget通过；最大chunk **390,035bytes**（限制512,000）；CompanionView仅开启时存在
-- 独立review复跑上述检查、70+11项收集及diff-check通过，无未解决阻断性代码发现
-- 新增6项浏览器用例；R16前端组合 **70项 / 9文件**、相关实际后端故事线 **11项 / 6文件** 均仅收集。没有浏览器断言、截图、键盘布局或真实API执行结果
-- 本轮增量diff-check通过；原需求附件第3行Markdown双空格硬换行的历史例外保留
+- Node **22.23.3** 全前端 **281/281**；新增77项真实Vue SFC renderer测试（详情/PictureList/管理筛选47，空间列表/SpaceCard/AiAgentPanel30）
+- lint、Companion开/关production build、两组bundle budget通过，最大chunk **390,035bytes**；CompanionView只在开启模式存在
+- 独立复跑以上检查、111项收集、diff-check通过；补充生产API/真实Axios载荷及分页/草稿探针4/4通过，无未解决阻断性代码发现
+- 后端 **clean verify通过：722项，718通过，0失败/错误，4预期跳过**；编译514个主源码/143个测试源码、打包和原JaCoCo门通过
+- 干净覆盖率：airuntime447/504（**88.69%**），companion541/626（**86.42%**），原门槛均85%；独立审核143份XML和覆盖率计数
+- 后端原自附加失败、首次成功、干净成功分别保留；最终结果使用独立新target执行数据。命令/工具链见 `docs/work/R14-BACKEND-VALIDATION.md`
+- 新增7项浏览器用例；组合Shell/Gallery/R16为 **111项 / 12文件**，仅收集，未执行断言/截图/键盘布局或真实浏览器API故事线
+- 本轮diff-check通过；原需求附件第3行Markdown双空格硬换行的历史例外保留
 
 ## 发布与恢复
 
-- GitHub权限已恢复（D-10）；仅用已有connector快进长期分支，按原顺序重建完全相同的tree。不强推，不PR/merge/deploy。
-- 代码远端对象已回读核对；本STATE对应docs-only检查点随后发布。活动本地分支只在干净、完整tree相同条件下对齐已发布父链。
-- 源检查点 `nexus/checkpoint-r12-local-dda1650`、`nexus/checkpoint-r13-local-state`、`nexus/checkpoint-r16-local-state` 仅作审计，不得从旧源父链继续开发或推回远端。
-- 恢复首选远端 `nexus/mainline-r11`；根需求/DECISIONS/STATE与R11/R12/R13/R16、PUBLICATION记录足以续接。
-- CI只监听main push/pull_request；当前分支没有触发运行不等于CI通过。
+- GitHub权限已恢复（D-10）；只经已有connector快进长期分支，保留每个tree/顺序/message；不强推，不PR/merge/deploy
+- 代码远端对象已回读；本STATE对应docs-only检查点随后发布。活动本地仅在干净、完整tree相同后对齐发布父链
+- 源 `nexus/checkpoint-r12-local-dda1650`、`nexus/checkpoint-r13-local-state`、`nexus/checkpoint-r16-local-state`、`nexus/checkpoint-r14-local-state` 只供审计，不从旧源父链续开发
+- 首选恢复远端 `nexus/mainline-r11`；根需求/DECISIONS/STATE、R11/R12/R13/R16/R14、R14-BACKEND-VALIDATION和PUBLICATION足以续接
+- CI只监听main push/pull_request；本分支无CI触发不等于CI通过，本轮报告为已执行的本地验证
 
-## 阻塞 / 限制
+## 当前阻塞 / 限制
 
-- 官方Playwright运行时先前下载返回无效ZIP；当前缓存仍未见可用运行时，没有新证据，本轮未重复安装或改安全/代理/沙箱配置。
-- 历史socket policy未重新验证，不当作无效ZIP的已确认原因。
-- R11/R13/R16浏览器、R12 V3真实Home/history/SSE/后端故事线待验收；组件级renderer不代替页面测试。
-- R03初访理解/已有样片授权仍是发布前核实事项；R16其余页面及真实布局需要继续巡检。
+- 当前系统Chromium154存在，但本轮保留sandbox的标准启动在about:blank前因 `socket() failed: Operation not permitted` 失败；Unix IPC权限拒绝已实际复核。停止该路径，不通过安全参数或其他通道绕过
+- Playwright自有运行时先前无效ZIP下载，本轮未重复；它与本轮IPC拒绝是不同证据，不混同原因
+- 本地TCP bind/listen可用；后端并非整体不可测试。完整官方JDK/Maven已准备，现有可信配置下载依赖后离线verify通过；未关闭TLS/更改CA/系统代理或attach安全策略
+- Redis运行时仍未准备；3项opt-in Redis测试及真实API/E2E未执行。apt配置读取被拒绝，未继续该apt路径；不能把普通缺少依赖误写成所有安装方式均无权限
+- R11/R12/R13/R16和R14浏览器/API验收仍pending；R03初访理解/样片授权仍需发布前核实
 
 ## 下一步
 
-1. 环境确有变化且官方运行时可用后，运行 `e2e/config/product-copy.config.js`（70项），检查文案、详情键盘展开、320px/平板布局、刷新焦点及既有伙伴交互。
-2. 使用默认配置执行受影响的model-gateway/MCP/recipe/emoji/fusion/companion故事线（本轮11项仅收集）；连同feeding、feature-off补齐R11/R12/R13验收，再做R14全量回归。环境没变不反复安装。
-3. 若仅验收环境继续受阻，可继续R16剩余页面的事实性巡检或R14已有自动回归的准备与执行，先检查对应依赖；R15保持独立高风险支线，不因编号自动跳入。
-4. 每轮先核对远端最新专用分支，不恢复旧源父链；稳定后review、STATE与验证tree的发布检查点。其他用户分支不动。
+1. 后端可复跑既有clean verify，复用R14-BACKEND-VALIDATION记录的工具链；需要新下载时只用既有可信路由和证书验证，不能复用失效的临时网络配置
+2. 可单独评估授权范围内的官方隔离Redis运行时，完成3项opt-in Redis专项及test,e2e真实API前置条件。不要绕过被拒绝的apt配置读取
+3. 浏览器需要允许正常IPC的环境。该条件未变时不重复已拒绝启动；可用后执行 `e2e/config/space-recovery.config.js`（111项）、feature-off、feeding和默认完整E2E，再判断V3/DONE
+4. 默认E2E用H2和已有外部服务stub，无需生产MySQL/COS/真实模型密钥；需Redis127.0.0.1:6380无密码DB15，Node22，后端18124和前端15173
+5. 后续只处理实际发现、对应需求及未完成验证，不制造新产品范围或重复报告。R15仍为独立高风险支线；没有可执行独立工作时说明最小缺失条件并暂停相关验收
+6. 每轮从远端最新专用分支开始，稳定后review/STATE/验证tree发布；不改其他用户分支，不PR/merge/deploy
 
 ## 最近更新
 
 | 时间（UTC） | 更新者 | 内容 |
 |---|---|---|
-| 2026-10-02 13:49 | Nexus | R11代码review通过，浏览器安装失败，保存恢复包 |
-| 2026-10-02 14:47 | Nexus | R12前端157/157与review通过，V3保留pending |
-| 2026-10-02 15:20 | Nexus | GitHub写入恢复，R11/R12逐tree发布并对齐父链 |
-| 2026-10-02 15:59 | Nexus | R13独立review与173/173通过；64项仅收集并发布检查点 |
-| 2026-10-02 16:59 | Nexus | R16独立review与204/204通过；70+11项仅收集，核对远端代码tree并准备状态检查点 |
+| 2026-10-02 13:49 | Nexus | R11review通过，浏览器安装失败 |
+| 2026-10-02 14:47 | Nexus | R12前端157/157通过，V3保留pending |
+| 2026-10-02 15:20 | Nexus | 写权限恢复，R11/R12逐tree发布 |
+| 2026-10-02 15:59 | Nexus | R13review与173/173通过；64项仅收集 |
+| 2026-10-02 17:07 | Nexus | R16review与204/204通过，70+11仅收集并发布 |
+| 2026-10-02 18:12 | Nexus | R14空间增量review通过，前端281/281、后端干净verify通过；IPC拒绝已复核，111项仅收集 |

@@ -58,3 +58,17 @@
 源代码独立review通过：204/204、lint、功能开/关build/budget及分块检查通过；70项前端模拟和11项真实后端故事线仅收集。上述远端对象已由只读fetch核对完整tree与父链。随后创建包含本节的docs-only状态提交，再以force=false快进长期分支；不会创建PR、merge/deploy或触碰其他分支。
 
 本轮源状态提交保存在本地专用 `nexus/checkpoint-r16-local-state`，并保留增量bundle作作者/时间/SHA核查。增量bundle需要已发布基线 `7da6afbeaa05059f6c9c41ffcfea7f2e2b079000`，不是独立完整备份。状态提交通过 `git log -- STATE.md docs/work/PUBLICATION-2026-10-02.md` 定位，不在自己的内容中自引用。活动分支在工作区干净、完整tree相同后对齐远端；新的恢复首选远端主线，不从源检查点继续开发。
+
+
+## R14 后续检查点（2026-10-02）
+
+沿 R16 已发布 `ff09c2fed69393e69e764ddb817e95ba95ea6188` 继续，没有从原始源备份父链开发。本轮仍仅快进长期专用分支；原顺序、message、每个tree完整保留。
+
+| 原本地源 SHA | 对应远端 commit 对象 | 完全相同的 tree SHA |
+|---|---|---|
+| `2bddf43280cbfac0349b510892a3cba8a07bf54e` | `68911f9a70fe01d5257d133cfd4513b192b7774a` | `d4250330a382d534b86b02d6befde77a3bc46fd4` |
+| `f734708fed3b4746828f969b2ac0f4836e648d3c` | `e8d96eafd896aa4182fcf4157702a6fe7f06dec8` | `f6862c6bda3e7903d0bc70432d6c75ba2a8f56f6` |
+
+最终源代码独立审核与281/281、lint、双模式build/budget通过；111项浏览器仅收集。额外完成后端clean verify（718通过、4预期跳过、0失败/错误），打包与原覆盖率门通过；后端源码和POM未改，命令及边界见R14-BACKEND-VALIDATION。当前浏览器IPC实际权限拒绝，R14 V3及此前pending验收仍未完成。
+
+远端对象经只读fetch核对tree与父链后，随后创建包含本节的docs-only状态提交，再以force=false发布。源状态提交保留在 `nexus/checkpoint-r14-local-state`；源增量bundle必须已有基线 `ff09c2fed69393e69e764ddb817e95ba95ea6188`，不作为独立全量恢复包。活动分支仅在干净且完整tree一致时对齐发布父链。状态提交仍通过git历史定位，不自引用自己的SHA；恢复和继续开发首选远端长期分支，不使用源备份父链。
