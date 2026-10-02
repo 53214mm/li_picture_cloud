@@ -1,0 +1,33 @@
+# 2026-10-02 · R11 / R12 首次远端发布
+
+## 结果与边界
+
+- 长期分支：[nexus/mainline-r11](https://github.com/53214mm/li_picture_cloud/tree/nexus/mainline-r11)
+- 首次远端检查点：`7c5c975b19b686dd4dfdd01998fe1edc5b8139bf`；tree `18320f4ec95c1e68ed15792607b8b76d6fb253b4`，与原本地 `dda1650f6c5b77d5cdbed70be408ae039d2205f6` 完全一致。
+- 共同基线：`d49fd06645995e6f2c0a67a6f230ae6704afb2e4`。发布前 `nexus/*` 远端分支为空；仅创建独立长期分支，未强推、修改 main、创建 PR、merge 或部署。
+- 用户安装 GitHub App 后，先前 integration 403 的权限条件已改变；同一 GitHub connector 的实际 tree/commit/branch 写入及回读均成功，未换凭据绕行。
+- Connector 未提供原始 author/committer/date 参数，因此 GitHub 使用连接账号及发布时间创建新的 commit SHA；未伪造原始身份或时间。提交顺序、父链基线、message 与每个完整 tree 保持一致。
+
+## 本地源提交 → 已发布提交
+
+| 原本地源 SHA | 已发布 SHA | 完全相同的 tree SHA |
+|---|---|---|
+| `c9d3584e6ab6998861fcfab5b564b5f35e504823` | `030bbde4827d972497c647294a9b538dd35cebc5` | `d82a5b52e1767f223dcde3b4c007d237cd55f883` |
+| `36cb536dd7517c684200f277c73959ab1c47eb2d` | `6a96f92a6ce299a3eabeecf48f68ff0b4de82bb1` | `d7ca0b4f99e777851ec1e5f6262c387507bbce83` |
+| `5177cf49f6349b9f861980bbbcb9d9dac3290fc1` | `7a68d4204a7c166c6545f59b14429a915fe931a5` | `9d31b41b78646a25cf628b22aa143b54b12a3306` |
+| `0648c559c8195fbebd865c58f8d57e97e53dacd1` | `7135e120b8b46e0cc95bb81ddabb49f772446ef7` | `0056df8ed51bdb98a6d913e13c2fce305f00ed27` |
+| `dda1650f6c5b77d5cdbed70be408ae039d2205f6` | `7c5c975b19b686dd4dfdd01998fe1edc5b8139bf` | `18320f4ec95c1e68ed15792607b8b76d6fb253b4` |
+
+## 恢复与后续工作
+
+- 活动本地 `nexus/mainline-r11` 已对齐已发布父链，上游为 `origin/nexus/mainline-r11`；原本地检查点保留在 `nexus/checkpoint-r12-local-dda1650`，不得将这条备份父链混入后续主线或强推远端。
+- 原本地完整历史另存为 `pre-publication-dda1650.bundle`，`git bundle verify` 通过；SHA-256：`3cac2cca5c42a2b84641460a35fa3c1eee1d22f388f77dac6c3d8887fa474acf`。原 R12 Library 恢复包仍可恢复本地历史。
+- 从新环境续接时优先读取远端长期分支及根目录 `DECISIONS.md` / `STATE.md`；只有恢复原本地包时才使用左列 SHA。
+- 本发布状态文档是随后追加的 docs-only 提交；其 SHA 使用 `git log -- STATE.md docs/work/PUBLICATION-2026-10-02.md` 定位，避免在文件内自引用。
+
+## 验证边界
+
+- 五个远端 commit 均回读确认 tree、父提交及顺序，完整 Git tree SHA 与本地验证对象一一相同。
+- 既有前端 157/157、lint、功能开/关 build + bundle budget 和独立 review 证据因 tree 相同适用于已发布代码；本次仅做 Git 发布及文档更新，不冒称重新运行代码测试。
+- `.github/workflows/ci.yml` 当前仅监听 main push 和 pull_request；独立分支发布不触发该 CI，无运行不等于通过。
+- R11 浏览器验收以及 R12 V3 真实 Home/history/SSE / 后端故事线验收仍未完成；原 Chromium 安装限制和 50 项仅收集的事实保持不变。
