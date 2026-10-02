@@ -4,13 +4,13 @@
 
 - 仓库：https://github.com/53214mm/li_picture_cloud
 - 唯一工作分支：`nexus/mainline-r11`（长期主线，不随Rxx改名）
-- 当前Rxx：R14兼容回归；已复现并修复批量编辑成功后列表仍旧的缓存失效遗漏
+- 当前Rxx：R14兼容回归；已复现并修复登录/注册页面迟到跳转、倒计时与重复提交
 - 验收状态：R14完整V3、R11浏览器、R12浏览器到API/共享视图验收、R13浏览器、R16页面/布局仍pending，不标DONE；R12后端HTTP故事线已有执行证据
 - 上一完整确认完成需求：R10（用户确认，main `d49fd06`）
 - 共同基线：`d49fd06645995e6f2c0a67a6f230ae6704afb2e4`
-- R14当前轮起点：已发布 `165070ed9d84dfaa5b9451f4125df263dbbc063c`；前轮创作链起点7953141，HTTP入口起点377ab3，空间首轮起点ff09c2f
-- 最近有效代码 / 已核对远端对象：`bf13623d1d72367dba1b9f915c34cea0f6bbe0b0`（tree `abf615cf36a0054fb4aa2169ddd868ab858375a3`；等价源 `a220a02d8429e2ca99364882f306917437a59ccf`）
-- 当前唯一产品改动：PictureController批量编辑服务成功返回后调用已有clearListCache；API字段、数据库、权限与业务规则未改。前轮Recipe时间修复9f77c02、空间增量e8d96ea、HTTP入口5d0aef4
+- R14当前轮起点：已发布 `9cc9cf6ee314acd3359884faaa5d77d37fc0ea11`；前轮缓存起点165070e，创作链起点7953141，HTTP入口起点377ab3，空间首轮起点ff09c2f
+- 最近有效代码 / 已核对远端对象：`003ae2b90b41b962b8ce3c2c7c180caca4673136`（tree `ec34e46d3d624412ac8aff598d62e03f5b48a0c9`；等价源 `6e29ca6a99cc2fe29eb07e4d17232770516ddc4a`）
+- 当前产品改动：LoginView/RegisterView保护页面生命周期与较新导航，阻止重复提交并清理注册倒计时；后端、API与会话store未改。前轮缓存bf13623、Recipe时间修复9f77c02、空间增量e8d96ea、HTTP入口5d0aef4
 - 空间首轮实现：远端对象 `68911f9a70fe01d5257d133cfd4513b192b7774a` / 源 `2bddf43`；产品代码e8d96ea追加review修复
 - 历史已审代码：R16 `6f81e7286004d766169855ed953bf7422f895bcf`；R13 `2e05d6d`；R12 `7135e12`；R11 `6a96f92`
 - 状态证据为随后docs-only提交，用 `git log -- STATE.md` 定位，避免自引用自己的hash
@@ -27,9 +27,17 @@
 | R13 P1/P2/P3 | 渲染预算、手机布局 | 代码review与组件验证通过 / 浏览器待执行 | R13.md；2e05d6d |
 | R16 P1/P2/P3 | 文案与读取状态 | 首增量review通过 / 页面手测待执行 | R16.md；6f81e72 |
 | R14 P1/P2 | 空间精度与读取恢复 | 首增量review通过 | R14.md；e8d96ea |
-| R14 P3 | V3完整回归 | 前端286/286、后端734项clean verify、Redis3项与HTTP27阶段通过 / 浏览器验收待执行 | 111重点/142默认浏览器仅收集 |
+| R14 P3 | V3完整回归 | 前端328/328、前轮后端734项clean verify、Redis3项与HTTP27阶段通过 / 浏览器验收待执行 | 116重点/147默认浏览器仅收集 |
 
 ## 当前轮完成
+
+- 实际SFC/RouterView/Pinia回归复现旧页面迟到跳转、倒计时残留、重复提交与同实例路由污染；初始32项中17红，最终扩展42/42通过
+- 当前路由/实例与导航意图共同保护UI回调；用户新导航仍在等待guard时也不会被登录完成或倒计时抢占。注册成功锁保留、原1.5秒正常跳转保留，取消导航可用已有手动登录链接
+- 登录请求仍按既有store更新成功会话，不声称卸载取消服务端认证或注册；后端/API/R15身份规则未变
+- 独立review无阻断性发现；10项额外探针、42/42专门套件和328/328全前端独立复跑通过
+- 新增5项浏览器回归仅收集；本轮未运行浏览器、后端、Redis或HTTP故事线。范围及后续最小门槛见R14-AUTH-NAVIGATION-VALIDATION
+
+## 前轮批量缓存修复
 
 - 实际HTTP复现：批量编辑成功且详情已更新，同一预热列表查询仍显示旧分类；不是额外发明测试场景
 - 一行产品修复：事务服务成功返回后调用已有列表缓存失效方法。失败/权限拒绝不推进缓存；沿用本地失效及版本Redis key，不改缓存架构
@@ -63,23 +71,23 @@
 
 ## 验证证据
 
-- Node **22.23.3** 全前端 **286/286**；入口策略检查共5项（前轮新增2项），此前新增77项真实Vue SFC renderer测试（详情/PictureList/管理筛选47，空间列表/SpaceCard/AiAgentPanel30）
+- Node **22.23.3** 全前端 **328/328**；本轮新增42项真实SFC/RouterView/Pinia生命周期回归；入口策略检查共5项（前轮新增2项），此前新增77项真实Vue SFC renderer测试（详情/PictureList/管理筛选47，空间列表/SpaceCard/AiAgentPanel30）
 - lint、Companion开/关production build、两组bundle budget通过，最大chunk **390,035bytes**；CompanionView只在开启模式存在
-- 先前空间review补充生产API/真实Axios载荷及分页/草稿探针4/4通过；当前缓存修复review、独立BatchCache/TeamAccess9/9及真实HTTP复跑通过，无未解决阻断性代码发现
-- 当前HTTP真实27阶段 + 4项纯协议通过（Node TAP35包含4个父容器）；独立重启新H2/Redis复跑通过，全部自有子进程已关闭。端口占用拒绝、无开关拒绝、重定向不转发探针通过；前轮额外BYOK stub故事、当前分类重新校验、禁用路由不回退及精确终态重读探针通过
+- 先前空间review补充生产API/真实Axios载荷及分页/草稿探针4/4通过；前轮缓存修复review、独立BatchCache/TeamAccess9/9及真实HTTP复跑通过，无未解决阻断性代码发现
+- 前轮HTTP真实27阶段 + 4项纯协议通过（Node TAP35包含4个父容器）；独立重启新H2/Redis复跑通过，全部自有子进程已关闭。端口占用拒绝、无开关拒绝、重定向不转发探针通过；前轮额外BYOK stub故事、当前分类重新校验、禁用路由不回退及精确终态重读探针通过
 - Redis专项3/3通过并独立复跑；命令/报告独立保存，原718通过+4跳过统计保持原义
-- 后端本轮 **clean verify通过：734项，730通过，0失败/错误，4预期跳过**；编译514个主源码/144个测试源码、打包和原JaCoCo门通过
-- 本轮干净覆盖率：airuntime447/504（**88.69%**），companion541/626（**86.42%**），原门槛均85%；独立审核144份XML和覆盖率计数
-- 后端早期722项、前轮728项、本轮734项clean verify及缓存红绿证据分别保存；历史结果未覆盖。本轮命令沿用R14-BACKEND-VALIDATION，结果见R14-CACHE-VALIDATION
-- 此前新增7项浏览器用例；组合Shell/Gallery/R16为 **111项 / 12文件**，仅收集；默认浏览器集另收集 **142项 / 22文件**。未执行浏览器断言/截图/键盘布局或真实浏览器API故事线
+- 后端前轮 **clean verify通过：734项，730通过，0失败/错误，4预期跳过**；编译514个主源码/144个测试源码、打包和原JaCoCo门通过
+- 前轮干净覆盖率：airuntime447/504（**88.69%**），companion541/626（**86.42%**），原门槛均85%；独立审核144份XML和覆盖率计数
+- 后端早期722项、随后728项、前轮734项clean verify及缓存红绿证据分别保存；本轮仅改前端，未重跑或覆盖这些历史结果。命令沿用R14-BACKEND-VALIDATION，结果见R14-CACHE-VALIDATION
+- 此前新增7项浏览器用例；本轮加入5项登录注册回归后组合Shell/Gallery/R16为 **116项 / 13文件**，仅收集；默认浏览器集另收集 **147项 / 23文件**。未执行浏览器断言/截图/键盘布局或真实浏览器API故事线
 - 本轮diff-check通过；原需求附件第3行Markdown双空格硬换行的历史例外保留
 
 ## 发布与恢复
 
 - GitHub权限已恢复（D-10）；只经已有connector快进长期分支，保留每个tree/顺序/message；不强推，不PR/merge/deploy
 - 代码远端对象已回读；本STATE对应docs-only检查点随后发布。活动本地仅在干净、完整tree相同后对齐发布父链
-- 源 `nexus/checkpoint-r12-local-dda1650`、`nexus/checkpoint-r13-local-state`、`nexus/checkpoint-r16-local-state`、`nexus/checkpoint-r14-local-state`、`nexus/checkpoint-r14-api-local-state`、`nexus/checkpoint-r14-creation-local-state`、`nexus/checkpoint-r14-cache-local-state` 只供审计，不从旧源父链续开发
-- 首选恢复远端 `nexus/mainline-r11`；根需求/DECISIONS/STATE、R11/R12/R13/R16/R14、R14-BACKEND-VALIDATION、R14-API-VALIDATION、R14-CREATION-API-VALIDATION、R14-CACHE-VALIDATION和PUBLICATION足以续接
+- 源 `nexus/checkpoint-r12-local-dda1650`、`nexus/checkpoint-r13-local-state`、`nexus/checkpoint-r16-local-state`、`nexus/checkpoint-r14-local-state`、`nexus/checkpoint-r14-api-local-state`、`nexus/checkpoint-r14-creation-local-state`、`nexus/checkpoint-r14-cache-local-state`、`nexus/checkpoint-r14-auth-local-state` 只供审计，不从旧源父链续开发
+- 首选恢复远端 `nexus/mainline-r11`；根需求/DECISIONS/STATE、R11/R12/R13/R16/R14、R14-BACKEND-VALIDATION、R14-API-VALIDATION、R14-CREATION-API-VALIDATION、R14-CACHE-VALIDATION、R14-AUTH-NAVIGATION-VALIDATION和PUBLICATION足以续接
 - CI只监听main push/pull_request；本分支无CI触发不等于CI通过，本轮报告为已执行的本地验证
 
 ## 当前阻塞 / 限制
@@ -95,9 +103,9 @@
 
 1. 后端可复跑既有clean verify，复用R14-BACKEND-VALIDATION记录的工具链；需要新下载时只用既有可信路由和证书验证，不能复用失效的临时网络配置
 2. 用R14-API-VALIDATION中的入口可重复运行当前27阶段HTTP故事线（扩展细节见R14-CREATION-API-VALIDATION）；Redis及后端应在同一编排启动。仅因新代码或环境变化需要时复跑，不重复已取得证据制造进度
-3. 浏览器需要允许正常IPC的环境。该条件未变时不重复已拒绝启动；可用后执行 `e2e/config/space-recovery.config.js`（111项）、feature-off、feeding和默认完整E2E，再判断V3/DONE
+3. 浏览器需要允许正常IPC的环境。该条件未变时不重复已拒绝启动；可用后执行 `e2e/config/space-recovery.config.js`（116项）、feature-off、feeding和默认完整E2E，再判断V3/DONE
 4. 默认E2E用H2和已有外部服务stub，无需生产MySQL/COS/真实模型密钥；需Redis127.0.0.1:6380无密码DB15，Node22，后端18124和前端15173
-5. 可先复现源码已发现的Login/Register迟到跳转候选：离开页面后旧请求/注册计时器可能抢回路由；尚未运行复现，不当作已确认缺陷。若成立，只修页面生命周期，不改登录会话或服务端注册语义。没有新缺陷或环境变化时，不重跑同类证据制造进度
+5. Login/Register迟到跳转候选已实际复现并修复，当前没有另一个已复现的独立产品缺陷待修；详见R14-AUTH-NAVIGATION-VALIDATION。正常浏览器环境或必要业务决策未到位时暂停相关工作，不重复测试或发明功能制造进度
 6. R15先收敛上述身份/API决策，再选一条V4纵向切片；不搭无消费者的验证框架。严格Accept的SSE协商缺口需要单独API边界确认。浏览器相关工作在正常IPC环境可用前暂停，不绕行
 7. 每轮从远端最新专用分支开始，稳定后review/STATE/验证tree发布；不改其他用户分支，不PR/merge/deploy
 
@@ -114,3 +122,4 @@
 | 2026-10-02 18:51 | Nexus | R14隔离Redis3/3及真实HTTP8阶段独立复跑通过；前端284/284，浏览器111/142仅收集，完整验收仍pending |
 | 2026-10-02 19:49 | Nexus | R14模型网关/Story/Recipe扩展27阶段通过；修复Recipe创建时间一致性，后端728/724/4、前端286/286；浏览器仍pending |
 | 2026-10-02 20:49 | Nexus | R14批量编辑缓存缺陷先红后绿，734/730/4后端及27阶段HTTP通过；R15前置身份决策明确为待定，浏览器pending |
+| 2026-10-02 21:46 | Nexus | R14登录注册迟到跳转红绿通过；专门42/42、全前端328/328、独立review通过；浏览器116/147仅收集，剩余依赖明确暂停 |

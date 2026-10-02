@@ -111,3 +111,16 @@
 HTTP同查询红绿实证、6项控制器红绿及完整新clean verify734项（730通过、4跳过）、前端286/286和双模式build/budget通过。原27业务阶段计数不增加，浏览器111/142仅收集。只读fetch核对tree和父链后，追加docs-only状态提交并只force=false快进专用分支。
 
 源状态用新检查点nexus/checkpoint-r14-cache-local-state，不覆盖既有源备份。增量bundle需要已发布165070e基线；活动分支仅在干净且tree完全相同后对齐远端。状态提交从git历史定位，不自引用，恢复仍优先远端长期分支。
+
+
+## R14 登录注册生命周期检查点（2026-10-02）
+
+从已发布9cc9cf6ee314acd3359884faaa5d77d37fc0ea11继续；只修LoginView/RegisterView的异步导航/重复提交并增加针对性回归。
+
+| 原本地源 SHA | 对应远端 commit 对象 | 完全相同的 tree SHA |
+|---|---|---|
+| `6e29ca6a99cc2fe29eb07e4d17232770516ddc4a` | `003ae2b90b41b962b8ce3c2c7c180caca4673136` | `ec34e46d3d624412ac8aff598d62e03f5b48a0c9` |
+
+实际SFC/RouterView/Pinia红绿、最终专门42/42、全前端328/328、lint和双模式build/budget通过；独立review及10项额外探针通过。后端/API未改，本轮不重跑历史后端数据；重点116/默认147浏览器仅收集。只读fetch核对上述tree/父链后，追加docs-only状态提交并以force=false快进专用分支。
+
+源状态用新检查点nexus/checkpoint-r14-auth-local-state，增量bundle需要已发布9cc9cf6基线。活动分支只在干净且完整tree一致后对齐远端，不改其他用户分支。状态提交仍由git历史定位，不自引用；恢复优先远端长期分支，不从源备份开发。
