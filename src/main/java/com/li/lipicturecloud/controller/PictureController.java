@@ -438,6 +438,7 @@ public class PictureController {
         ThrowUtils.throwIf(pictureEditByBatchRequest == null, ErrorCode.PARAMS_ERROR);
         User loginUser = userService.getLoginUserEntity(request);
         pictureService.editPictureByBatch(pictureEditByBatchRequest, loginUser);
+        clearListCache();
         return ResultUtils.success(true);
     }
 

@@ -261,11 +261,41 @@ test('real local fixture API story (HTTP only; not browser acceptance)', { timeo
     // and permissions, not >2^53 precision or the frontend batch serializer.
     const before = await owner.json('/picture/get/vo?id=102')
     const untouched = pictureMetadata(await owner.json('/picture/get/vo?id=103'))
+    const query = { current: 1, pageSize: 20, spaceId: '10', sortField: 'id', sortOrder: 'ascend' }
+    const oldCategoryQuery = { ...query, category: before.category }
+    const newCategoryQuery = { ...query, category: 'API fixture check' }
+    const cached = body => owner.json('/picture/list/page/vo/cache', { method: 'POST', body })
+    // These are intentionally small fixture IDs. Cache hits can render safe
+    // numeric IDs; this lookup does not assert large-ID transport behavior.
+    const selected = page => page.records.find(picture => String(picture.id) === '102')
+    const ids = page => page.records.map(picture => String(picture.id))
+    assert.equal(selected(await cached(query)).category, before.category)
+    assert.equal(selected(await cached(query)).name, before.name)
+    assert.deepEqual(ids(await cached(oldCategoryQuery)), ['102'])
+    assert.deepEqual(ids(await cached(newCategoryQuery)), [])
+    // A warm private-space cache never skips the per-request permission check.
+    await other.json('/picture/list/page/vo/cache', { method: 'POST', body: query, status: 403, code: 40101 })
     try {
       await other.json('/picture/edit/batch', {
         method: 'POST', body: { spaceId: '10', pictureIdList: ['102'], category: 'must-not-write' },
         status: 403, code: 40101
       })
+      const afterDenied = selected(await cached(query))
+      assert.equal(afterDenied.category, before.category)
+      assert.equal(afterDenied.name, before.name)
+      assert.deepEqual(afterDenied.tags, before.tags)
+      // The existing H2 fixture's category column is VARCHAR(64). This forces
+      // a real database rejection, not a mocked controller error. It proves
+      // no visible change on rejection, not rollback after a prior good row.
+      await owner.json('/picture/edit/batch', {
+        method: 'POST', body: { spaceId: '10', pictureIdList: ['102', '103'], category: 'x'.repeat(65) },
+        status: 500, code: 50000
+      })
+      assert.deepEqual(pictureMetadata(await owner.json('/picture/get/vo?id=102')), pictureMetadata(before))
+      assert.deepEqual(pictureMetadata(await owner.json('/picture/get/vo?id=103')), untouched)
+      assert.equal(selected(await cached(query)).category, before.category)
+      assert.deepEqual(ids(await cached(oldCategoryQuery)), ['102'])
+      assert.deepEqual(ids(await cached(newCategoryQuery)), [])
       assert.equal(await owner.json('/picture/edit/batch', {
         method: 'POST', body: { spaceId: '10', pictureIdList: ['102'], category: 'API fixture check', tags: ['api-fixture'], nameRule: 'API fixture {序号}' }
       }), true)
@@ -278,12 +308,28 @@ test('real local fixture API story (HTTP only; not browser acceptance)', { timeo
       assert.equal(changed.url, before.url)
       assert.equal(changed.originalUrl, before.originalUrl)
       assert.deepEqual(pictureMetadata(await owner.json('/picture/get/vo?id=103')), untouched)
+      // SpaceDetail reloads this exact cached endpoint after a successful batch.
+      // Detail reads alone would hide the stale-list regression.
+      for (let read = 0; read < 2; read += 1) {
+        const listed = selected(await cached(query))
+        assert.equal(listed.category, changed.category, 'Successful batch must invalidate the same cached list query')
+        assert.equal(listed.name, changed.name)
+        assert.deepEqual(listed.tags, changed.tags)
+      }
+      assert.deepEqual(ids(await cached(oldCategoryQuery)), [], 'Old category membership must refresh')
+      assert.deepEqual(ids(await cached(newCategoryQuery)), ['102'], 'Previously empty new category must refresh')
     } finally {
       await owner.json('/picture/edit/batch', {
         method: 'POST', body: { spaceId: '10', pictureIdList: ['102'], category: before.category, tags: before.tags, nameRule: before.name }
       })
     }
     assert.deepEqual(pictureMetadata(await owner.json('/picture/get/vo?id=102')), pictureMetadata(before))
+    const restored = selected(await cached(query))
+    assert.equal(restored.category, before.category)
+    assert.equal(restored.name, before.name)
+    assert.deepEqual(restored.tags, before.tags)
+    assert.deepEqual(ids(await cached(oldCategoryQuery)), ['102'])
+    assert.deepEqual(ids(await cached(newCategoryQuery)), [])
   })
 
   await stage('logout invalidates only the selected session; the other account remains isolated', async () => {
