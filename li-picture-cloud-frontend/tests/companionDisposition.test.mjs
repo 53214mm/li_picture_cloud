@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { URL } from 'node:url'
 import { mapCompanionPresentation } from '../src/presentation/companionPresentation.js'
 import { mapCompanionAnimation, createCompanionAnimator } from '../src/presentation/companionAnimation.js'
 
@@ -160,4 +162,12 @@ test('R11 mood updates cannot reset focus or replay proposal and direct-interact
   assert.equal(c.value.state, 'idle')
   assert.equal(c.timer.duration, 4000)
   c.animator.destroy()
+})
+
+// The added visible state must not move figcaption away from a figure edge.
+test('R11 body keeps a valid trailing caption and no live region for passive mood', async () => {
+  const source = await readFile(new URL('../src/components/companion/body/CompanionBody.vue', import.meta.url), 'utf8')
+  assert.match(source, /<p v-if="showDisposition"[^>]*>[^]*?<\/p>\s*<figcaption>/)
+  assert.match(source, /<\/figcaption>\s*<\/figure>/)
+  assert.doesNotMatch(source, /aria-live|role="(?:status|alert)"/)
 })

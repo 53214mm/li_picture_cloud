@@ -18,6 +18,7 @@
       <CompanionArtwork v-else class="body-static" :asset="lingyeAssets.home" loading="eager"
                         accessible-label="绫页，纸翼蛾族的成年全身像" />
     </button>
+    <p v-if="showDisposition" class="body-disposition">{{ presentation.disposition.mood.label }}</p>
     <figcaption>
       <span><strong>绫页</strong><span class="body-species">纸翼蛾族</span></span>
       <button v-if="animate && animationIntent.state !== 'static' && !availability.reducedMotion && !availability.failed"
@@ -26,7 +27,6 @@
       </button>
       <span v-else class="body-static-label">静态立绘</span>
     </figcaption>
-    <p v-if="showDisposition" class="body-disposition">{{ presentation.disposition.mood.label }}</p>
   </figure>
 </template>
 <script setup>

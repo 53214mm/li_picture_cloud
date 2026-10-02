@@ -21,8 +21,11 @@ test('awakens a companion and recovers one private-picture feed without double g
   await page.getByRole('button', { name: '唤醒我的伙伴' }).click()
   await expect(page.getByText('光点', { exact: true })).toBeVisible()
   // 已唤醒但尚未喂养：主页返回服务端中性情绪视图（五轴为 0），关系面板保持空状态。
+  await page.getByTestId('mood-details').locator('summary').click()
+  await expect(page.getByTestId('mood-value-energy')).toBeVisible()
   await expect(page.getByTestId('mood-value-energy')).toHaveText('0')
-  await expect(page.getByText('伙伴还没和你建立关系，先喂一张图片开始相处。')).toBeVisible()
+  await expect(page.getByTestId('relationship-label')).toHaveText('暂无记录')
+  await expect(page.getByTestId('relationship-details')).toHaveCount(0)
 
   await page.getByRole('button', { name: /旅行样片/ }).click()
   const keys = []
@@ -53,7 +56,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   expect(keys[1]).toBe(keys[0])
   await expect(page.getByText('42 / 100 生命经验')).toBeVisible()
   await expect(page.getByText('+42 生命经验')).toBeVisible()
-  // 喂养故事、情绪摘要与记忆都统一使用"伙伴说"气泡；按文案过滤各自的展示。
+  // 喂养故事与记忆保留"伙伴说"气泡；情绪由统一表现协议展示。
   await expect(page.getByRole('group', { name: '伙伴说' })
     .filter({ hasText: '演示营养让伙伴练习了观察与叙事。' })).toBeVisible()
   await expect(page.getByTestId('growth-trait-curiosity').first()).toContainText('+0.60')
@@ -69,6 +72,10 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByText('伙伴记得一张让它练习了观察与叙事的演示图片，它把这次练习记进了档案。')).toBeVisible()
   // 无需 reload：喂养成功后页面自动重取权威主页，情绪与关系面板立即出现最新值。
   // Demo 档每次喂养五轴 +2；首次完整喂养关系为 熟悉 +5 / 信任 +2 / 亲密 +1 / 默契 +1 / 近期反馈 +5。
+  await page.getByTestId('mood-details').locator('summary').click()
+  await page.getByTestId('relationship-details').locator('summary').click()
+  await expect(page.getByTestId('mood-value-energy')).toBeVisible()
+  await expect(page.getByTestId('relationship-value-familiarity')).toBeVisible()
   await expect(page.getByTestId('mood-value-energy')).toHaveText('2')
   await expect(page.getByTestId('mood-value-joy')).toHaveText('2')
   await expect(page.getByTestId('mood-value-loneliness')).toHaveText('2')
@@ -157,7 +164,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
   await expect(page.getByText('来源 dashscope / qwen3.6-flash')).toBeVisible()
   await expect(page.getByText('置信度 0.84')).toBeVisible()
-  // 成长档案内恰好两条喂养故事气泡（页面另有情绪/记忆气泡，不在档案区内计数）。
+  // 成长档案内恰好两条喂养故事气泡（页面另有记忆气泡，不在档案区内计数）。
   const archiveBubbles = page.locator('.timeline-list').getByRole('group', { name: '伙伴说' })
   await expect(archiveBubbles).toHaveCount(2)
   // 档案内两条来源图片链接（记忆面板使用"来源图片 #102"文案，精确匹配区分）。
