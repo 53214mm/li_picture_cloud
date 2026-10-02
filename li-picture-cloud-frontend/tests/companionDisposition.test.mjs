@@ -167,7 +167,7 @@ test('R11 mood updates cannot reset focus or replay proposal and direct-interact
 // The added visible state must not move figcaption away from a figure edge.
 test('R11 body keeps a valid trailing caption and no live region for passive mood', async () => {
   const source = await readFile(new URL('../src/components/companion/body/CompanionBody.vue', import.meta.url), 'utf8')
-  assert.match(source, /<p v-if="showDisposition"[^>]*>[^]*?<\/p>\s*<figcaption>/)
+  assert.match(source, /<p v-if="showDisposition"[^>]*>[^]*?<\/p>\s*(?:<CompanionProposalHint[^>]*\/>\s*)?<figcaption>/)
   assert.match(source, /<\/figcaption>\s*<\/figure>/)
   assert.doesNotMatch(source, /aria-live|role="(?:status|alert)"/)
 })

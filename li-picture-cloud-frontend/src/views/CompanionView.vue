@@ -293,7 +293,8 @@ watch([() => interaction.destination, () => home.value?.companion?.id, sourceLoa
   const focusGeneration = selectionGeneration
   await nextTick()
   if (focusGeneration !== selectionGeneration || command.actor !== String(userStore.currentUser?.id)) return
-  const target = document.getElementById(command.target === 'chat' ? 'companion-chat-input' : 'feeding-title')
+  let target = document.getElementById(command.target === 'chat' ? 'companion-chat-input' : command.target === 'proposal' ? 'proposal-title' : 'feeding-title')
+  if (command.target === 'chat' && target?.disabled) target = document.getElementById('chat-title')
   target?.scrollIntoView({ block: 'center' })
   target?.focus({ preventScroll: true })
 }, { flush: 'post' })

@@ -1,26 +1,27 @@
 <template>
-  <section class="chat-card" aria-labelledby="chat-title">
+  <section class="chat-card" :class="{ 'chat-card--compact': compact }" :aria-labelledby="titleId" :data-chat-ready="!unavailable">
     <header>
-      <button type="button" class="portrait-interaction" aria-label="和绫页互动" aria-haspopup="dialog" @click="interaction.open()">
+      <button v-if="!compact" type="button" class="portrait-interaction" aria-label="和绫页互动" aria-haspopup="dialog" @click="interaction.open()">
         <CompanionPortrait :presentation="presentation" />
       </button>
+      <CompanionPortrait v-else :presentation="presentation" />
       <div>
         <span class="eyebrow">绫页 · 站内对话</span>
-        <h2 id="chat-title">和伙伴说说话</h2>
+        <h2 :id="titleId" tabindex="-1">{{ compact ? '和绫页聊聊' : '和伙伴说说话' }}</h2>
       </div>
     </header>
 
-    <div v-if="loadError" class="chat-state error" role="alert">
-      <p>{{ loadError }}</p>
-      <button class="btn btn-outline" type="button" @click="loadHistory">重试</button>
+    <div v-if="state.loadError" class="chat-state error" role="alert">
+      <p>{{ state.loadError }}</p>
+      <button class="btn btn-outline" type="button" @click="chat.reload">重试</button>
     </div>
-    <div v-else-if="loading && !messages.length" class="chat-state">正在读取我们的对话…</div>
-    <div v-else-if="!messages.length" class="chat-state">
+    <div v-else-if="state.loading && !state.messages.length" class="chat-state">正在读取我们的对话…</div>
+    <div v-else-if="!state.messages.length" class="chat-state">
       伙伴还在这里。你可以问问它记得什么，或者聊聊今天想喂它哪张图片。
     </div>
-    <div v-else class="chat-scroll" role="log" aria-label="伙伴对话记录" tabindex="0">
+    <div v-else ref="scroller" class="chat-scroll" role="log" aria-label="伙伴对话记录" tabindex="0">
       <div class="chat-list">
-        <template v-for="message in messages" :key="message.localKey">
+        <template v-for="message in state.messages" :key="message.localKey">
           <CompanionMessageBubble v-if="message.role === 'COMPANION'"
                                   :message="message.content"
                                   speaker-label="伙伴说" />
@@ -33,113 +34,60 @@
       </div>
     </div>
 
-    <form class="chat-input" @submit.prevent="send">
-      <label class="visually-hidden" for="companion-chat-input">对伙伴说的话</label>
-      <input id="companion-chat-input" v-model="draft" type="text" maxlength="500"
-             placeholder="对伙伴说点什么…" autocomplete="off" :disabled="sending" />
-      <button class="btn btn-primary" type="submit" :disabled="sending || !draft.trim()">
+    <form class="chat-input" @submit.prevent="chat.send">
+      <label class="visually-hidden" :for="inputId">对伙伴说的话</label>
+      <input :id="inputId" v-model="draft" type="text" maxlength="500"
+             placeholder="对伙伴说点什么…" autocomplete="off" :disabled="sending || state.needsRefresh" />
+      <button class="btn btn-primary" type="submit" :disabled="sending || unavailable || !draft.trim()">
         {{ sending ? '伙伴正在回应…' : '发送' }}
       </button>
     </form>
-    <p v-if="sendError" class="chat-error" role="alert">{{ sendError }}</p>
-    <p v-if="chatPolicy !== 'MODEL'" class="chat-policy-note" data-testid="chat-policy-note">
-      当前对话模式：演示回复（不调用模型）。切换到 MODEL 档后，伙伴会用真实语言模型回应。
+    <p v-if="state.sendError" class="chat-error" role="alert">{{ state.sendError }}</p>
+    <div v-if="state.needsRefresh || state.notice" class="chat-recovery">
+      <p>{{ state.notice }}</p>
+      <button v-if="state.needsRefresh" type="button" class="btn btn-outline" :disabled="state.loading || sending" @click="chat.reload">
+        {{ state.loading ? '正在刷新…' : '刷新对话' }}
+      </button>
+    </div>
+    <p v-if="chatPolicy === 'DEMO'" class="chat-policy-note" data-testid="chat-policy-note">
+      当前对话模式：演示回复（不调用模型）。
     </p>
   </section>
 </template>
 
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
-import { listCompanionChatHistory } from '@/api/companion'
-import { streamCompanionChat } from '@/utils/companion'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
+import { storeToRefs } from 'pinia'
 import CompanionMessageBubble from '@/components/companion/CompanionMessageBubble.vue'
 import CompanionPortrait from '@/components/companion/body/CompanionPortrait.vue'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
+import { useCompanionChatStore } from '@/stores/companionChat'
 const interaction = useCompanionInteractionStore()
-
-defineProps({
+const chat = useCompanionChatStore()
+const { state } = storeToRefs(chat)
+const props = defineProps({
   chatPolicy: { type: String, default: null },
-  presentation: { type: Object, required: true }
+  presentation: { type: Object, required: true },
+  compact: Boolean
 })
 const emit = defineEmits(['presentation-change'])
-
-const messages = ref([])
-const loading = ref(false)
-const loadError = ref('')
-const draft = ref('')
-const sending = ref(false)
-const sendError = ref('')
-const receiving = ref(false)
+const scroller = ref(null)
+const sending = computed(() => state.value.phase !== 'idle')
+const draft = computed({ get: () => state.value.draft, set: value => chat.setDraft(value) })
+const inputId = computed(() => props.compact ? 'companion-quick-chat-input' : 'companion-chat-input')
+const titleId = computed(() => props.compact ? 'quick-chat-title' : 'chat-title')
+const unavailable = computed(() => !state.value.loaded || state.value.loading || Boolean(state.value.loadError) || state.value.needsRefresh)
+let release = () => {}
+onMounted(() => { release = chat.acquire() })
+onBeforeUnmount(() => { release(); emit('presentation-change', { phase: 'idle', error: false }) })
 watchEffect(() => emit('presentation-change', {
-  phase: sending.value && !sendError.value ? receiving.value ? 'streaming' : 'waiting' : 'idle',
-  error: Boolean(sendError.value || loadError.value)
+  phase: state.value.phase,
+  error: Boolean(state.value.sendError || state.value.loadError)
 }))
-onBeforeUnmount(() => emit('presentation-change', { phase: 'idle', error: false }))
-let localKeySeed = 0
-
-onMounted(loadHistory)
-
-async function loadHistory() {
-  loading.value = true
-  loadError.value = ''
-  try {
-    const history = await listCompanionChatHistory()
-    messages.value = (history.records || []).map(message => withKey(message))
-  } catch (error) {
-    loadError.value = error.message || '对话历史读取失败，请稍后重试。'
-  } finally {
-    loading.value = false
-  }
-}
-
-async function send() {
-  const content = draft.value.trim()
-  if (sending.value || !content) return
-  sending.value = true
-  receiving.value = false
-  sendError.value = ''
-  messages.value.push(withKey({ role: 'USER', content }))
-  draft.value = ''
-  let partial = ''
-  const companionDraft = withKey({ role: 'COMPANION', content: '' })
-  messages.value.push(companionDraft)
-  try {
-    await streamCompanionChat(content, {
-      onChunk(chunk) {
-        receiving.value = true
-        partial += chunk
-        companionDraft.content = partial
-      },
-      onError(error) {
-        receiving.value = false
-        companionDraft.content = partial || error.message
-        sendError.value = error.message
-      }
-    })
-    if (!companionDraft.content) companionDraft.content = '（这次没有想好怎么回）'
-  } catch (error) {
-    // 请求未发出或响应异常：移除空泡泡、恢复草稿，历史刷新后会与后端一致。
-    const index = messages.value.indexOf(companionDraft)
-    if (index !== -1 && !companionDraft.content) messages.value.splice(index, 1)
-    if (!draft.value) draft.value = content
-    sendError.value = error.message || '伙伴暂时没法回应，请稍后再试。'
-  } finally {
-    sending.value = false
-    receiving.value = false
-    await nextTick()
-    scrollToBottom()
-  }
-}
-
-function withKey(message) {
-  localKeySeed += 1
-  return { localKey: `m-${localKeySeed}`, role: message.role, content: message.content }
-}
-
-function scrollToBottom() {
-  const scroller = document.querySelector('.chat-scroll')
-  if (scroller) scroller.scrollTop = scroller.scrollHeight
-}
+watch(() => state.value.messages, async () => {
+  await nextTick()
+  if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
+})
 </script>
 
 <style scoped>
@@ -163,6 +111,15 @@ function scrollToBottom() {
 .chat-input input { min-width: 0; padding: .6rem .75rem; border: 2px solid var(--black); font: inherit; font-size: .9rem; }
 .chat-input .btn { min-height: 44px; }
 .chat-error { margin: 0 1.5rem 1.25rem; color: var(--red); font-size: .8rem; }
+.chat-recovery { display: grid; gap: .5rem; margin: 0 1rem 1rem; color: var(--lp-text-secondary); font-size: .8rem; }
+.chat-card--compact { border: 1px solid var(--lp-border); border-radius: var(--lp-radius-m); overflow: hidden; }
+.chat-card--compact > header { gap: .6rem; padding: .75rem; border-width: 1px; }
+.chat-card--compact h2 { font-size: 1rem; }
+.chat-card--compact :deep(.companion-portrait) { width: 56px; height: 56px; }
+.chat-card--compact .chat-scroll { max-block-size: 18rem; }
+.chat-card--compact .chat-list, .chat-card--compact .chat-input, .chat-card--compact .chat-state { padding: .75rem; }
+.chat-card--compact .chat-input { grid-template-columns: 1fr; border-width: 1px; }
+.chat-card--compact .chat-policy-note { margin-inline: .75rem; }
 .chat-policy-note { margin: 0 1.5rem 1.25rem; padding: .5rem .7rem; border-left: 4px solid #8a6d1a; background: var(--gray-100); color: #8a6d1a; font-size: .78rem; font-weight: 700; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 767px) {

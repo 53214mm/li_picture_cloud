@@ -4,6 +4,7 @@ import { useUserStore } from './user'
 import { COMPANION_UI_ENABLED } from '@/config/features'
 import { mapCompanionPresentation } from '@/presentation/companionPresentation'
 import { createPresentationChannel } from '@/presentation/companionPresentationChannel'
+import { selectCompanionProposalPreview } from '@/presentation/companionProposalPreview'
 
 // Observation cache only. Existing components retain ownership of business IO.
 export const useCompanionPresentationStore = defineStore('companionPresentation', () => {
@@ -12,5 +13,6 @@ export const useCompanionPresentationStore = defineStore('companionPresentation'
   const channel = createPresentationChannel(snapshot => { observation.value = snapshot })
   watch(() => user.currentUser?.id, () => channel.reset(), { flush: 'sync' })
   const presentation = computed(() => mapCompanionPresentation({ ...observation.value, enabled: COMPANION_UI_ENABLED }))
-  return { presentation, acquireSource: channel.acquire }
+  const proposalPreview = computed(() => selectCompanionProposalPreview(observation.value, presentation.value))
+  return { presentation, proposalPreview, acquireSource: channel.acquire }
 })

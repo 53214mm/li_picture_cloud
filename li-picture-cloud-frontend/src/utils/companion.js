@@ -116,38 +116,65 @@ export function parseSse(buffer) {
 /**
  * 流式发送一条伙伴消息；回调 onChunk 逐段接收伙伴回复。
  */
-export async function streamCompanionChat(message, { onChunk, onError, onDone } = {}) {
+export async function streamCompanionChat(message, { signal, onChunk, onError, onDone } = {}) {
+  const checkAbort = () => {
+    if (signal?.aborted) throw signal.reason ?? new DOMException('The operation was aborted', 'AbortError')
+  }
+  checkAbort()
   const response = await fetch('/api/companion/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ message })
+    body: JSON.stringify({ message }),
+    signal
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
+    checkAbort()
     throw Object.assign(new Error(body?.message || '伙伴暂时没法回应，请稍后再试'),
       { status: response.status })
+  }
+  if (!response.body) {
+    checkAbort()
+    throw new Error('伙伴的回应连接不可用，请刷新对话记录后再试')
   }
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const { parsed, remainder } = parseSse(buffer)
-    buffer = remainder
-    for (const event of parsed) {
-      if (event.name === 'error') {
-        onError?.(new Error(event.data || '伙伴暂时没法回应，请稍后再试'))
-        return
-      }
-      if (event.name === 'done') {
-        onDone?.()
-        return
-      }
-      if (event.data) onChunk?.(event.data)
-    }
+  let cancellation
+  const cancelReader = () => {
+    cancellation ||= Promise.resolve().then(() => reader.cancel()).catch(() => {})
+    return cancellation
   }
-  onDone?.()
+  const abortReader = () => { void cancelReader() }
+  signal?.addEventListener('abort', abortReader, { once: true })
+  try {
+    while (true) {
+      checkAbort()
+      const { done, value } = await reader.read()
+      checkAbort()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const { parsed, remainder } = parseSse(buffer)
+      buffer = remainder
+      for (const event of parsed) {
+        checkAbort()
+        if (event.name === 'error') {
+          onError?.(new Error(event.data || '伙伴暂时没法回应，请稍后再试'))
+          return
+        }
+        if (event.name === 'done') {
+          onDone?.()
+          return
+        }
+        if (event.data) onChunk?.(event.data)
+      }
+    }
+    onDone?.()
+  } finally {
+    signal?.removeEventListener('abort', abortReader)
+    await cancelReader()
+    // Releasing must never replace the original network/callback exception.
+    try { reader.releaseLock() } catch { /* a failed reader is already unusable */ }
+  }
 }

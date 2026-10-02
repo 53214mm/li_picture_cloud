@@ -3,7 +3,7 @@
     <header>
       <div>
         <span class="eyebrow">主动提案</span>
-        <h2 id="proposal-title">伙伴想对你说</h2>
+        <h2 id="proposal-title" tabindex="-1">伙伴想对你说</h2>
       </div>
       <button class="contract-toggle" type="button" :aria-expanded="showContract"
               @click="showContract = !showContract">
@@ -102,6 +102,7 @@ const contractDraft = reactive({ active: false, quietStart: '23:00', quietEnd: '
 let proposalReadGeneration = 0
 watchEffect(() => emit('presentation-change', {
   status: proposal.value?.status ?? null,
+  preview: proposal.value ? { id: proposal.value.id, content: proposal.value.content } : null,
   loading: loading.value,
   busy: busy.value,
   error: Boolean(loadError.value || actionError.value)

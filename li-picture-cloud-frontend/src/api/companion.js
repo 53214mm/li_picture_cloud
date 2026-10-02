@@ -1,6 +1,6 @@
 import request from './request'
 
-export const getCompanionHome = () => request.get('/companion/me')
+export const getCompanionHome = (options = {}) => request.get('/companion/me', options)
 export const awakenCompanion = () => request.post('/companion/awaken')
 export const feedCompanion = data => request.post('/companion/feed', data)
 
@@ -12,8 +12,8 @@ export const correctCompanionMemory = (id, content) =>
 export const dismissCompanionMemory = id => request.post(`/companion/memories/${id}/dismiss`)
 export const deleteCompanionMemory = id => request.delete(`/companion/memories/${id}`)
 
-export const listCompanionChatHistory = (limit = 50) =>
-  request.get('/companion/chat/history', { params: { limit } })
+export const listCompanionChatHistory = (limit = 50, options = {}) =>
+  request.get('/companion/chat/history', { ...options, params: { limit } })
 
 export const getCompanionContract = () => request.get('/companion/contract')
 export const updateCompanionContract = data => request.put('/companion/contract', data)

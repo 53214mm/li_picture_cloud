@@ -283,21 +283,24 @@ test('parses sse chunks across fragmented buffers and names events', () => {
   assert.equal(crlf.remainder, '')
 })
 
-test('chat panel reuses the companion bubble and streams replies', async () => {
+test('chat surfaces reuse the companion bubble and share the account-scoped stream', async () => {
   const chat = await readFile(fileURLToPath(new globalThis.URL('../src/components/companion/CompanionChatPanel.vue', import.meta.url)), 'utf8')
   const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/CompanionView.vue', import.meta.url)), 'utf8')
   const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/companion.js', import.meta.url)), 'utf8')
   const utils = await readFile(fileURLToPath(new globalThis.URL('../src/utils/companion.js', import.meta.url)), 'utf8')
 
   assert.match(chat, /CompanionMessageBubble/)
-  assert.match(chat, /streamCompanionChat/)
-  assert.match(chat, /listCompanionChatHistory/)
+  const chatStore = await readFile(fileURLToPath(new globalThis.URL('../src/stores/companionChat.js', import.meta.url)), 'utf8')
+  assert.match(chat, /useCompanionChatStore/)
+  assert.match(chatStore, /streamCompanionChat/)
+  assert.match(chatStore, /listCompanionChatHistory/)
   assert.match(chat, /role === 'COMPANION'/)
   assert.match(chat, /user-bubble/)
-  // 发送失败时恢复草稿，避免用户输入丢失。
-  assert.match(chat, /draft\.value = content/)
-  // 非 MODEL 档必须明示「演示回复（不调用模型）」，避免用户误以为伙伴在用真实模型。
-  assert.match(chat, /chatPolicy !== 'MODEL'/)
+  // 未决发送先读回历史，不恢复已发送草稿诱导重复提交。
+  assert.match(chat, /state\.needsRefresh/)
+  assert.match(chat, /chat\.reload/)
+  // 只有已知 DEMO 档明示演示回复；不把未知模式猜成模型或演示。
+  assert.match(chat, /chatPolicy === 'DEMO'/)
   assert.match(chat, /演示回复（不调用模型）/)
   assert.match(page, /CompanionChatPanel/)
   assert.match(api, /\/companion\/chat\/history/)

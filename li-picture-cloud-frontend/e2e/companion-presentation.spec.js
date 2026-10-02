@@ -152,7 +152,7 @@ test('uncertain Feed retries the same key and refresh failure remains neutral wi
   expect(state.errors).toEqual([])
 })
 
-test('stream error and network failure leave neutral request activity and allow retry', async ({ page }) => {
+test('stream error and network failure stay neutral and reconcile history before another send', async ({ page }) => {
   const state = await fixture(page)
   await page.goto('/companion')
   await sendChat(page)
@@ -161,12 +161,16 @@ test('stream error and network failure leave neutral request activity and allow 
   await chunk(page, 'event:error\ndata:模型暂时不可用\n\n')
   await allSurfaces(page, 'activity', 'idle')
   await allSurfaces(page, 'affect', 'cheerful')
+  await expect(page.getByLabel('对伙伴说的话')).toBeDisabled()
+  await page.getByRole('button', { name: '刷新对话' }).click()
   await page.getByLabel('对伙伴说的话').fill('再次尝试')
   await page.getByRole('button', { name: '发送', exact: true }).click()
   await allSurfaces(page, 'activity', 'thinking')
   await page.evaluate(() => globalThis.r06ChatReject(new Error('network offline')))
   await allSurfaces(page, 'activity', 'idle')
-  await expect(page.getByLabel('对伙伴说的话')).toHaveValue('再次尝试')
+  await expect(page.getByLabel('对伙伴说的话')).toHaveValue('')
+  await expect(page.getByLabel('对伙伴说的话')).toBeDisabled()
+  await expect(page.getByRole('button', { name: '刷新对话' })).toBeVisible()
   expect(state.errors).toEqual([])
 })
 

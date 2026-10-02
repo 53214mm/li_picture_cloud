@@ -19,6 +19,7 @@
                         accessible-label="绫页，纸翼蛾族的成年全身像" />
     </button>
     <p v-if="showDisposition" class="body-disposition">{{ presentation.disposition.mood.label }}</p>
+    <CompanionProposalHint :presentation="presentation" />
     <figcaption>
       <span><strong>绫页</strong><span class="body-species">纸翼蛾族</span></span>
       <button v-if="animate && animationIntent.state !== 'static' && !availability.reducedMotion && !availability.failed"
@@ -32,6 +33,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import CompanionArtwork from './CompanionArtwork.vue'
+import CompanionProposalHint from '../CompanionProposalHint.vue'
 import SpritePlayer from './SpritePlayer.vue'
 import { lingyeAssets } from './lingyeAssets'
 import { mapCompanionAnimation } from '@/presentation/companionAnimation'
@@ -58,7 +60,8 @@ const userPaused = ref(false)
 const availability = ref({ reducedMotion: true, failed: false })
 </script>
 <style scoped>
-.companion-body { width: 100%; margin: 0; align-self: center; padding: 1rem 1rem .75rem; color: var(--lp-text-primary); background: radial-gradient(ellipse at 50% 38%, #faf8ef 0, #ece5d5 70%, #e1d7c4 100%); }
+.companion-body { position: relative; width: 100%; margin: 0; align-self: center; padding: 1rem 1rem .75rem; color: var(--lp-text-primary); background: radial-gradient(ellipse at 50% 38%, #faf8ef 0, #ece5d5 70%, #e1d7c4 100%); }
+.companion-body > :deep(.proposal-hint) { position: absolute; top: 5%; right: 0; z-index: 1; }
 .companion-body--habitat { padding: 0; background: transparent; }
 .companion-body--habitat figcaption { gap: 4px; padding-inline: 12px; }
 .companion-body--habitat .body-motion { background: #f7f5e5b3; }
