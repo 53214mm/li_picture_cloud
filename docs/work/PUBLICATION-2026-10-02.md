@@ -31,3 +31,17 @@
 - 既有前端 157/157、lint、功能开/关 build + bundle budget 和独立 review 证据因 tree 相同适用于已发布代码；本次仅做 Git 发布及文档更新，不冒称重新运行代码测试。
 - `.github/workflows/ci.yml` 当前仅监听 main push 和 pull_request；独立分支发布不触发该 CI，无运行不等于通过。
 - R11 浏览器验收以及 R12 V3 真实 Home/history/SSE / 后端故事线验收仍未完成；原 Chromium 安装限制和 50 项仅收集的事实保持不变。
+
+
+## R13 后续检查点（2026-10-02）
+
+沿已发布 `bb4e6f501635230e8b515fde18e718026f91d37e` 开始，不恢复旧本地 R12 父链。仍使用相同 connector 的 tree/commit/ref 接口；同一内容因 author/date 差异产生新 SHA，提交顺序与每个 tree 不变。
+
+| 原本地源 SHA | 对应远端 commit 对象 | 完全相同的 tree SHA |
+|---|---|---|
+| `b10070303b4847c1f06fb3c94e66d533c2e4b2a4` | `5d707515202d96d81f410abe4f1a1cf24253775f` | `7502604ff8d559ad5d9e557c3482bd651f85b226` |
+| `ca743a9df55a791864084e10c23bcfe7ae9ec5b9` | `2e05d6dd328da59060f0cd01ba373527d96d32f2` | `d31e856b1728f7d5217a446c8e135d7284d7f3de` |
+
+源提交已独立审核：Node22全前端173/173、lint、功能开/关build/budget通过；64项浏览器仅收集，R11/R12/R13未验收项保留。GitHub创建结果与只读fetch再次确认上述tree/父链，之后只快进 `nexus/mainline-r11`；不得推其他分支、创建PR、merge/deploy。
+
+状态证据为随后追加的 docs-only 提交（含本节）；发布后源状态提交保存在本地专用 `nexus/checkpoint-r13-local-state`，活动分支按完整tree相同条件对齐远端。状态提交不自引用哈希；通过 `git log -- STATE.md docs/work/PUBLICATION-2026-10-02.md` 可查到其已发布版本。新的恢复应优先clone远端长期分支，源备份只用于核查，不能混入后续主线父链。
