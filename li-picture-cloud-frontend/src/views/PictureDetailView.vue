@@ -10,7 +10,7 @@
           <!-- 图片展示区 -->
           <div class="image-area" @click="showFullscreen = true" title="点击全屏查看">
             <img :src="picture.url" :alt="picture.name" class="main-image"
-                 @dragstart="interaction.startDrag($event, picture.id)" @dragend="interaction.cancelDrag" />
+                 @dragstart="interaction.startDrag($event, picture)" @dragend="interaction.cancelDrag" />
             <span class="zoom-hint">🔍 点击全屏</span>
           </div>
 
@@ -89,7 +89,7 @@
 
             <!-- 操作按钮 -->
             <div class="actions">
-              <button v-if="companionEnabled && userStore.isLoggedIn" type="button" class="btn btn-outline"
+              <button v-if="canOfferToCompanion" type="button" class="btn btn-outline"
                       @click="interaction.open(picture.id)">选给绫页</button>
               <button class="btn btn-outline" @click="showShare = true">分享</button>
               <button v-if="canEdit || collaborationModeValue === 'view'" class="btn btn-outline" @click="openImageEditor">
@@ -201,6 +201,7 @@ import { SPACE_TYPE } from '@/constants/space'
 import { collaborationMode } from '@/utils/spaceAccess'
 import { COMPANION_UI_ENABLED } from '@/config/features'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
+import { mayOfferCompanionPicture } from '@/presentation/companionInteraction'
 import { formatDate } from '@/utils/date'
 const companionEnabled = COMPANION_UI_ENABLED
 const interaction = useCompanionInteractionStore()
@@ -237,6 +238,10 @@ const canEdit = computed(() => {
   if (!userStore.isLoggedIn || !picture.value) return false
   return userStore.isAdmin || picture.value.userId === userStore.currentUser?.id || permissions.value.includes('picture:edit')
 })
+
+// Same scope as the companion picker: only the viewer's own private-space pictures.
+const canOfferToCompanion = computed(() => companionEnabled && userStore.isLoggedIn &&
+  pictureSpaceType.value === SPACE_TYPE.PRIVATE && mayOfferCompanionPicture(picture.value, userStore.currentUser?.id))
 
 const collaborationModeValue = computed(() => collaborationMode(
   permissions.value,

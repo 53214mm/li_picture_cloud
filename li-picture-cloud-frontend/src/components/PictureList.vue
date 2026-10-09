@@ -66,7 +66,7 @@
           :alt="pic.name || '图片'"
           class="card-img"
           loading="lazy"
-          @dragstart="interaction.startDrag($event, pic.id)" @dragend="interaction.cancelDrag"
+          @dragstart="interaction.startDrag($event, pic)" @dragend="interaction.cancelDrag"
         />
         <div class="card-overlay">
           <h3 class="card-name">{{ pic.name || '未命名' }}</h3>

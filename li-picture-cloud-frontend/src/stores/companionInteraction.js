@@ -4,7 +4,7 @@ import { useUserStore } from './user'
 import { COMPANION_UI_ENABLED } from '@/config/features'
 import { getPictureVOById } from '@/api/picture'
 import { getSpaceVOById } from '@/api/space'
-import { createPictureDragSession, createPictureInspector, PICTURE_DRAG_TYPE } from '@/presentation/companionInteraction'
+import { createPictureDragSession, createPictureInspector, mayOfferCompanionPicture, PICTURE_DRAG_TYPE } from '@/presentation/companionInteraction'
 
 export const useCompanionInteractionStore = defineStore('companionInteraction', () => {
   const user = useUserStore()
@@ -25,9 +25,11 @@ export const useCompanionInteractionStore = defineStore('companionInteraction', 
     requestNumber.value += 1
     if (pictureId !== null) inspector.inspect(pictureId, user.currentUser.id)
   }
-  function startDrag(event, pictureId) {
-    if (!enabled() || !event.dataTransfer) return
-    const ticket = drag.start(pictureId, user.currentUser.id)
+  // Pictures outside the owner's spaces keep the browser's ordinary drag and
+  // never light up companion drop targets.
+  function startDrag(event, picture) {
+    if (!enabled() || !event.dataTransfer || !mayOfferCompanionPicture(picture, user.currentUser.id)) return
+    const ticket = drag.start(picture.id, user.currentUser.id)
     if (!ticket) { event.preventDefault(); return }
     event.dataTransfer.clearData()
     event.dataTransfer.setData(PICTURE_DRAG_TYPE, ticket)

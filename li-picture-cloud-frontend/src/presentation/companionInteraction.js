@@ -33,6 +33,14 @@ export function createPictureDragSession(tokenFactory = () => globalThis.crypto.
   }
 }
 
+// Cheap list-level pre-check so public/other users' pictures never advertise a
+// hand-off that inspectCompanionPicture() is certain to reject. Not authorization.
+export function mayOfferCompanionPicture(picture, userId) {
+  const actor = normalizePictureId(userId)
+  return !!actor && !!normalizePictureId(picture?.id) && !!normalizePictureId(picture?.spaceId) &&
+    normalizePictureId(picture?.userId) === actor
+}
+
 // Deliberately narrower than server PICTURE_VIEW: match the existing private
 // owner picker. This is entry-point policy, not an authorization substitute.
 export async function inspectCompanionPicture(pictureId, userId, { readPicture, readSpace }) {

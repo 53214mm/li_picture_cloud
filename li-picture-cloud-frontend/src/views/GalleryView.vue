@@ -95,7 +95,7 @@
           class="gallery-card"
           :to="`/picture/${pic.id}`"
           :aria-label="`查看图片：${pic.name || '未命名'}`"
-          @dragstart="interaction.startDrag($event, pic.id)" @dragend="interaction.cancelDrag"
+          @dragstart="interaction.startDrag($event, pic)" @dragend="interaction.cancelDrag"
         >
           <div v-if="failedImages.has(pic.id)" class="image-fallback">预览暂不可用<br />可进入详情查看</div>
           <img

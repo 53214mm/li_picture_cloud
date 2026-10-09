@@ -114,7 +114,7 @@ test('native Gallery drag opens a verified candidate and hands off only a select
   expect(state.errors).toEqual([])
 })
 
-test('external and forged drops are ignored; public, team and other-owner candidates are explained', async ({ page }) => {
+test('external and forged drops are ignored; public pictures never offer a hand-off; team and other-owner candidates are explained', async ({ page }) => {
   const state = await fixture(page)
   await page.goto('/gallery')
   for (const type of ['text/uri-list', 'application/x-lipicturecloud-companion-picture']) {
@@ -124,8 +124,16 @@ test('external and forged drops are ignored; public, team and other-owner candid
     await expect(panel(page)).not.toBeVisible()
   }
   expect(state.calls.some(call => call.path === '/api/picture/get/vo')).toBe(false)
-  for (const kind of ['public', 'team', 'other']) {
-    state.photo.spaceId = kind === 'public' ? null : '51'
+  // The gallery list itself must carry a public picture, so reload after changing it.
+  state.photo.spaceId = null
+  await page.reload()
+  await ticketDrop(page, page.locator('.gallery-card').first())
+  await expect(panel(page)).not.toBeVisible()
+  await expect(page.locator('.sidebar .presence')).not.toHaveClass(/is-drop-target/)
+  expect(state.calls.some(call => call.path === '/api/picture/get/vo')).toBe(false)
+  state.photo.spaceId = '51'
+  await page.reload()
+  for (const kind of ['team', 'other']) {
     state.space = { ...space, spaceType: kind === 'team' ? 1 : 0, userId: kind === 'other' ? '43' : '42' }
     await ticketDrop(page, page.locator('.gallery-card').first())
     await expect(panel(page).getByRole('alert')).toContainText('仅支持你自己的私有空间')
@@ -133,6 +141,20 @@ test('external and forged drops are ignored; public, team and other-owner candid
     await page.keyboard.press('Escape')
   }
   noFeed(state)
+  expect(state.errors).toEqual([])
+})
+
+test("picture detail offers the companion action only for the owner's private-space pictures", async ({ page }) => {
+  const state = await fixture(page)
+  await page.goto('/picture/11')
+  await expect(page.getByRole('button', { name: '选给绫页' })).toBeVisible()
+  for (const variant of [{ photo: { spaceId: null } }, { space: { spaceType: 1 } }, { photo: { userId: '43' } }]) {
+    state.photo = { ...photo, ...variant.photo }
+    state.space = { ...space, ...variant.space }
+    await page.reload()
+    await expect(page.getByRole('button', { name: '分享', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '选给绫页' })).toHaveCount(0)
+  }
   expect(state.errors).toEqual([])
 })
 

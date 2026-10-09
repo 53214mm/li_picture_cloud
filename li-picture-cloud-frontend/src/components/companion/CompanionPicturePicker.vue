@@ -20,7 +20,7 @@
                 :aria-pressed="String(picture.id) === String(selectedId)" :disabled="disabled"
                 @click="$emit('select', String(picture.id))">
           <img :src="picture.thumbnailUrl || picture.url" :alt="picture.name || '图片'"
-               :draggable="!disabled" @dragstart="disabled ? $event.preventDefault() : interaction.startDrag($event, picture.id)" @dragend="interaction.cancelDrag"
+               :draggable="!disabled" @dragstart="disabled ? $event.preventDefault() : interaction.startDrag($event, picture)" @dragend="interaction.cancelDrag"
                width="320" height="220" loading="lazy" />
           <span>{{ picture.name || '未命名图片' }}</span>
         </button>
