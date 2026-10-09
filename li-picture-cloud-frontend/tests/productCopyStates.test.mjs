@@ -529,7 +529,7 @@ test('R16 emoji keeps candidate loading distinct and preserves saved candidate, 
   assertNoWrites(fixture)
 })
 
-const gatewayPath = 'views/ModelGatewayView.vue'
+const gatewayPath = 'components/model/ModelGatewayAdvanced.vue'
 const gatewayEmpty = [
   '还没有 API Key。填写供应商和密钥后保存。',
   '还没有模型连接。填写端点和模型信息，添加后可启用并测试。',

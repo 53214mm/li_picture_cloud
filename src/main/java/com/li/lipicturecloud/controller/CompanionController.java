@@ -9,7 +9,11 @@ import com.li.lipicturecloud.application.companion.CompanionProposalService;
 import com.li.lipicturecloud.application.companion.FeedPictureCommand;
 import com.li.lipicturecloud.application.companion.view.ChatHistoryView;
 import com.li.lipicturecloud.application.companion.view.CompanionContractView;
+import com.li.lipicturecloud.application.companion.CompanionChatModeService;
+import com.li.lipicturecloud.application.companion.view.CompanionChatModeView;
 import com.li.lipicturecloud.application.companion.view.CompanionHomeView;
+import com.li.lipicturecloud.domain.companion.CompanionChatMode;
+import com.li.lipicturecloud.model.dto.companion.CompanionChatModeRequest;
 import com.li.lipicturecloud.application.companion.view.CompanionMemoryListView;
 import com.li.lipicturecloud.application.companion.view.CompanionMemoryView;
 import com.li.lipicturecloud.application.companion.view.CompanionProposalView;
@@ -67,27 +71,55 @@ public class CompanionController {
     private final CompanionChatService chatService;
     private final CompanionProposalService proposalService;
     private final UserService userService;
+    private final CompanionChatModeService chatModeService;
 
     public CompanionController(CompanionLife companionLife, CompanionMemoryService memoryService,
                                CompanionChatService chatService, CompanionProposalService proposalService,
-                               UserService userService) {
+                               UserService userService, CompanionChatModeService chatModeService) {
         this.companionLife = companionLife;
         this.memoryService = memoryService;
         this.chatService = chatService;
         this.proposalService = proposalService;
         this.userService = userService;
+        this.chatModeService = chatModeService;
     }
 
     @GetMapping("/me")
     @AuthCheck
     public BaseResponse<CompanionHomeView> current(HttpServletRequest request) {
-        return ResultUtils.success(companionLife.home(subject(request)));
+        AuthorizationSubject subject = subject(request);
+        return ResultUtils.success(withChatMode(companionLife.home(subject), subject));
     }
 
     @PostMapping("/awaken")
     @AuthCheck
     public BaseResponse<CompanionHomeView> awaken(HttpServletRequest request) {
-        return ResultUtils.success(companionLife.awaken(subject(request)));
+        AuthorizationSubject subject = subject(request);
+        return ResultUtils.success(withChatMode(companionLife.awaken(subject), subject));
+    }
+
+    @GetMapping("/chat/mode")
+    @AuthCheck
+    public BaseResponse<CompanionChatModeView> chatMode(HttpServletRequest request) {
+        return ResultUtils.success(chatModeService.view(subject(request).userId()));
+    }
+
+    @PutMapping("/chat/mode")
+    @AuthCheck
+    public BaseResponse<CompanionChatModeView> chooseChatMode(@RequestBody CompanionChatModeRequest body,
+                                                              HttpServletRequest request) {
+        ThrowUtils.throwIf(body == null || body.getMode() == null, ErrorCode.PARAMS_ERROR, "请选择聊天模式");
+        CompanionChatMode mode;
+        try {
+            mode = CompanionChatMode.valueOf(body.getMode());
+        } catch (IllegalArgumentException unknown) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "未知的聊天模式");
+        }
+        return ResultUtils.success(chatModeService.choose(subject(request).userId(), mode));
+    }
+
+    private CompanionHomeView withChatMode(CompanionHomeView home, AuthorizationSubject subject) {
+        return home == null ? null : home.withChatMode(chatModeService.view(subject.userId()));
     }
 
     @PostMapping("/feed")

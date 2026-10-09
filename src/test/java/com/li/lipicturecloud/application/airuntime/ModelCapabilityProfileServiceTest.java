@@ -60,6 +60,21 @@ class ModelCapabilityProfileServiceTest {
     }
 
     @Test
+    void verifiedSnapshotMarksUnknownModelsAsTextCapableOnly() {
+        when(registry.capabilitiesFor(ModelProvider.DEEPSEEK, "deepseek-chat"))
+                .thenReturn(ModelCapabilities.unknown());
+        when(profileRepository.append(any(ModelCapabilityProfile.class))).thenAnswer(invocation ->
+                invocation.<ModelCapabilityProfile>getArgument(0).withId(4L));
+
+        ModelCapabilityProfile verified = service.snapshotWithVerifiedText(connection(), 7L);
+        ModelCapabilityProfile plain = service.snapshot(connection(), 7L);
+
+        assertThat(verified.text()).isTrue();
+        assertThat(verified.vision()).isFalse();
+        assertThat(plain.text()).isFalse();
+    }
+
+    @Test
     void snapshotRejectsUnpersistedConnections() {
         ModelConnection unpersisted = ModelConnection.create(7L, ModelProvider.DEEPSEEK, "主力",
                 URI.create("https://api.deepseek.com/v1"), "deepseek-chat", 5L);

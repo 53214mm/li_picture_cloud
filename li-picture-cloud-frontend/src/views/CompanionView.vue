@@ -48,7 +48,7 @@
             <section id="habitat-chat" class="home-zone" aria-labelledby="window-title">
               <header class="zone-heading"><div><span>01 / BY THE WINDOW</span><h2 id="window-title" tabindex="-1">在窗边，聊一会儿</h2></div><p>你说的话，她的回应。</p></header>
               <div class="conversation-layout">
-                <CompanionChatPanel :chat-policy="home?.chatPolicy" :presentation="presentation"
+                <CompanionChatPanel :chat-mode="home?.chatMode" :presentation="presentation"
                                     @presentation-change="chatSignal = $event" />
                 <CompanionProposalPanel :refresh-key="panelsRefreshKey" @presentation-change="proposalSignal = $event" />
               </div>

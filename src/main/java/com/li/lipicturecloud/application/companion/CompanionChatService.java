@@ -82,6 +82,7 @@ public class CompanionChatService {
     private final LanguageModelInvoker languageInvoker;
     private final ModelUsageService modelUsageService;
     private final com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService trialLedger;
+    private final CompanionChatModeService chatModeService;
     private final Clock clock;
 
     public CompanionChatService(CompanionRepository companionRepository,
@@ -98,6 +99,7 @@ public class CompanionChatService {
                                 LanguageModelInvoker languageInvoker,
                                 ModelUsageService modelUsageService,
                                 com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService trialLedger,
+                                CompanionChatModeService chatModeService,
                                 Clock clock) {
         this.companionRepository = companionRepository;
         this.messageRepository = messageRepository;
@@ -113,6 +115,7 @@ public class CompanionChatService {
         this.languageInvoker = languageInvoker;
         this.modelUsageService = modelUsageService;
         this.trialLedger = trialLedger;
+        this.chatModeService = chatModeService;
         this.clock = clock;
     }
 
@@ -140,8 +143,10 @@ public class CompanionChatService {
         Objects.requireNonNull(subject, "subject");
         String normalized = validateMessage(message);
         Companion companion = requireCompanion(subject);
-        ModelRouteDecision route = properties.getChatPolicy()
-                == CompanionFeatureProperties.CompanionChatPolicy.MODEL
+        // 用户选择的模式：真实模型时由语言路由决定用自己的模型还是平台模型。
+        com.li.lipicturecloud.domain.companion.CompanionChatMode mode =
+                chatModeService.effectiveMode(subject.userId());
+        ModelRouteDecision route = mode == com.li.lipicturecloud.domain.companion.CompanionChatMode.MODEL
                 ? languageRouter.decide(subject.userId())
                 : null;
         // 平台钱包路径：写任何消息前预占试用额度（不足大声失败，不自动扣费）；
@@ -156,8 +161,8 @@ public class CompanionChatService {
         // 保留本轮落库消息的精确 id：历史去重与上下文排除都按它进行，而不是按角色猜测。
         CompanionChatMessage currentMessage = messageRepository.append(
                 CompanionChatMessage.user(companion.id(), subject.userId(), normalized, now));
-        log.info("companion_chat_message_sent subjectId={} policy={}",
-                subject.userId(), properties.getChatPolicy().name());
+        log.info("companion_chat_message_sent subjectId={} mode={}",
+                subject.userId(), mode.name());
 
         if (route != null) {
             return modelReply(companion, subject, currentMessage, normalized, now, route, platformReserved);

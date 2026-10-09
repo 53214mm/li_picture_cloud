@@ -5,7 +5,7 @@
       <p>{{ error }}</p>
       <button type="button" class="btn btn-outline" @click="load">重试</button>
     </div>
-    <CompanionChatPanel v-else-if="home?.companion" compact :presentation="presentation" :chat-policy="home.chatPolicy" />
+    <CompanionChatPanel v-else-if="home?.companion" compact :presentation="presentation" :chat-mode="home.chatMode" />
     <p v-else>还没有唤醒伙伴。可以先到伙伴空间看看。</p>
   </div>
 </template>

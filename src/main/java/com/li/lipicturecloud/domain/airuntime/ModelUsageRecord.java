@@ -39,8 +39,8 @@ public record ModelUsageRecord(
             throw new IllegalArgumentException("connectionId must be positive or null");
         }
         Objects.requireNonNull(provider, "provider");
-        if (modelCode == null || !CODE.matcher(modelCode).matches()) {
-            throw new IllegalArgumentException("modelCode must match " + CODE.pattern());
+        if (modelCode == null || !ModelConnection.MODEL_CODE.matcher(modelCode).matches()) {
+            throw new IllegalArgumentException("modelCode must match " + ModelConnection.MODEL_CODE.pattern());
         }
         Objects.requireNonNull(costSource, "costSource");
         if (!success) {

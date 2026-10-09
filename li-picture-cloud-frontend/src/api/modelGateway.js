@@ -20,6 +20,15 @@ export const upsertModelRouting = (task, connectionId) =>
   request.put(`/model/routing/${task}`, { connectionId })
 export const deleteModelRouting = task => request.delete(`/model/routing/${task}`)
 
+// 快速连接：选厂商 → 填 Key 读取模型 → 选模型完成连接。Key 只随请求发送，不在前端保存。
+export const listQuickProviders = () => request.get('/model/quick/providers')
+export const discoverQuickModels = (provider, apiKey) =>
+  request.post('/model/quick/models', { provider, apiKey })
+export const connectQuickModel = (provider, apiKey, modelCode) =>
+  request.post('/model/quick/connect', { provider, apiKey, modelCode })
+export const getQuickConnection = () => request.get('/model/quick/current')
+export const useQuickPlatform = () => request.delete('/model/quick/current')
+
 export const listModelUsage = (limit = 50) => request.get('/model/usage', { params: { limit } })
 
 export const listMcpServices = () => request.get('/model/mcp/services')

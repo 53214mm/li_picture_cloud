@@ -56,7 +56,7 @@ test('control center api module mirrors the backend endpoints', async () => {
 })
 
 test('control center never renders ciphertext and only collects api keys in inputs', async () => {
-  const view = await readFile(fileURLToPath(new globalThis.URL('../src/views/ModelGatewayView.vue', import.meta.url)), 'utf8')
+  const view = await readFile(fileURLToPath(new globalThis.URL('../src/components/model/ModelGatewayAdvanced.vue', import.meta.url)), 'utf8')
 
   // 永不渲染密文或明文回显：保险库只展示尾号。
   assert.match(view, /尾号 \{\{ credential\.tail4 \}\}/)
@@ -80,7 +80,7 @@ test('control center never renders ciphertext and only collects api keys in inpu
 })
 
 test('control center routing keeps platform default explicit', async () => {
-  const view = await readFile(fileURLToPath(new globalThis.URL('../src/views/ModelGatewayView.vue', import.meta.url)), 'utf8')
+  const view = await readFile(fileURLToPath(new globalThis.URL('../src/components/model/ModelGatewayAdvanced.vue', import.meta.url)), 'utf8')
 
   assert.match(view, /平台默认/)
   assert.match(view, /rule\?\.connectionId == null \? '' : String\(rule\.connectionId\)/)
@@ -94,7 +94,7 @@ test('control center routing keeps platform default explicit', async () => {
 })
 
 test('mcp admin section is admin-gated and fail-closed', async () => {
-  const view = await readFile(fileURLToPath(new globalThis.URL('../src/views/ModelGatewayView.vue', import.meta.url)), 'utf8')
+  const view = await readFile(fileURLToPath(new globalThis.URL('../src/components/model/ModelGatewayAdvanced.vue', import.meta.url)), 'utf8')
   const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/modelGateway.js', import.meta.url)), 'utf8')
 
   // 仅平台管理员可见。
@@ -111,7 +111,7 @@ test('mcp admin section is admin-gated and fail-closed', async () => {
 })
 
 test('usage table exposes the minimal unified usage snapshot columns', async () => {
-  const view = await readFile(fileURLToPath(new globalThis.URL('../src/views/ModelGatewayView.vue', import.meta.url)), 'utf8')
+  const view = await readFile(fileURLToPath(new globalThis.URL('../src/components/model/ModelGatewayAdvanced.vue', import.meta.url)), 'utf8')
 
   // 控制中心使用记录展示最小统一用量（输入/输出 token 与图片张数）。
   assert.match(view, /data-testid="usage-table"/)
@@ -126,12 +126,15 @@ test('usage table exposes the minimal unified usage snapshot columns', async () 
 })
 
 test('model connection copy keeps actionable safety rules and folds technical metadata', async () => {
-  const view = await readFile(fileURLToPath(new globalThis.URL('../src/views/ModelGatewayView.vue', import.meta.url)), 'utf8')
-  const pageHeader = view.match(/<header class="gateway-hero">([\s\S]*?)<\/header>/)?.[1]
+  const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/ModelGatewayView.vue', import.meta.url)), 'utf8')
+  const view = await readFile(fileURLToPath(new globalThis.URL('../src/components/model/ModelGatewayAdvanced.vue', import.meta.url)), 'utf8')
+  const pageHeader = page.match(/<header class="gateway-hero">([\s\S]*?)<\/header>/)?.[1]
 
   assert.match(pageHeader, /<h1>模型连接<\/h1>/)
-  assert.match(pageHeader, /添加模型连接，并为不同任务配置使用的模型/)
-  assert.doesNotMatch(pageHeader, /你的模型连接|密钥|加密|BYOK|MCP/)
+  assert.doesNotMatch(pageHeader, /密钥|加密|BYOK|MCP/)
+  // 手动管理默认折叠在高级设置里，打开后才加载。
+  assert.match(page, /<details class="advanced-panel"/)
+  assert.match(page, /<ModelGatewayAdvanced v-if="advancedOpen"/)
   assert.match(view, /密钥会加密保存，保存后仅显示尾号/)
   assert.match(view, /删除 API Key 后，仍绑定它的连接将无法调用/)
   assert.match(view, /使用平台白名单内的 HTTPS 端点/)
@@ -148,7 +151,7 @@ test('model connection copy keeps actionable safety rules and folds technical me
 })
 
 test('model gateway emptiness requires a successful read rather than a mutation outcome', async () => {
-  const view = await readFile(fileURLToPath(new globalThis.URL('../src/views/ModelGatewayView.vue', import.meta.url)), 'utf8')
+  const view = await readFile(fileURLToPath(new globalThis.URL('../src/components/model/ModelGatewayAdvanced.vue', import.meta.url)), 'utf8')
 
   for (const status of ['listStatus', 'usageStatus', 'mcpStatus']) {
     assert.match(view, new RegExp(`const ${status} = ref\\('loading'\\)`))

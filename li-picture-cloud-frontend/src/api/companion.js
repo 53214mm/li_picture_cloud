@@ -15,6 +15,9 @@ export const deleteCompanionMemory = id => request.delete(`/companion/memories/$
 export const listCompanionChatHistory = (limit = 50, options = {}) =>
   request.get('/companion/chat/history', { ...options, params: { limit } })
 
+export const getCompanionChatMode = () => request.get('/companion/chat/mode')
+export const setCompanionChatMode = mode => request.put('/companion/chat/mode', { mode })
+
 export const getCompanionContract = () => request.get('/companion/contract')
 export const updateCompanionContract = data => request.put('/companion/contract', data)
 export const getActiveCompanionProposal = () => request.get('/companion/proposals/active')

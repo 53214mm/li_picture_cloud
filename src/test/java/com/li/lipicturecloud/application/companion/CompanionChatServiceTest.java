@@ -102,7 +102,19 @@ class CompanionChatServiceTest {
         service = new CompanionChatService(companionRepository, messageRepository, moodRepository,
                 CompanionMoodRules.v1(), relationshipRepository, memoryService, contextAssembler,
                 quotaGuard, properties, chatModelProvider, languageRouter, languageInvoker,
-                modelUsageService, trialLedger, Clock.fixed(NOW, ZoneOffset.UTC));
+                modelUsageService, trialLedger, chatModeService(properties), Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    /** 用户从未选择过模式、也没有自己的模型：模式由服务端策略决定（与原行为一致）。 */
+    private static CompanionChatModeService chatModeService(CompanionFeatureProperties properties) {
+        com.li.lipicturecloud.domain.companion.CompanionChatPreferenceRepository preferences =
+                mock(com.li.lipicturecloud.domain.companion.CompanionChatPreferenceRepository.class);
+        when(preferences.findMode(anyLong())).thenReturn(java.util.Optional.empty());
+        com.li.lipicturecloud.application.airuntime.ModelQuickSetupService quickSetup =
+                mock(com.li.lipicturecloud.application.airuntime.ModelQuickSetupService.class);
+        when(quickSetup.current(anyLong())).thenReturn(
+                com.li.lipicturecloud.application.airuntime.view.QuickConnectionView.platform());
+        return new CompanionChatModeService(preferences, quickSetup, properties);
     }
 
     @Test

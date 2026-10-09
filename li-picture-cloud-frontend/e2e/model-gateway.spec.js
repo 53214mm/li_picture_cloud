@@ -10,11 +10,17 @@ async function login(page) {
   expect(response.ok(), `login failed: ${response.status()} ${await response.text()}`).toBeTruthy()
 }
 
+// 手动管理默认折叠在「高级设置」里，打开后才加载；刷新页面会重新折叠。
+async function openAdvanced(page) {
+  await page.getByTestId('gateway-advanced').getByText('高级设置', { exact: true }).click()
+}
+
 test('control center manages credentials connections routing and usage', async ({ page }) => {
   await login(page)
   await page.goto('/model-gateway')
   await expect(page).toHaveURL(/\/model-gateway$/)
   await expect(page.getByRole('heading', { name: '模型连接', level: 1 })).toBeVisible()
+  await openAdvanced(page)
   await expect(page.getByText('还没有 API Key。填写供应商和密钥后保存。')).toBeVisible()
   // 普通用户看不到平台管理的 MCP 白名单区。
   await expect(page.getByTestId('mcp-section')).toHaveCount(0)
@@ -67,6 +73,7 @@ test('control center manages credentials connections routing and usage', async (
     .selectOption({ label: 'E2E 主力（DeepSeek）' })
   await expect(page.locator('.routing-row').first().locator('select')).toHaveValue(/^\d+$/)
   await page.reload()
+  await openAdvanced(page)
   await expect(page.locator('.routing-row').first().locator('select')).toHaveValue(/^\d+$/)
   // 清理前先清除路由规则：悬空规则会让后续语言任务大声失败（fail-loud 语义），
   // 其它 E2E 故事线依赖平台默认路由。
@@ -88,4 +95,43 @@ test('control center manages credentials connections routing and usage', async (
     await row.getByRole('button', { name: '删除' }).click()
   }
   await expect(page.getByText('还没有 API Key。填写供应商和密钥后保存。')).toBeVisible()
+})
+
+test('quick connect lists models with a key, connects one and switches companion chat to it', async ({ page }) => {
+  await login(page)
+  await page.goto('/model-gateway')
+  await expect(page.getByTestId('quick-status')).toContainText('还没有连接自己的模型')
+
+  // E2E 后端的目录替身：以 sk-rejected 开头的 Key 被拒，其余返回厂商推荐模型。
+  await page.getByRole('button', { name: /DeepSeek/ }).click()
+  const key = page.getByLabel('DeepSeek API Key')
+  await key.fill('sk-rejected-e2e')
+  await page.getByRole('button', { name: '获取模型' }).click()
+  await expect(page.getByRole('alert')).toContainText('API Key 无效')
+  await key.fill('sk-e2e-quick-4321')
+  await page.getByRole('button', { name: '获取模型' }).click()
+  await expect(page.getByTestId('quick-models').getByRole('radio', { name: /deepseek-chat/ })).toBeChecked()
+  await page.getByRole('button', { name: '完成连接' }).click()
+  await expect(page.getByTestId('quick-status')).toContainText('DeepSeek · deepseek-chat')
+
+  // 一步到位：保存了凭据、启用了连接、写了可对话的能力画像，并把语言任务路由过去。
+  const json = async response => (await response.json()).data
+  const connections = await json(await page.request.get('/api/model/connections'))
+  expect(connections).toHaveLength(1)
+  expect(connections[0]).toMatchObject({ provider: 'DEEPSEEK', modelCode: 'deepseek-chat', enabled: true })
+  const capability = await json(await page.request.get(`/api/model/connections/${connections[0].id}/capability`))
+  expect(capability.text).toBe(true)
+  const routing = await json(await page.request.get('/api/model/routing'))
+  expect(routing).toEqual([expect.objectContaining({ task: 'LANGUAGE_AGENT', connectionId: connections[0].id })])
+  const mode = await json(await page.request.get('/api/companion/chat/mode'))
+  expect(mode).toMatchObject({ mode: 'MODEL', modelSource: 'OWN', providerLabel: 'DeepSeek', modelCode: 'deepseek-chat' })
+
+  // 清理：改回平台默认后服务端仅演示，聊天自动回到演示回复；再删掉连接与凭据。
+  await page.getByRole('button', { name: '改用平台默认' }).click()
+  await expect(page.getByTestId('quick-status')).toContainText('还没有连接自己的模型')
+  expect(await json(await page.request.get('/api/companion/chat/mode'))).toMatchObject({ mode: 'DEMO', modelAvailable: false })
+  expect((await page.request.delete(`/api/model/connections/${connections[0].id}`)).ok()).toBeTruthy()
+  for (const credential of await json(await page.request.get('/api/model/credentials'))) {
+    expect((await page.request.delete(`/api/model/credentials/${credential.id}`)).ok()).toBeTruthy()
+  }
 })

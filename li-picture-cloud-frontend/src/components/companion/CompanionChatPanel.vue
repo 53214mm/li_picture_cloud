@@ -11,6 +11,20 @@
       </div>
     </header>
 
+    <div v-if="modeView" class="chat-mode" data-testid="chat-mode">
+      <div class="chat-mode-switch" role="group" aria-label="聊天模式">
+        <button type="button" :aria-pressed="modeView.mode === 'DEMO'" :disabled="modeLocked"
+                @click="chat.chooseMode('DEMO')">演示回复</button>
+        <button type="button" :aria-pressed="modeView.mode === 'MODEL'" :disabled="modeLocked || !modeView.modelAvailable"
+                :title="modeView.modelAvailable ? '' : '先连接一个模型'" @click="chat.chooseMode('MODEL')">真实模型</button>
+      </div>
+      <p class="chat-mode-note" data-testid="chat-mode-note">
+        {{ modeCopy.note }}
+        <router-link v-if="modeCopy.link" to="/model-gateway">{{ modeCopy.link }}</router-link>
+      </p>
+      <p v-if="chat.modeError" class="chat-error" role="alert">{{ chat.modeError }}</p>
+    </div>
+
     <div v-if="state.loadError" class="chat-state error" role="alert">
       <p>{{ state.loadError }}</p>
       <button class="btn btn-outline" type="button" @click="chat.reload">重试</button>
@@ -49,9 +63,6 @@
         {{ state.loading ? '正在刷新…' : '刷新对话' }}
       </button>
     </div>
-    <p v-if="chatPolicy === 'DEMO'" class="chat-policy-note" data-testid="chat-policy-note">
-      当前对话模式：演示回复（不调用模型）。
-    </p>
   </section>
 </template>
 
@@ -62,11 +73,12 @@ import CompanionMessageBubble from '@/components/companion/CompanionMessageBubbl
 import CompanionPortrait from '@/components/companion/body/CompanionPortrait.vue'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
 import { useCompanionChatStore } from '@/stores/companionChat'
+import { describeChatMode } from '@/presentation/companionChatMode'
 const interaction = useCompanionInteractionStore()
 const chat = useCompanionChatStore()
 const { state } = storeToRefs(chat)
 const props = defineProps({
-  chatPolicy: { type: String, default: null },
+  chatMode: { type: Object, default: null },
   presentation: { type: Object, required: true },
   compact: Boolean
 })
@@ -76,6 +88,11 @@ const sending = computed(() => state.value.phase !== 'idle')
 const draft = computed({ get: () => state.value.draft, set: value => chat.setDraft(value) })
 const inputId = computed(() => props.compact ? 'companion-quick-chat-input' : 'companion-chat-input')
 const titleId = computed(() => props.compact ? 'quick-chat-title' : 'chat-title')
+// Home reads carry the server's chat mode; a switch made in either panel is shared.
+watch(() => props.chatMode, view => chat.adoptMode(view), { immediate: true })
+const modeView = computed(() => chat.mode)
+const modeCopy = computed(() => describeChatMode(modeView.value))
+const modeLocked = computed(() => chat.modeBusy || sending.value)
 const unavailable = computed(() => !state.value.loaded || state.value.loading || Boolean(state.value.loadError) || state.value.needsRefresh)
 let release = () => {}
 onMounted(() => { release = chat.acquire() })
@@ -125,8 +142,16 @@ watch(() => state.value.messages, async () => {
 .chat-card--compact .chat-scroll { max-block-size: 18rem; }
 .chat-card--compact .chat-list, .chat-card--compact .chat-input, .chat-card--compact .chat-state { padding: .75rem; }
 .chat-card--compact .chat-input { grid-template-columns: 1fr; border-width: 1px; }
-.chat-card--compact .chat-policy-note { margin-inline: .75rem; }
-.chat-policy-note { margin: 0 1.5rem 1.25rem; padding: .5rem .7rem; border-left: 4px solid #8a6d1a; background: var(--gray-100); color: #8a6d1a; font-size: .78rem; font-weight: 700; }
+.chat-mode { display: grid; gap: .45rem; padding: .85rem 1.5rem; border-bottom: 1px solid var(--gray-200); background: var(--gray-100); }
+.chat-mode-switch { display: inline-flex; justify-self: start; padding: 3px; border: 1px solid var(--gray-300); border-radius: 999px; background: var(--white); }
+.chat-mode-switch button { min-height: 36px; padding: 0 .9rem; border: 0; border-radius: 999px; background: transparent; color: var(--gray-600); font-size: .8rem; font-weight: 700; cursor: pointer; }
+.chat-mode-switch button[aria-pressed="true"] { background: var(--black); color: var(--white); }
+.chat-mode-switch button:disabled { cursor: not-allowed; opacity: .5; }
+.chat-mode-switch button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.chat-mode-note { color: var(--gray-600); font-size: .78rem; line-height: 1.6; overflow-wrap: anywhere; }
+.chat-mode-note a { margin-left: .25rem; color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
+.chat-mode .chat-error { margin: 0; }
+.chat-card--compact .chat-mode { padding: .65rem .75rem; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 767px) {
   .chat-card > header, .chat-list, .chat-input { padding-inline: 1.25rem; }

@@ -302,9 +302,11 @@ test('chat surfaces reuse the companion bubble and share the account-scoped stre
   // 未决发送先读回历史，不恢复已发送草稿诱导重复提交。
   assert.match(chat, /state\.needsRefresh/)
   assert.match(chat, /chat\.reload/)
-  // 只有已知 DEMO 档明示演示回复；不把未知模式猜成模型或演示。
-  assert.match(chat, /chatPolicy === 'DEMO'/)
-  assert.match(chat, /演示回复（不调用模型）/)
+  // 聊天模式只展示服务端报告的视图；没有视图时不显示切换，不猜测模式。
+  assert.match(chat, /v-if="modeView"/)
+  assert.match(chat, /chat\.chooseMode\('DEMO'\)/)
+  assert.match(chat, /:disabled="modeLocked \|\| !modeView\.modelAvailable"/)
+  assert.match(chatStore, /setCompanionChatMode/)
   assert.match(page, /CompanionChatPanel/)
   assert.match(api, /\/companion\/chat\/history/)
   assert.match(utils, /parseSse/)

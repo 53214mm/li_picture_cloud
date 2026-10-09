@@ -28,6 +28,19 @@ public class ModelCapabilityProfileService {
     }
 
     public ModelCapabilityProfile snapshot(ModelConnection connection, long subjectId) {
+        return append(connection, subjectId, false);
+    }
+
+    /**
+     * 平台已用该连接的模型完成一次最小对话：文本能力由这次验证确认，其余能力仍取认知表。
+     * 认知表不认识的新模型因此也能用于语言任务，而不必按名称猜测。
+     */
+    public ModelCapabilityProfile snapshotWithVerifiedText(ModelConnection connection, long subjectId) {
+        return append(connection, subjectId, true);
+    }
+
+    private ModelCapabilityProfile append(ModelConnection connection, long subjectId,
+                                          boolean textVerified) {
         Objects.requireNonNull(connection, "connection");
         if (connection.id() == null || subjectId <= 0) {
             throw new IllegalArgumentException("invalid snapshot identity");
@@ -35,8 +48,9 @@ public class ModelCapabilityProfileService {
         if (connection.subjectId() != subjectId) {
             throw new IllegalArgumentException("snapshot subject must own the connection");
         }
-        ModelCapabilities capabilities = registry.capabilitiesFor(connection.provider(),
+        ModelCapabilities known = registry.capabilitiesFor(connection.provider(),
                 connection.modelCode());
+        ModelCapabilities capabilities = textVerified ? known.withVerifiedText() : known;
         return profileRepository.append(ModelCapabilityProfile.snapshot(connection.id(),
                 subjectId, connection.provider(), connection.modelCode(), capabilities,
                 clock.instant()));

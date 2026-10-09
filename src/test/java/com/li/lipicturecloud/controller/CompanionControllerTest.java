@@ -61,7 +61,8 @@ class CompanionControllerTest {
         when(userService.isAdmin(loginUser)).thenReturn(false);
         subject = AuthorizationSubject.user(7L);
         CompanionController controller = new CompanionController(companionLife, memoryService,
-                chatService, proposalService, userService);
+                chatService, proposalService, userService,
+                org.mockito.Mockito.mock(com.li.lipicturecloud.application.companion.CompanionChatModeService.class));
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

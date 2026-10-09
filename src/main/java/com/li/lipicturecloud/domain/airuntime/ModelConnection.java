@@ -21,7 +21,8 @@ public record ModelConnection(
         long revision) {
 
     private static final Pattern NAME = Pattern.compile("[\\p{L}\\p{N} _\\-]{1,64}");
-    private static final Pattern MODEL_CODE = Pattern.compile("[a-zA-Z0-9._\\-]{1,64}");
+    /** 供应商目录里的模型编码可能带命名空间（deepseek-ai/DeepSeek-V3）或标签（name:tag）。 */
+    public static final Pattern MODEL_CODE = Pattern.compile("[a-zA-Z0-9._\\-/:]{1,64}");
 
     public ModelConnection {
         if (id != null && id <= 0) {
