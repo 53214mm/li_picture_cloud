@@ -8,7 +8,7 @@ export const presenceScenarios = Object.freeze([
 
 export function sanitizePresenceEvent(input, now = Date.now()) {
   const scenario = presenceScenarios.find(item => item.kind === input?.kind)
-  if (!scenario || typeof input.id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(input.id)) return null
+  if (!scenario || typeof input.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.id)) return null
   if (!Number.isFinite(input.occurredAt) || input.occurredAt > now || now - input.occurredAt > 30000) return null
   return Object.freeze({ id: input.id, kind: scenario.kind, eventType: scenario.eventType, page: scenario.page, occurredAt: input.occurredAt })
 }

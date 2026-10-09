@@ -120,6 +120,7 @@
 
     <!-- 图片编辑弹窗（通过后端代理加载 COS 图片，解决跨域） -->
     <ImageEditModal
+      v-if="showImageEditor"
       :visible="showImageEditor"
       :image-src="imageEditorSrc"
       :picture-id="picture?.id"
@@ -189,8 +190,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, reactive, computed, inject, watch, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
+import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getPictureVOById, editPicture, deletePicture, reviewPicture, getPictureTagCategory, uploadPicture } from '@/api/picture'
 import { getMyPicturePermissions } from '@/api/spaceUser'
@@ -201,7 +202,9 @@ import { SPACE_TYPE } from '@/constants/space'
 import { collaborationMode } from '@/utils/spaceAccess'
 import { COMPANION_UI_ENABLED } from '@/config/features'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
-import { mayOfferCompanionPicture } from '@/presentation/companionInteraction'
+import { mayOfferCompanionPicture, normalizePictureId } from '@/presentation/companionInteraction'
+import { SITE_PRESENCE_KEY } from '@/presentation/sitePresence'
+import { onSiteNavigationIntent } from '@/presentation/sitePresenceNavigation'
 import { formatDate } from '@/utils/date'
 const companionEnabled = COMPANION_UI_ENABLED
 const interaction = useCompanionInteractionStore()
@@ -209,6 +212,7 @@ const interaction = useCompanionInteractionStore()
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const presence = inject(SITE_PRESENCE_KEY, null)
 
 const picture = ref(null)
 const loading = ref(false)
@@ -273,57 +277,175 @@ const saving = ref(false)
 const modalError = ref('')
 const editForm = reactive({ name: '', introduction: '', category: '', tagsStr: '' })
 
-onMounted(async () => {
+// A request belongs to one confirmed route/account and one navigation intent.
+// Invalidating the UI never claims to cancel a write already sent to the server.
+let active = true
+let generation = 0
+let pendingNavigation = null
+let openedContext = null
+let imageEditorContext = null
+
+function resetDetail() {
+  generation += 1
+  picture.value = null
+  permissions.value = []
+  pictureSpaceType.value = null
+  detailError.value = ''
+  loading.value = false
+  reviewing.value = false
+  saving.value = false
+  reviewMessage.value = ''
+  modalError.value = ''
+  showFullscreen.value = false
+  showShare.value = false
+  showImageEditor.value = false
+  imageEditorContext = null
+  showEditModal.value = false
+  Object.assign(editForm, { name: '', introduction: '', category: '', tagsStr: '' })
+  categoryList.value = []
+}
+
+function captureContext() {
+  return {
+    generation, route: router.currentRoute.value,
+    actor: userStore.currentUser?.id ?? null,
+    id: normalizePictureId(route.params.id)
+  }
+}
+
+function isCurrent(context) {
+  return active && !pendingNavigation && context.generation === generation &&
+    context.route === router.currentRoute.value &&
+    context.actor === (userStore.currentUser?.id ?? null) &&
+    context.id === normalizePictureId(route.params.id)
+}
+
+function operationContext() {
+  const context = captureContext()
+  return context.id && isCurrent(context) &&
+    normalizePictureId(picture.value?.id) === context.id ? context : null
+}
+
+function matchingPicture(result, context) {
+  if (!result || normalizePictureId(result.id) !== context.id) throw new Error('图片详情与当前页面不匹配')
+  return result
+}
+
+async function loadCategories(context) {
   try {
     const meta = await getPictureTagCategory()
-    categoryList.value = meta.categoryList || []
-  } catch { /* ignore */ }
+    if (isCurrent(context)) categoryList.value = meta.categoryList || []
+  } catch { /* Optional metadata must not delay or fail the authorized detail read. */ }
+}
 
-  const id = route.params.id
-  if (!id) return
-  loading.value = true
+async function loadAccess(context, result) {
+  if (!isCurrent(context) || !userStore.isLoggedIn || !result.spaceId) return
   try {
-    picture.value = await getPictureVOById(id)
-    if (userStore.isLoggedIn && picture.value?.spaceId) {
-      try {
-        const [permissionResult, spaceResult] = await Promise.all([
-          getMyPicturePermissions(picture.value.id),
-          getSpaceVOById(picture.value.spaceId)
-        ])
-        permissions.value = permissionResult
-        pictureSpaceType.value = spaceResult?.spaceType ?? null
-      } catch {
-        permissions.value = []
-        pictureSpaceType.value = null
-      }
+    const [permissionResult, spaceResult] = await Promise.all([
+      getMyPicturePermissions(result.id),
+      getSpaceVOById(result.spaceId)
+    ])
+    if (!isCurrent(context)) return
+    permissions.value = permissionResult
+    pictureSpaceType.value = spaceResult?.spaceType ?? null
+  } catch {
+    if (!isCurrent(context)) return
+    permissions.value = []
+    pictureSpaceType.value = null
+  }
+}
+
+async function loadDetail() {
+  resetDetail()
+  if (!active || pendingNavigation || route.name !== 'picture-detail') return
+  const context = captureContext()
+  if (!openedContext || openedContext.id !== context.id || openedContext.actor !== context.actor) {
+    openedContext = { id: context.id, actor: context.actor, emitted: false }
+  }
+  if (!context.id) return
+  loading.value = true
+  void loadCategories(context)
+  try {
+    const result = await getPictureVOById(context.id)
+    if (!isCurrent(context)) return
+    picture.value = matchingPicture(result, context)
+    // Only the current authorized read signals an opening. Never send picture
+    // data, IDs, page text or a second read to the presence coordinator.
+    if (companionEnabled && !openedContext.emitted) {
+      openedContext.emitted = true
+      presence?.pictureOpened()
     }
+    void loadAccess(context, result)
   } catch (e) {
+    if (!isCurrent(context)) return
     picture.value = null
     detailError.value = e.message || '加载图片详情失败'
   } finally {
-    loading.value = false
+    if (isCurrent(context)) loading.value = false
   }
+}
+
+function navigationIntent(to, from) {
+  if (!active || pendingNavigation?.to === to) return
+  pendingNavigation = { to, from }
+  resetDetail()
+}
+// Leave guards run first; the router broadcasts its first global guard before
+// awaiting authentication, including same-component navigations later canceled.
+onBeforeRouteLeave(navigationIntent)
+onBeforeRouteUpdate(navigationIntent)
+const removeNavigationIntent = onSiteNavigationIntent(to => navigationIntent(to, router.currentRoute.value))
+function finishNavigation(to, from, failure) {
+  if (!active || pendingNavigation?.to !== to) return
+  pendingNavigation = null
+  if (failure && router.currentRoute.value === from) void loadDetail()
+}
+const removeAfterEach = router.afterEach(finishNavigation)
+const removeOnError = router.onError((_error, to, from) => finishNavigation(to, from, true))
+watch(() => [router.currentRoute.value, userStore.currentUser?.id ?? null], () => {
+  if (pendingNavigation && router.currentRoute.value === pendingNavigation.from) {
+    resetDetail()
+    return
+  }
+  pendingNavigation = null
+  void loadDetail()
+}, { immediate: true, flush: 'sync' })
+onBeforeUnmount(() => {
+  active = false
+  generation += 1
+  removeNavigationIntent()
+  removeAfterEach()
+  removeOnError()
 })
 
+async function refreshPicture(context) {
+  if (!isCurrent(context)) return
+  const result = await getPictureVOById(context.id)
+  if (isCurrent(context)) picture.value = matchingPicture(result, context)
+}
+
 async function handleReview(status) {
+  const context = operationContext()
+  if (!context || !userStore.isAdmin || reviewing.value) return
   reviewing.value = true
   try {
     await reviewPicture({
-      id: picture.value.id,
+      id: context.id,
       reviewStatus: status,
       reviewMessage: reviewMessage.value || (status === 1 ? '通过' : '拒绝')
     })
-    // 刷新
-    picture.value = await getPictureVOById(picture.value.id)
-    reviewMessage.value = ''
+    if (!isCurrent(context)) return
+    await refreshPicture(context)
+    if (isCurrent(context)) reviewMessage.value = ''
   } catch (e) {
-    alert(e.message || '审核操作失败')
+    if (isCurrent(context)) alert(e.message || '审核操作失败')
   } finally {
-    reviewing.value = false
+    if (isCurrent(context)) reviewing.value = false
   }
 }
 
 function openEditModal() {
+  if (!operationContext() || !canEdit.value) return
   editForm.name = picture.value.name || ''
   editForm.introduction = picture.value.introduction || ''
   editForm.category = picture.value.category || ''
@@ -332,61 +454,73 @@ function openEditModal() {
 }
 
 async function handleEdit() {
+  const context = operationContext()
+  if (!context || !canEdit.value || saving.value) return
   modalError.value = ''
   saving.value = true
   try {
     const tags = editForm.tagsStr.split(/[,，]/).map(t => t.trim()).filter(Boolean)
     await editPicture({
-      id: picture.value.id,
+      id: context.id,
       name: editForm.name,
       introduction: editForm.introduction,
       category: editForm.category,
       tags
     })
+    if (!isCurrent(context)) return
     showEditModal.value = false
-    picture.value = await getPictureVOById(picture.value.id)
+    await refreshPicture(context)
   } catch (e) {
-    modalError.value = e.message || '编辑失败'
+    if (isCurrent(context)) modalError.value = e.message || '编辑失败'
   } finally {
-    saving.value = false
+    if (isCurrent(context)) saving.value = false
   }
 }
 
 function openImageEditor() {
+  const context = operationContext()
+  if (!context) return
+  imageEditorContext = context
   showImageEditor.value = true
 }
 
 async function onImageEditSave(blob) {
+  const context = imageEditorContext
+  if (!showImageEditor.value || !context || !isCurrent(context) || !canEdit.value) return
   // 用编辑后的图片替换当前图片
   const fd = new FormData()
   const ext = picture.value?.picFormat || 'png'
   fd.append('file', blob, `edited.${ext}`)
-  fd.append('id', picture.value.id)  // 更新模式：传入已有图片 ID
+  fd.append('id', context.id)  // 更新模式：传入已有图片 ID
   try {
     await uploadPicture(fd)
+    if (!isCurrent(context) || context !== imageEditorContext || !showImageEditor.value) return
     showImageEditor.value = false
-    picture.value = await getPictureVOById(picture.value.id)
+    await refreshPicture(context)
   } catch (e) {
-    alert(e.message || '更新图片失败')
+    if (isCurrent(context) && context === imageEditorContext && showImageEditor.value) alert(e.message || '更新图片失败')
   }
 }
 
 function handleDownload() {
-  if (!picture.value?.id) return
+  const context = operationContext()
+  if (!context) return
   const a = document.createElement('a')
-  a.href = `/api/picture/download/${picture.value.id}`
+  a.href = `/api/picture/download/${context.id}`
   a.click()
 }
 
 async function handleDelete() {
-  if (!confirm('确定要删除这张图片吗？此操作不可恢复。')) return
+  const context = operationContext()
+  if (!context || !canEdit.value || !confirm('确定要删除这张图片吗？此操作不可恢复。')) return
   try {
-    await deletePicture(picture.value.id)
-    router.replace('/gallery')
+    await deletePicture(context.id)
+    if (isCurrent(context)) await router.replace('/gallery')
   } catch (e) {
-    alert(e.message || '删除失败')
+    if (isCurrent(context)) alert(e.message || '删除失败')
   }
 }
+
 function formatSize(bytes) {
   if (!bytes) return '-'
   if (bytes < 1024) return bytes + ' B'

@@ -29,6 +29,8 @@
               :aria-expanded="panel === 'companion'" @click="interaction.open()"><ShellIcon name="companion" /><span>伙伴</span></button>
       <button type="button" aria-haspopup="dialog" :aria-expanded="panel === 'navigation'" @click="panel = 'navigation'"><ShellIcon name="more" /><span>更多</span></button>
     </nav>
+    <SitePresenceWidget v-if="companionEnabled && sitePresence.state.value && !panel && !legacyOverlay && !loggingOut && route.name !== 'companion-rehearsal'"
+                        :state="sitePresence.state.value" @configure="sitePresence.coordinator.configure" @reply="interaction.open()" />
     <ShellDialog :open="panel === 'navigation'" title="导航" :return-focus="focusNavigation" @close="panel = null">
       <div @click="closeOnLink"><AppNavigation /></div>
       <div class="drawer-links" @click="closeOnLink">
@@ -68,6 +70,8 @@ import CompanionPresenceSlot from '@/components/shell/CompanionPresenceSlot.vue'
 import SiteFooter from '@/components/shell/SiteFooter.vue'
 import ShellIcon from '@/components/shell/ShellIcon.vue'
 import LpButton from '@/components/ui/LpButton.vue'
+import SitePresenceWidget from '@/components/companion/SitePresenceWidget.vue'
+import { useSitePresence } from '@/composables/useSitePresence'
 import { useLegacyOverlayIsolation } from '@/composables/useLegacyOverlayIsolation'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
 import CompanionInteractionPanel from '@/components/companion/CompanionInteractionPanel.vue'
@@ -80,6 +84,7 @@ const panel = ref(null)
 const legacyOverlay = useLegacyOverlayIsolation()
 const loggingOut = ref(false)
 const logoutError = ref('')
+const sitePresence = useSitePresence({ enabled: companionEnabled, user, route, router, panel, legacyOverlay, loggingOut })
 const accountName = computed(() => user.currentUser?.userName || user.currentUser?.userAccount || '已登录')
 const accountIdentifier = computed(() => {
   const account = user.currentUser?.userAccount

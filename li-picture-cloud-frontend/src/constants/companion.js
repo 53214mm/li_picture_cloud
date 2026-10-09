@@ -1,7 +1,7 @@
 export const LIFE_STAGE = Object.freeze({
-  LIGHT: { label: '光点', description: '刚刚被唤醒，正在形成自己的轮廓。' },
-  SEEDLING: { label: '幼体', description: '已经积累了一些稳定倾向与技能。' },
-  COMPANION: { label: '伙伴', description: '成长为能够长期陪伴与共同创作的形态。' }
+  LIGHT: { label: '初始阶段', description: '刚刚被唤醒，正在形成自己的轮廓。' },
+  SEEDLING: { label: '成长阶段', description: '已经积累了一些稳定倾向与技能。' },
+  COMPANION: { label: '成熟阶段', description: '成长为能够长期陪伴与共同创作的形态。' }
 })
 
 export const TRAIT_AXES = Object.freeze([

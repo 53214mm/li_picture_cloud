@@ -16,12 +16,12 @@
                     :interaction-request="interactionRequest"
                     :paused="paused || userPaused || !renderPolicy.allowMotion" :visible="visible" @availability="availability = $event" />
       <CompanionArtwork v-else class="body-static" :asset="lingyeAssets.home" loading="eager"
-                        accessible-label="绫页，纸翼蛾族的成年全身像" />
+                        accessible-label="绫页，当前静态全身像" />
     </button>
     <p v-if="showDisposition" class="body-disposition">{{ presentation.disposition.mood.label }}</p>
     <CompanionProposalHint :presentation="presentation" />
     <figcaption>
-      <span><strong>绫页</strong><span class="body-species">纸翼蛾族</span></span>
+      <span><strong>绫页</strong></span>
       <button v-if="animate && renderPolicy.allowMotion && animationIntent.state !== 'static' && !availability.reducedMotion && !availability.failed"
               type="button" class="body-motion" :aria-pressed="userPaused" @click="userPaused = !userPaused">
         {{ userPaused ? '恢复动作' : '暂停动作' }}
@@ -84,14 +84,12 @@ const availability = ref({ reducedMotion: true, failed: false })
 .body-static { aspect-ratio: 3 / 4; position: relative; }
 figcaption { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .25rem .75rem; min-height: 44px; padding-inline: .25rem; }
 figcaption strong { font-size: .95rem; }
-.body-species { margin-left: .5rem; color: var(--lp-text-secondary); font-size: .7rem; }
 .body-motion { min-height: 44px; padding: .25rem .5rem; border: 1px solid var(--lp-border-strong); border-radius: var(--lp-radius-s); color: var(--lp-text-primary); background: #ffffff80; font-size: .75rem; cursor: pointer; }
 .body-motion:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 2px; }
 .body-static-label { color: var(--lp-text-secondary); font-size: .7rem; }
 @media (width < 768px) {
   .body-ground { width: 96px; max-width: 100%; }
   .companion-body--habitat figcaption { justify-content: center; padding-inline: 0; gap: 2px 6px; }
-  .companion-body--habitat .body-species { display: none; }
   .companion-body > :deep(.proposal-hint) { position: static; width: 100%; margin-top: 4px; padding-inline: 4px; }
   .body-disposition { padding-inline: 0; font-size: .7rem; }
   .body-static-label { font-size: .65rem; }

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
 import { useUserStore } from '@/stores/user'
 import { COMPANION_UI_ENABLED } from '@/config/features'
+import { siteNavigationIntent } from '@/presentation/sitePresenceNavigation'
 import { shellMeta } from '@/constants/shell'
 
 const routes = [
@@ -125,6 +126,8 @@ const router = createRouter({
   history: createWebHistory(),
   routes
 })
+
+router.beforeEach(to => { siteNavigationIntent(to) })
 
 router.beforeEach(async to => {
   if (!to.meta.requiresAuth && to.meta.layout !== 'adaptive') return true

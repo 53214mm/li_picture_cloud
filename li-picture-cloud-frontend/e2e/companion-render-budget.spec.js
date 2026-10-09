@@ -22,7 +22,7 @@ async function fixture(page, proposal = false) {
   })
   return state
 }
-const player = page => page.locator('.sprite-player')
+const player = page => page.locator('.companion-body')
 const body = page => page.locator('.companion-body')
 function noAtlas(state) { expect(state.images.some(url => url.includes('adult-idle'))).toBe(false) }
 async function connection(page, settings) {
@@ -39,8 +39,8 @@ test('R13 mobile starts with a compact clickable still and no atlas, leaving pho
   const state = await fixture(page)
   await page.goto('/companion')
   await expect(body(page)).toHaveAttribute('data-render-mode', 'compact')
-  await expect(player(page)).toHaveAttribute('data-playback', 'static')
-  await expect(player(page).locator('.sprite-still')).toHaveJSProperty('naturalWidth', 576)
+  await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')
+  await expect(player(page).locator('.body-static img')).toHaveJSProperty('naturalWidth', 576)
   await expect(page.locator('.body-ground')).toHaveCSS('width', '96px')
   await expect(page.getByRole('button', { name: '暂停动作' })).toHaveCount(0)
   noAtlas(state)
@@ -57,41 +57,41 @@ test('R13 mobile starts with a compact clickable still and no atlas, leaving pho
   expect(state.errors).toEqual([])
 })
 
-test('R13 breakpoint changes preserve the same player, consumed proposal hint and user pause', async ({ page }) => {
+test('R13 breakpoint changes preserve the same static body and never enable animation', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await fixture(page, true)
   await freezeClock(page)
   await page.goto('/companion')
-  await expect(player(page)).toHaveAttribute('data-animation-state', 'attention')
+  await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')
   await player(page).evaluate(element => { element.dataset.r13Identity = 'same-player' })
   await page.clock.runFor(1060)
-  await expect(player(page)).toHaveAttribute('data-animation-state', 'idle')
+  await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')
   await page.setViewportSize({ width: 390, height: 844 })
-  await expect(player(page)).toHaveAttribute('data-playback', 'static')
+  await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')
   await page.setViewportSize({ width: 1280, height: 900 })
   await player(page).scrollIntoViewIfNeeded()
-  await expect(player(page)).toHaveAttribute('data-animation-state', 'idle')
+  await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')
   await expect(player(page)).toHaveAttribute('data-r13-identity', 'same-player')
-  await page.getByRole('button', { name: '暂停动作' }).click()
+  await expect(page.getByRole('button', { name: /暂停动作|恢复动作/ })).toHaveCount(0)
   await page.setViewportSize({ width: 390, height: 844 })
   await page.setViewportSize({ width: 1280, height: 900 })
-  await expect(page.getByRole('button', { name: '恢复动作' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(player(page)).toHaveAttribute('data-playback', 'static')
+  await expect(page.getByRole('button', { name: '恢复动作' })).toHaveCount(0)
+  await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')
 })
 
 for (const [settings, reason] of [[{ saveData: true, effectiveType: '4g' }, 'save-data'], [{ saveData: false, effectiveType: '2g' }, 'slow-connection']]) {
-  test(`R13 ${reason} prevents initial atlas IO and resumes only after the budget changes`, async ({ page }) => {
+  test(`R13 ${reason} preserves static artwork without atlas IO before or after budget changes`, async ({ page }) => {
     await connection(page, settings)
     const state = await fixture(page)
     await page.goto('/companion')
     await expect(body(page)).toHaveAttribute('data-motion-policy', reason)
-    await expect(player(page)).toHaveAttribute('data-playback', 'static')
-    await expect(player(page).locator('.sprite-still')).toHaveJSProperty('naturalWidth', 576)
+    await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')
+    await expect(player(page).locator('.body-static img')).toHaveJSProperty('naturalWidth', 576)
     noAtlas(state)
     await page.evaluate(() => { Object.assign(globalThis.r13Connection, { saveData: false, effectiveType: '4g' }); globalThis.r13Connection.dispatchEvent(new globalThis.Event('change')) })
-    await expect(player(page)).toHaveAttribute('data-playback', 'playing')
+    await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')
     await page.evaluate(() => { globalThis.r13Connection.saveData = true; globalThis.r13Connection.dispatchEvent(new globalThis.Event('change')) })
-    await expect(player(page)).toHaveAttribute('data-playback', 'static')
+    await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')
     expect(state.writes).toEqual([])
     expect(state.errors).toEqual([])
   })
@@ -103,7 +103,7 @@ test('R13 viewport changes cannot override reduced-motion or resource failure', 
   await page.goto('/companion')
   for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 })
-    await expect(player(page)).toHaveAttribute('data-playback', 'static')
+    await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')
   }
   noAtlas(state)
   await page.route('**/*adult-idle*.webp*', route => route.request().resourceType() === 'image' ? route.abort() : route.continue())
@@ -111,7 +111,7 @@ test('R13 viewport changes cannot override reduced-motion or resource failure', 
   await expect(page.locator('.body-static-label')).toBeVisible()
   for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 })
-    await expect(player(page)).toHaveAttribute('data-playback', 'static')
+    await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')
   }
   expect(state.errors).toEqual([])
 })

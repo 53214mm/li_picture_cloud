@@ -168,7 +168,7 @@ test('a real WHEN opportunity produces a pending confirmation the user confirms'
   const awaken = page.getByRole('button', { name: '唤醒我的伙伴' })
   if (await awaken.isVisible()) {
     await awaken.click()
-    await expect(page.getByText('光点', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('growth-stage')).toBeVisible()
   }
   await page.getByRole('button', { name: /旅行样片/ }).click()
   await page.getByRole('button', { name: '喂给伙伴' }).click()

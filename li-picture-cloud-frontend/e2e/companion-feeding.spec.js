@@ -222,7 +222,7 @@ test('touch and reduced motion retain confirmation, withdrawal and image-failure
     await page.goto('/companion'); await choose(page).tap()
     await expect(card(page).getByText('预览暂不可用')).toBeVisible()
     await expect(card(page).getByRole('button', { name: '喂给伙伴' })).toBeEnabled()
-    await expect(page.locator('.sprite-player')).toHaveAttribute('data-animation-state', 'static')
+    await expect(page.locator('.companion-body')).toHaveAttribute('data-animation-intent', 'static')
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 844 })
       expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth)).toBe(true)

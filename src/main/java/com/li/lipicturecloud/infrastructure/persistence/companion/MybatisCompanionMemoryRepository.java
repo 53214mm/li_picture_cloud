@@ -61,6 +61,18 @@ public class MybatisCompanionMemoryRepository implements CompanionMemoryReposito
     }
 
     @Override
+    public List<CompanionMemory> findConfirmed(long companionId, long subjectId, int limit) {
+        return memoryMapper.selectList(new LambdaQueryWrapper<CompanionMemoryEntity>()
+                        .eq(CompanionMemoryEntity::getCompanionId, companionId)
+                        .eq(CompanionMemoryEntity::getSubjectId, subjectId)
+                        .eq(CompanionMemoryEntity::getStatus, MemoryStatus.CONFIRMED.name())
+                        .orderByDesc(CompanionMemoryEntity::getCreateTime)
+                        .orderByDesc(CompanionMemoryEntity::getId)
+                        .last("LIMIT " + boundedLimit(limit)))
+                .stream().map(this::fromRow).toList();
+    }
+
+    @Override
     public List<CompanionMemory> findActive(long companionId, int limit) {
         return memoryMapper.selectList(new LambdaQueryWrapper<CompanionMemoryEntity>()
                         .eq(CompanionMemoryEntity::getCompanionId, companionId)

@@ -30,6 +30,6 @@ test('every existing stage receives the same adult representation without transl
     assert.equal(visual.currentStage, currentStage)
     assert.equal(visual.visualStage, 'adult')
     assert.equal(visual.assetKey, 'lingye-adult-v1')
-    assert.equal(visual.allowIdle, ['LIGHT', 'SEEDLING', 'COMPANION'].includes(currentStage))
+    assert.equal(visual.allowIdle, false)
   }
 })

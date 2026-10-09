@@ -81,10 +81,19 @@ public class CompanionMemoryService {
                                                            int limit) {
         Objects.requireNonNull(companion, "companion");
         Objects.requireNonNull(subject, "subject");
-        Set<Long> unavailable = propagateRevocation(companion, subject);
-        return memoryRepository.findRecent(companion.id(), boundedLimit(limit)).stream()
-                .filter(memory -> memory.status() == MemoryStatus.CONFIRMED
-                        && !unavailable.contains(memory.id()))
+        if (companion.ownerId() != subject.userId()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "伙伴不存在");
+        }
+        List<CompanionMemory> candidates = memoryRepository
+                .findConfirmed(companion.id(), subject.userId(), boundedLimit(limit)).stream()
+                .filter(memory -> memory.companionId() == companion.id()
+                        && memory.subjectId() == subject.userId()
+                        && memory.status() == MemoryStatus.CONFIRMED)
+                .toList();
+        // 授权实际召回候选，不依赖另一个有界 active 窗口的覆盖范围。
+        Set<Long> unavailable = propagateRevocation(companion, subject, candidates);
+        return candidates.stream()
+                .filter(memory -> !unavailable.contains(memory.id()))
                 .toList();
     }
 
@@ -97,14 +106,21 @@ public class CompanionMemoryService {
      * 无法确认权限时继续展示或外发记忆内容。</p>
      */
     private Set<Long> propagateRevocation(Companion companion, AuthorizationSubject subject) {
+        return propagateRevocation(companion, subject,
+                memoryRepository.findActive(companion.id(), MAX_ACTIVE_SCAN));
+    }
+
+    private Set<Long> propagateRevocation(Companion companion, AuthorizationSubject subject,
+                                          List<CompanionMemory> candidates) {
+        Set<Long> checkedPictures = new HashSet<>();
         Set<Long> unavailablePictures = new HashSet<>();
         Set<Long> unavailableMemories = new HashSet<>();
-        for (CompanionMemory memory : memoryRepository.findActive(companion.id(), MAX_ACTIVE_SCAN)) {
+        for (CompanionMemory memory : candidates) {
             if (memory.pictureId() == null) {
                 continue;
             }
             boolean unavailable = unavailablePictures.contains(memory.pictureId());
-            if (!unavailable) {
+            if (checkedPictures.add(memory.pictureId())) {
                 unavailable = sourcePictureRevokedOrMissing(memory.pictureId(), subject.userId());
                 if (unavailable) {
                     unavailablePictures.add(memory.pictureId());
@@ -130,23 +146,23 @@ public class CompanionMemoryService {
 
     @Transactional
     public CompanionMemoryView confirm(AuthorizationSubject subject, long memoryId) {
-        return transition(subject, memoryId, "confirm", memory -> memory.confirm(now()));
+        return transition(subject, memoryId, "confirm", true, memory -> memory.confirm(now()));
     }
 
     @Transactional
     public CompanionMemoryView correct(AuthorizationSubject subject, long memoryId, String correctedContent) {
         Objects.requireNonNull(correctedContent, "content");
-        return transition(subject, memoryId, "correct", memory -> memory.correct(correctedContent, now()));
+        return transition(subject, memoryId, "correct", true, memory -> memory.correct(correctedContent, now()));
     }
 
     @Transactional
     public CompanionMemoryView dismiss(AuthorizationSubject subject, long memoryId) {
-        return transition(subject, memoryId, "dismiss", memory -> memory.dismiss(now()));
+        return transition(subject, memoryId, "dismiss", true, memory -> memory.dismiss(now()));
     }
 
     @Transactional
     public CompanionMemoryView delete(AuthorizationSubject subject, long memoryId) {
-        return transition(subject, memoryId, "delete", memory -> memory.delete(now()));
+        return transition(subject, memoryId, "delete", false, memory -> memory.delete(now()));
     }
 
     /**
@@ -180,13 +196,15 @@ public class CompanionMemoryService {
     }
 
     private CompanionMemoryView transition(AuthorizationSubject subject, long memoryId, String action,
+                                           boolean requireSourceAccess,
                                            Function<CompanionMemory, CompanionMemory> operation) {
         Companion companion = requireCompanion(subject);
         CompanionMemory memory = requireOwnedMemory(companion, subject, memoryId);
-        // 撤权传播覆盖转移端点：来源图片已撤权或消失时，直接拒绝操作且不返回记忆内容。
+        // 确认、纠正与忽略仍需要来源权限；撤权时拒绝操作且不返回记忆内容。
         // 状态失效仍由列表读取路径惰性传播，避免本事务内"先失效再报错"被整体回滚。
         // 授权无法验证（系统或基础设施异常）时同样拒绝操作，绝不默认放行。
-        if (memory.pictureId() != null && sourcePictureRevokedOrMissing(memory.pictureId(), subject.userId())) {
+        // 删除只丢弃已验证归属的记录，并返回隐藏正文的终态；无需恢复来源读取权限。
+        if (requireSourceAccess && memory.pictureId() != null && sourcePictureRevokedOrMissing(memory.pictureId(), subject.userId())) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "记忆来源图片已不可用");
         }
         try {

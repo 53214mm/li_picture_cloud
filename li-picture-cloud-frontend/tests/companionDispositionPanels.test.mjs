@@ -198,3 +198,19 @@ test('R11 a stale observation removes formerly known details and all previous ax
     assert.notEqual(stale.view.label, known.view.label)
   }
 })
+
+test('L06 compiled Stats retains 绫页 across stages, with separate growth labels and unchanged numeric progress', async () => {
+  const panel = panels.find(item => item.key === 'traits')
+  for (const [lifeStage, label] of [['LIGHT', '初始阶段'], ['SEEDLING', '成长阶段'], ['COMPANION', '成熟阶段'], ['FUTURE', '阶段待确认']]) {
+    const input = inputForStatus('known')
+    input.home.companion.lifeStage = lifeStage
+    const before = JSON.stringify(input.home)
+    const { html } = await renderPanel(panel, input)
+    assert.match(html, /<h2 id="companion-stats-title">绫页<\/h2>/)
+    assert.equal(testIdText(html, 'growth-stage'), label)
+    assert.match(html, /200 \/ 500 生命经验/)
+    assert.match(html, /aria-valuenow="25"/)
+    assert.doesNotMatch(html, /光点/)
+    assert.equal(JSON.stringify(input.home), before)
+  }
+})

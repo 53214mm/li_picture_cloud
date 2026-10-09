@@ -52,7 +52,7 @@ async function fixture(page) {
   return state
 }
 async function allSurfaces(page, key, value) {
-  for (const selector of ['.sidebar .companion-presence', '.companion-body', '.companion-portrait']) {
+  for (const selector of ['.sidebar .companion-presence', '.companion-body', '.chat-card .companion-portrait']) {
     await expect(page.locator(selector)).toHaveAttribute(`data-presentation-${key}`, value)
   }
 }
@@ -103,7 +103,7 @@ test('loading, error, explicit absence and service unavailable never manufacture
   await page.route('**/api/companion/me', route => route.fulfill({ status: 404, json: { code: 40400, message: '未开放' } }))
   await page.reload()
   await expect(shell).toHaveAttribute('data-presentation-availability', 'unavailable')
-  await expect(page.locator('.companion-portrait')).toHaveCount(0)
+  await expect(page.locator('.chat-card .companion-portrait')).toHaveCount(0)
   expect(state.errors).toEqual([])
 })
 

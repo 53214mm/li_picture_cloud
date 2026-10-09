@@ -20,7 +20,8 @@ function clock() {
     schedule(callback, duration) { const id = ++sequence; pending.set(id, { callback, duration }); return id },
     cancel(id) { pending.delete(id) }
   })
-  return { animator, pending, get value() { return value }, get timer() { return [...pending.values()][0] },
+  return { // Explicit legacy capability only inside controller tests; production stays static.
+    animator: { ...animator, update(p, ...args) { animator.update({ ...p, appearance: { ...p.appearance, allowIdle: true } }, ...args) } }, pending, get value() { return value }, get timer() { return [...pending.values()][0] },
     tick() { assert.equal(pending.size, 1); const [id, timer] = [...pending][0]; pending.delete(id); timer.callback() } }
 }
 
@@ -76,7 +77,7 @@ test('R11 high-mood idle choices use existing affect ordering and never infer sl
     for (const value of [0, 5, 59.99, 60, 100]) {
       const p = map({ mood: { ...mood, [axis]: value, summary: '睡觉、庆祝、发起聊天' } })
       assert.equal(p.disposition.mood.idleTone, value >= 60 ? tone : 'neutral')
-      assert.equal(mapCompanionAnimation(p).state, 'idle')
+      assert.equal(mapCompanionAnimation(p).state, 'static')
       assert.equal(p.attention, 'none')
     }
   }

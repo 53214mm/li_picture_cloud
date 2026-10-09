@@ -30,7 +30,7 @@ test('shows the explicit fusion not-open notice and never calls the generator', 
     const awaken = page.getByRole('button', { name: '唤醒我的伙伴' })
     if (await awaken.isVisible()) {
       await awaken.click()
-      await expect(page.getByText('光点', { exact: true })).toBeVisible()
+      await expect(page.getByTestId('growth-stage')).toBeVisible()
     }
 
     // 面板明示"多图融合暂未开放"，且不提供任何创建/生成/保存入口。

@@ -85,8 +85,10 @@ test('server transport sends bounded DEMO whitelist payload and correlates respo
 })
 test('stop during session creation cleans late session and never requests decision', async () => {
   const pending = deferred(); const f = apiFixture({ open: () => pending.promise }); const transport = createPresenceTransport(f.api)
-  const run = transport.decide(sanitizePresenceEvent(event(), 1000)); await transport.stop()
-  pending.resolve({ sessionId: 'late', mode: 'DEMO' }); await assert.rejects(run, /superseded/)
+  const run = transport.decide(sanitizePresenceEvent(event(), 1000))
+  for (let i = 0; i < 6; i++) await Promise.resolve()
+  const stopping = transport.stop()
+  pending.resolve({ sessionId: 'late', mode: 'DEMO' }); await assert.rejects(run, /superseded/); await stopping
   assert.deepEqual(f.calls, [['close', 'late']])
 })
 test('mismatched server correlation and accidental real-model response are rejected', async () => {
@@ -113,7 +115,8 @@ test('canonical string sequence cannot bypass stop or abort during decision', as
     const f = apiFixture({ decide: data => { sent = data; return pending.promise } })
     const transport = createPresenceTransport(f.api); const controller = new globalThis.AbortController()
     const run = transport.decide(sanitizePresenceEvent(event(), 1000), { signal: controller.signal })
-    await Promise.resolve()
+    for (let i = 0; i < 12; i++) await Promise.resolve()
+    assert.ok(sent, 'decision started')
     if (action === 'stop') await transport.stop(); else controller.abort()
     pending.resolve({ ...sent, sequence: String(sent.sequence), mode: 'DEMO', action: 'SPEAK', text: 'late' })
     await assert.rejects(run, /superseded/)

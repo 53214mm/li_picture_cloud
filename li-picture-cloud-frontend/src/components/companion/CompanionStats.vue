@@ -2,8 +2,9 @@
   <section class="stats-card" aria-labelledby="companion-stats-title">
     <header class="stats-header">
       <div>
-        <span class="eyebrow">当前形态</span>
-        <h2 id="companion-stats-title">{{ stage.label }}</h2>
+        <span class="eyebrow">成长阶段</span>
+        <h2 id="companion-stats-title">绫页</h2>
+        <p class="growth-stage" data-testid="growth-stage">{{ stage.label }}</p>
         <p>{{ stage.description }}</p>
       </div>
       <span class="level-chip">等级 {{ companion.level }}</span>
@@ -100,7 +101,7 @@ const props = defineProps({
 const traits = computed(() => props.presentation.disposition.traits)
 
 const stage = computed(() => LIFE_STAGE[props.companion.lifeStage] || {
-  label: props.companion.lifeStage || '未知形态',
+  label: '阶段待确认',
   description: '伙伴仍在形成自己的样子。'
 })
 

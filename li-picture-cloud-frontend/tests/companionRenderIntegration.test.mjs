@@ -5,7 +5,9 @@ import { mapCompanionRenderPolicy } from '../src/presentation/companionRenderPol
 import { mapCompanionPresentation } from '../src/presentation/companionPresentation.js'
 import { createCompanionAnimator } from '../src/presentation/companionAnimation.js'
 
-const presentation = mapCompanionPresentation({ homeStatus: 'ready', home: { companion: { id: '7', lifeStage: 'LIGHT' } }, proposal: { status: 'PENDING' } })
+// Synthetic motion-capable fixture preserves controller downgrade coverage.
+const observed = mapCompanionPresentation({ homeStatus: 'ready', home: { companion: { id: '7', lifeStage: 'LIGHT' } }, proposal: { status: 'PENDING' } })
+const presentation = { ...observed, appearance: { ...observed.appearance, allowIdle: true } }
 function clock() {
   const pending = new Map()
   let current, sequence = 0

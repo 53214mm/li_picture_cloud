@@ -12,6 +12,19 @@ import com.li.lipicturecloud.domain.companion.MemorySourceType;
 import com.li.lipicturecloud.domain.companion.MemoryStatus;
 import com.li.lipicturecloud.domain.companion.MoodImpact;
 import org.junit.jupiter.api.Test;
+import com.li.lipicturecloud.application.companion.CompanionMemoryService;
+import com.li.lipicturecloud.domain.companion.Companion;
+import com.li.lipicturecloud.domain.companion.CompanionBalance;
+import com.li.lipicturecloud.domain.companion.CompanionRepository;
+import com.li.lipicturecloud.manager.auth.SpaceAuthorizationAccessService;
+import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
+import java.time.Clock;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doThrow;
+import com.li.lipicturecloud.exception.BusinessException;
+import com.li.lipicturecloud.exception.ErrorCode;
+import static com.li.lipicturecloud.manager.auth.model.SpaceUserPermissionConstant.PICTURE_VIEW;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -129,6 +142,53 @@ class CompanionMoodMemoryPersistenceIntegrationTest {
         assertThat(memoryRepository.findRecent(602L, 10)).hasSize(1);
         assertThat(memoryRepository.findRecent(602L, 10).get(0).status())
                 .isEqualTo(MemoryStatus.INVALIDATED);
+    }
+
+    @Test
+    void confirmedRecallSurvivesOverOneHundredNewerNonConfirmedRows() {
+        Companion companion = Companion.awaken(7L, CompanionBalance.v1()).persistedAs(603L);
+        CompanionMemory older = memoryRepository.append(CompanionMemory.candidate(
+                603L, 7L, 101L, 500L, MemorySourceType.VISUAL,
+                "较早确认的图片记忆。", bd("0.8"), NOW).confirm(NOW));
+        for (int i = 0; i < 156; i++) {
+            CompanionMemory newer = CompanionMemory.candidate(603L, 7L, 202L, 501L + i,
+                    MemorySourceType.VISUAL, "较新的未确认图片记忆。", bd("0.7"), NOW.plusSeconds(i + 1));
+            if (i % 3 == 1) newer = newer.dismiss(NOW.plusSeconds(i + 1));
+            if (i % 3 == 2) newer = newer.invalidate("PICTURE_UNAVAILABLE", NOW.plusSeconds(i + 1));
+            memoryRepository.append(newer);
+        }
+        SpaceAuthorizationAccessService authorization = mock(SpaceAuthorizationAccessService.class);
+        CompanionMemoryService service = new CompanionMemoryService(mock(CompanionRepository.class),
+                memoryRepository, authorization, null, Clock.systemUTC());
+
+        assertThat(service.confirmedMemoriesUsableBy(companion, AuthorizationSubject.user(7L), 100))
+                .extracting(CompanionMemory::id).containsExactly(older.id());
+        verify(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+        // 104 newer active rows push this actual candidate outside the old 100-row scan.
+        assertThat(memoryRepository.findActive(603L, 100))
+                .extracting(CompanionMemory::id).doesNotContain(older.id());
+        doThrow(new BusinessException(ErrorCode.NO_AUTH_ERROR, "来源已撤权"))
+                .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+        assertThat(service.confirmedMemoriesUsableBy(companion, AuthorizationSubject.user(7L), 100)).isEmpty();
+        assertThat(memoryRepository.findById(older.id()).orElseThrow().status())
+                .isEqualTo(MemoryStatus.INVALIDATED);
+    }
+
+    @Test
+    void confirmedQueryScopesOwnerAndCompanionBeforeApplyingLimit() {
+        CompanionMemory older = memoryRepository.append(CompanionMemory.candidate(604L, 7L, 101L, 701L,
+                MemorySourceType.VISUAL, "较早确认。", bd("0.8"), NOW).confirm(NOW));
+        CompanionMemory newer = memoryRepository.append(CompanionMemory.candidate(604L, 7L, 101L, 702L,
+                MemorySourceType.VISUAL, "较新确认。", bd("0.8"), NOW.plusSeconds(1)).confirm(NOW.plusSeconds(1)));
+        memoryRepository.append(CompanionMemory.candidate(604L, 999L, 101L, 703L,
+                MemorySourceType.VISUAL, "其他主体。", bd("0.8"), NOW.plusSeconds(2)).confirm(NOW.plusSeconds(2)));
+        memoryRepository.append(CompanionMemory.candidate(605L, 7L, 101L, 704L,
+                MemorySourceType.VISUAL, "其他伙伴。", bd("0.8"), NOW.plusSeconds(3)).confirm(NOW.plusSeconds(3)));
+
+        assertThat(memoryRepository.findConfirmed(604L, 7L, 1))
+                .extracting(CompanionMemory::id).containsExactly(newer.id());
+        assertThat(memoryRepository.findConfirmed(604L, 7L, 100))
+                .extracting(CompanionMemory::id).containsExactly(newer.id(), older.id());
     }
 
     private static BigDecimal bd(String value) {

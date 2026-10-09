@@ -15,6 +15,9 @@ public interface CompanionMemoryRepository {
     /** 最近记忆（全部状态），按创建时间倒序。 */
     List<CompanionMemory> findRecent(long companionId, int limit);
 
+    /** 已确认的归属记忆；在 LIMIT 前按 companion、subject、CONFIRMED 过滤。 */
+    List<CompanionMemory> findConfirmed(long companionId, long subjectId, int limit);
+
     /** 仍处于 PENDING/CONFIRMED/DISMISSED 的记忆，用于撤权失效传播。 */
     List<CompanionMemory> findActive(long companionId, int limit);
 

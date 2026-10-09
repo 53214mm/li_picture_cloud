@@ -22,7 +22,7 @@ test('creates a story draft from an authorized picture through outline draft and
   const awaken = page.getByRole('button', { name: '唤醒我的伙伴' })
   if (await awaken.isVisible()) {
     await awaken.click()
-    await expect(page.getByText('光点', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('growth-stage')).toBeVisible()
   }
   await expect(page.getByText('让伙伴为图片写一段故事')).toBeVisible()
   await expect(page.getByText('还没有故事。选好图片，开始第一次创作吧。')).toBeVisible()

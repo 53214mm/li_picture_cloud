@@ -7,25 +7,38 @@ function matchesSequence(actual, expected) {
     : Number.isSafeInteger(actual) && actual === expected
 }
 
+// Session creation is deliberately not aborted: an aborted POST can still replace
+// the server's one session per owner. Drain it and close its returned ID before
+// another transport (including the rehearsal) may open a replacement.
+const sessionQueues = new WeakMap()
+function serializeSession(api, action) {
+  const previous = sessionQueues.get(api) || Promise.resolve()
+  const next = previous.catch(() => {}).then(action)
+  sessionQueues.set(api, next.catch(() => {}))
+  return next
+}
+
 // Thin, injectable transport. Session identifiers are ephemeral and never persisted.
 export function createPresenceTransport(api) {
   let session = null; let generation = 0; let sequence = 0
   async function stop() {
     generation++
     const previous = session; session = null; sequence = 0
-    if (previous?.sessionId) await api.close(previous.sessionId)
+    await serializeSession(api, async () => { if (previous?.sessionId) await api.close(previous.sessionId) })
   }
   async function decide(input, { signal, intensity = 'LOW', limit = 12 } = {}) {
     const cycle = generation
-    if (!session) {
-      const opened = await api.open({ enabled: true, mode: 'DEMO', maxDecisions: Math.min(12, limit), muted: false, intensity }, { signal })
-      if (signal?.aborted || cycle !== generation) {
+    await serializeSession(api, async () => {
+      if (signal?.aborted || cycle !== generation) throw new Error('Presence session superseded')
+      if (session) return
+      const opened = await api.open({ enabled: true, mode: 'DEMO', maxDecisions: Math.min(12, limit), muted: false, intensity })
+      if (signal?.aborted || cycle !== generation || !opened?.sessionId || opened.mode !== 'DEMO') {
         if (opened?.sessionId) await api.close(opened.sessionId)
-        throw new Error('Presence session superseded')
+        throw new Error('Presence session superseded or unexpected')
       }
-      if (!opened?.sessionId || opened.mode !== 'DEMO') throw new Error('Unexpected presence session')
       session = opened
-    }
+    })
+    if (signal?.aborted || cycle !== generation || !session) throw new Error('Presence session superseded')
     const current = session
     if (!Number.isSafeInteger(sequence + 1)) throw new Error('Presence sequence exhausted')
     const sent = { sessionId: current.sessionId, eventId: input.id, sequence: ++sequence,
