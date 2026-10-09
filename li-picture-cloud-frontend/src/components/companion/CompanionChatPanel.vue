@@ -84,9 +84,15 @@ watchEffect(() => emit('presentation-change', {
   phase: state.value.phase,
   error: Boolean(state.value.sendError || state.value.loadError)
 }))
+// Follow new chunks only while the reader is already at the bottom, or right
+// after sending. Measured before the DOM update, so it reflects where they were.
+const FOLLOW_THRESHOLD_PX = 48
 watch(() => state.value.messages, async () => {
+  const el = scroller.value
+  const follow = !el || state.value.phase === 'waiting' ||
+    el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_THRESHOLD_PX
   await nextTick()
-  if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
+  if (follow && scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
 })
 </script>
 

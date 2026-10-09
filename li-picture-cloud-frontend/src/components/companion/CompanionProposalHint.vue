@@ -1,5 +1,5 @@
 <template>
-  <button v-if="visible" type="button" class="proposal-hint" aria-label="查看伙伴提议" data-testid="proposal-hint" @click="interaction.open()">
+  <button v-if="visible" type="button" class="proposal-hint" aria-label="查看伙伴提议" data-testid="proposal-hint" @click="viewProposal">
     <span aria-hidden="true">✦</span><span>有一条提议</span>
   </button>
 </template>
@@ -8,6 +8,14 @@ import { computed } from 'vue'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
 const props = defineProps({ presentation: { type: Object, required: true } })
 const interaction = useCompanionInteractionStore()
+// The proposal panel already lives on the Home page; go straight to it there
+// instead of detouring through the drawer preview and back.
+function viewProposal() {
+  const target = document.getElementById('proposal-title')
+  if (!target) return interaction.open()
+  target.scrollIntoView({ block: 'start', behavior: 'instant' })
+  target.focus({ preventScroll: true })
+}
 const visible = computed(() => props.presentation.version === 1 && props.presentation.availability === 'ready' && props.presentation.attention === 'proposal')
 </script>
 <style scoped>

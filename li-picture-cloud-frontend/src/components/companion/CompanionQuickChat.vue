@@ -13,17 +13,21 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useCompanionChatStore } from '@/stores/companionChat'
+import { useCompanionPresentationStore } from '@/stores/companionPresentation'
 import { getCompanionHome } from '@/api/companion'
 import { mapCompanionPresentation } from '@/presentation/companionPresentation'
 import CompanionChatPanel from './CompanionChatPanel.vue'
 
 // This component exists only in an explicitly opened interaction drawer. It
 // never acquires/replaces the Home observation lease or evaluates proposals.
+// On Home it only reads the snapshot that page already observed.
 const user = useUserStore()
 const chat = useCompanionChatStore()
+const observation = useCompanionPresentationStore()
 const actor = String(user.currentUser?.id)
-const home = shallowRef(null)
-const loading = ref(true)
+const fetched = shallowRef(null)
+const home = computed(() => fetched.value ?? observation.observedHome)
+const loading = ref(!observation.observedHome)
 const error = ref('')
 let active = true
 let generation = 0
@@ -44,12 +48,12 @@ async function load() {
     const snapshot = await getCompanionHome({ signal: controller.signal })
     if (!current(cycle)) return
     if (!['ready', 'absent'].includes(mapCompanionPresentation({ home: snapshot, homeStatus: 'ready' }).availability)) throw new Error('伙伴状态暂不可用，请重试。')
-    home.value = snapshot
+    fetched.value = snapshot
   } catch (failure) {
     if (current(cycle)) error.value = failure.message || '伙伴状态读取失败，请重试。'
   } finally { if (current(cycle)) loading.value = false }
 }
-onMounted(load)
+onMounted(() => { if (!observation.observedHome) load() })
 onBeforeUnmount(() => { active = false; generation += 1; controller?.abort() })
 </script>
 <style scoped>

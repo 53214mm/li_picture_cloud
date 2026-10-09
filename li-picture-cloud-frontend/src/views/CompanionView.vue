@@ -57,50 +57,44 @@
               <header class="zone-heading"><div><span>02 / PHOTO DESK</span><h2 id="desk-title" tabindex="-1">把照片放到桌上</h2></div><p>从自己的图库里，挑一张想分享的图片。</p></header>
               <div class="desk-layout">
                 <section class="feeding-column" aria-labelledby="feeding-title">
-              <div class="feeding-heading">
-                <div>
-                  <span class="section-index">PHOTO DESK</span>
-                  <h2 id="feeding-title" tabindex="-1">用一张图片喂养伙伴</h2>
-                </div>
-                <span v-if="privateSpace" class="space-name">{{ privateSpace.spaceName || '我的私有空间' }}</span>
-              </div>
+                  <div class="feeding-heading">
+                    <div>
+                      <span class="section-index">PHOTO DESK</span>
+                      <h2 id="feeding-title" tabindex="-1">用一张图片喂养伙伴</h2>
+                    </div>
+                    <span v-if="privateSpace" class="space-name">{{ privateSpace.spaceName || '我的私有空间' }}</span>
+                  </div>
 
-              <p v-if="interactionNotice" class="feed-message" role="status">{{ interactionNotice }}</p>
+                  <p v-if="interactionNotice" class="feed-message" role="status">{{ interactionNotice }}</p>
 
-              <div v-if="sourceError" class="source-state error" role="alert">
-                <p>{{ sourceError }}</p>
-                <button class="btn btn-outline" type="button" @click="loadSources">重试读取图库</button>
-              </div>
-              <div v-else-if="!sourceLoading && !privateSpace" class="source-state">
-                <p>你还没有私有空间。先创建一个空间，再把图片变成伙伴的成长素材。</p>
-                <router-link class="btn btn-outline" to="/space/create">创建私有空间</router-link>
-              </div>
-              <template v-else>
-                <CompanionPicturePicker
-                  :pictures="pictures"
-                  :space-id="privateSpace?.id"
-                  :selected-id="selectedPictureId"
-                  :loading="sourceLoading"
-                  :disabled="feedLocked"
-                  @select="selectPicture"
-                />
-                <div v-if="!sourceLoading && privateSpace && !pictures.length" class="upload-link">
-                  <router-link :to="{ path: '/upload', query: { spaceId: privateSpace.id } }">上传一张图片到这个空间 →</router-link>
-                </div>
-              </template>
-              <CompanionFeedingCard :state="feedState" :picture="selectedPicture" :home-fresh="homeFresh" :refreshing="homeSyncBusy"
-                                    @submit="submitFeed" @clear="clearSelection" @visit-growth="visitGrowth" />
-            </section>
-                <aside class="desk-note"><section class="nutrition-banner" aria-label="当前图片营养分析模式">
-          <div>
-            <span class="nutrition-label">关于这张图片</span>
-            <strong>实际来源会逐条写入成长档案</strong>
-          </div>
-          <p>
-            {{ home.nutrition?.notice }}
-            <span v-if="home.nutrition?.dailyLimit"> 每日视觉次数上限：{{ home.nutrition.dailyLimit }}。</span>
-          </p>
-        </section><p class="desk-footnote">图片仍留在原来的空间。选择图片后，由你确认是否喂养。</p></aside>
+                  <div v-if="sourceError" class="source-state error" role="alert">
+                    <p>{{ sourceError }}</p>
+                    <button class="btn btn-outline" type="button" @click="loadSources">重试读取图库</button>
+                  </div>
+                  <div v-else-if="!sourceLoading && !privateSpace" class="source-state">
+                    <p>你还没有私有空间。先创建一个空间，再把图片变成伙伴的成长素材。</p>
+                    <router-link class="btn btn-outline" to="/space/create">创建私有空间</router-link>
+                  </div>
+                  <template v-else>
+                    <CompanionPicturePicker
+                      :pictures="pictures"
+                      :space-id="privateSpace?.id"
+                      :selected-id="selectedPictureId"
+                      :loading="sourceLoading"
+                      :disabled="feedLocked"
+                      @select="selectPicture"
+                    />
+                    <div v-if="!sourceLoading && privateSpace && !pictures.length" class="upload-link">
+                      <router-link :to="{ path: '/upload', query: { spaceId: privateSpace.id } }">上传一张图片到这个空间 →</router-link>
+                    </div>
+                  </template>
+                  <CompanionFeedingCard :state="feedState" :picture="selectedPicture" :home-fresh="homeFresh" :refreshing="homeSyncBusy"
+                                        @submit="submitFeed" @clear="clearSelection" @visit-growth="focusSection('growth-title')" />
+                </section>
+                <aside class="desk-note">
+                  <CompanionNutritionNote :nutrition="home.nutrition" />
+                  <p class="desk-footnote">图片仍留在原来的空间。选择图片后，由你确认是否喂养。</p>
+                </aside>
               </div>
             </section>
             <section id="habitat-journal" class="home-zone" aria-labelledby="journal-title">
@@ -126,16 +120,7 @@
           </div>
           <footer class="habitat-footer"><span>留影小屋 · 绫页</span><a href="#habitat-title" @click.prevent="visitHabitat('home')">回到小屋 ↑</a></footer>
         </template>
-        <div v-else class="uninhabited-note"><section class="nutrition-banner" aria-label="当前图片营养分析模式">
-          <div>
-            <span class="nutrition-label">关于这张图片</span>
-            <strong>实际来源会逐条写入成长档案</strong>
-          </div>
-          <p>
-            {{ home.nutrition?.notice }}
-            <span v-if="home.nutrition?.dailyLimit"> 每日视觉次数上限：{{ home.nutrition.dailyLimit }}。</span>
-          </p>
-        </section></div>
+        <div v-else class="uninhabited-note"><CompanionNutritionNote :nutrition="home.nutrition" /></div>
       </template>
     </div>
   </div>
@@ -156,6 +141,7 @@ import CompanionStats from '@/components/companion/CompanionStats.vue'
 import CompanionHabitat from '@/components/companion/CompanionHabitat.vue'
 import CompanionPicturePicker from '@/components/companion/CompanionPicturePicker.vue'
 import CompanionFeedingCard from '@/components/companion/CompanionFeedingCard.vue'
+import CompanionNutritionNote from '@/components/companion/CompanionNutritionNote.vue'
 import { createFeedingSession, emptyFeedingState } from '@/presentation/companionFeeding'
 import CompanionGrowthTimeline from '@/components/companion/CompanionGrowthTimeline.vue'
 import CompanionMoodPanel from '@/components/companion/CompanionMoodPanel.vue'
@@ -245,17 +231,17 @@ function initializeFeeding() {
       if (state.phase === 'uncertain') homeFresh.value = false
     } })
 }
-function visitHabitat(area) {
-  const ids = { home: 'habitat-title', chat: 'companion-chat-input', feed: 'feeding-title', journal: 'journal-title', growth: 'habitat-growth-title' }
-  let target = document.getElementById(ids[area])
-  if (area === 'chat' && target?.disabled) target = document.getElementById('window-title')
-  target?.scrollIntoView({ block: 'start', behavior: 'instant' })
+// Scroll a section target into view and move focus there. A disabled chat
+// input cannot take focus, so callers may name a heading to fall back to.
+function focusSection(id, { fallback = null, block = 'start' } = {}) {
+  let target = document.getElementById(id)
+  if (fallback && (!target || target.disabled)) target = document.getElementById(fallback)
+  target?.scrollIntoView({ block, behavior: 'instant' })
   target?.focus({ preventScroll: true })
 }
-function visitGrowth() {
-  const target = document.getElementById('growth-title')
-  target?.scrollIntoView({ block: 'start', behavior: 'instant' })
-  target?.focus({ preventScroll: true })
+function visitHabitat(area) {
+  const ids = { home: 'habitat-title', chat: 'companion-chat-input', feed: 'feeding-title', journal: 'journal-title', growth: 'habitat-growth-title' }
+  focusSection(ids[area], { fallback: area === 'chat' ? 'window-title' : null })
 }
 
 // Consume a short-lived navigation command, never a feed command. Recheck server
@@ -293,10 +279,8 @@ watch([() => interaction.destination, () => home.value?.companion?.id, sourceLoa
   const focusGeneration = selectionGeneration
   await nextTick()
   if (focusGeneration !== selectionGeneration || command.actor !== String(userStore.currentUser?.id)) return
-  let target = document.getElementById(command.target === 'chat' ? 'companion-chat-input' : command.target === 'proposal' ? 'proposal-title' : 'feeding-title')
-  if (command.target === 'chat' && target?.disabled) target = document.getElementById('chat-title')
-  target?.scrollIntoView({ block: 'center' })
-  target?.focus({ preventScroll: true })
+  const ids = { chat: 'companion-chat-input', proposal: 'proposal-title', feed: 'feeding-title' }
+  focusSection(ids[command.target] || ids.feed, { fallback: command.target === 'chat' ? 'chat-title' : null, block: 'center' })
 }, { flush: 'post' })
 
 onMounted(() => {
@@ -401,9 +385,10 @@ async function loadSources() {
       if (!isCurrentPage() || cycle !== sourceGeneration) return
       pictures.value = picturePage.records || []
     }
-    // Recovery stores no image data. A picture outside the recent window must
-    // pass the same R08 owner/private-space check before its preview is shown.
-    if (pendingAttempt.value && !selectedPicture.value) {
+    // Recovery and R08 hand-offs may select a picture outside the recent window.
+    // Re-reading the source must not drop its preview, and it must pass the same
+    // owner/private-space check again before it is shown.
+    if (selectedPictureId.value && !selectedPicture.value) {
       try {
         const candidate = await inspectCompanionPicture(selectedPictureId.value, pageActor, { readPicture: getPictureVOById, readSpace: getSpaceVOById })
         if (!isCurrentPage() || cycle !== sourceGeneration) return
@@ -432,9 +417,7 @@ async function clearSelection() {
   interactionNotice.value = ''
   await nextTick()
   if (!isCurrentPage()) return
-  const target = document.getElementById('picture-picker-title') || document.getElementById('feeding-title')
-  target?.scrollIntoView({ block: 'start', behavior: 'instant' })
-  target?.focus({ preventScroll: true })
+  focusSection('picture-picker-title', { fallback: 'feeding-title' })
 }
 
 async function submitFeed() {
@@ -483,10 +466,7 @@ async function submitFeed() {
 .feeding-heading h2 { margin-top: 6px; font-size: 18px; font-weight: 500; }
 .space-name { max-width: 180px; padding: 5px 9px; color: #536449; background: #e9eddf; font-size: 11px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .desk-note { padding: 24px 20px; border: 1px solid #dedccf; background: #efebdd; border-radius: 3px 20px 3px 3px; }
-.nutrition-label, .nutrition-banner strong { display: block; }
-.nutrition-label { font-size: 10px; letter-spacing: .06em; color: #7a7b64; margin-bottom: 12px; }
-.nutrition-banner strong { font-size: 14px; font-weight: 500; line-height: 1.9; }
-.nutrition-banner p, .desk-footnote { margin-top: 16px; font-size: 12px; color: #66705e; line-height: 1.9; }
+.desk-footnote { margin-top: 16px; font-size: 12px; color: #66705e; line-height: 1.9; }
 .desk-footnote { padding-top: 18px; border-top: 1px solid #d5d3c0; }
 .uninhabited-note { max-width: 640px; margin: 28px auto; padding: 24px; }
 .source-state { padding: 24px; border: 1px dashed #b5bda9; border-radius: 6px; background: #fffdf7; font-size: 13px; line-height: 1.8; }
@@ -519,7 +499,6 @@ async function submitFeed() {
   .desk-layout, .state-grid { grid-template-columns: 1fr; }
   .feeding-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
   .desk-note { padding: 20px; }
-  .nutrition-banner strong { font-size: 13px; }
   .habitat-content .home-zone :deep(section > header) { padding: 16px; flex-wrap: wrap; gap: 12px; }
 }
 </style>

@@ -59,7 +59,7 @@ test('R12 drawer performs no proposal/contract IO and retains explicit picture h
   for (const source of [quick, drawer, hint]) assert.doesNotMatch(source, /getActiveCompanionProposal|getCompanionContract|acceptCompanionProposal|ignoreCompanionProposal|scoldCompanionProposal|setInterval/)
   assert.match(drawer, /CompanionQuickChat v-if="!interaction\.inspection"/)
   assert.match(drawer, /go\('feed', interaction\.inspection\.picture\.id\)/)
-  assert.match(quick, /onMounted\(load\)/)
+  assert.match(quick, /onMounted\(\(\) => \{ if \(!observation\.observedHome\) load\(\) \}\)/)
   assert.match(quick, /onBeforeUnmount\([^]*controller\?\.abort\(\)/)
   assert.match(quick, /actor === String\(user\.currentUser\?\.id\)/)
   assert.match(hint, /presentation\.attention === 'proposal'/)

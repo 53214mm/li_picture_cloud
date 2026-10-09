@@ -103,7 +103,12 @@ test('R12 pending proposal is a passive avatar hint and previews only the existi
   await page.goto('/companion')
   await expect(page.getByTestId('proposal-hint')).toBeVisible()
   await expect(dialog(page)).not.toBeVisible()
+  // On Home the hint goes straight to the existing proposal panel.
   await page.getByTestId('proposal-hint').click()
+  await expect(dialog(page)).not.toBeVisible()
+  await expect(page.locator('#proposal-title')).toBeFocused()
+  // Other entries still preview the observed proposal in the drawer.
+  await shell(page).click()
   await expect(dialog(page).getByText('一起看看最近的图片？', { exact: true })).toBeVisible()
   expect(state.calls.filter(call => call.path.endsWith('/proposals/active'))).toHaveLength(1)
   expect(state.calls.filter(call => call.path.endsWith('/contract'))).toHaveLength(1)
