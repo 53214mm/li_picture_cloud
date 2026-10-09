@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { freezeClock } from './helpers/clock.js'
 
 const mood = { energy: 0, joy: 0, loneliness: 0, inspiration: 0, irritation: 0 }
 const relationship = { familiarity: 0, trust: 0, closeness: 0, tacit: 0, recentFeedback: 0 }
@@ -81,8 +82,7 @@ test('R11 high loneliness remains passive and 320px reduced-motion disclosure st
 
 test('R11 energetic idle pauses and resumes the latest tone through the existing clock', async ({ page }) => {
   await fixture(page, { mood: { ...mood, energy: 80 } })
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await freezeClock(page)
   await page.goto('/companion')
   const player = page.locator('.sprite-player')
   await expect(player).toHaveAttribute('data-playback', 'playing')

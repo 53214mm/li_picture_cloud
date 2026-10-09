@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { delimiter, join } from 'node:path'
 import { API_E2E_OPT_IN, API_E2E_URL, apiE2eFiles, backendArguments, fixtureEnvironment } from '../scripts/lib/api-e2e-policy.mjs'
 
 test('API fixture environment excludes inherited credentials and runtime overrides', () => {
@@ -14,7 +15,7 @@ test('API fixture environment excludes inherited credentials and runtime overrid
   }
   const env = fixtureEnvironment(source, '/tools/jdk', '/tools/maven')
   assert.deepEqual(env, {
-    PATH: '/tools/jdk/bin:/usr/bin:/bin', HOME: '/test-home', TMPDIR: '/tmp',
+    PATH: `${join('/tools/jdk', 'bin')}${delimiter}/usr/bin:/bin`, HOME: '/test-home', TMPDIR: '/tmp',
     JAVA_HOME: '/tools/jdk', MAVEN_USER_HOME: '/tools/maven',
     MAVEN_OPTS: '-Dmaven.user.home=/tools/maven', LANG: 'C.UTF-8', COMPANION_VISION_LIVE_TEST: 'false'
   })

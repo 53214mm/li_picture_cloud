@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test'
+import { freezeClock } from './helpers/clock.js'
+import { isBusinessWrite } from './helpers/request-policy.js'
 
 const specimen = { id: '7001', lifeStage: 'LIGHT', lifeExperience: '42', level: 1, levelStartExperience: '0', nextLevelExperience: '100', revision: '9', traits: {}, skills: [] }
 const ok = (route, data) => route.fulfill({ json: { code: 0, data } })
@@ -6,7 +8,7 @@ async function fixture(page, proposal = false) {
   const state = { images: [], writes: [], errors: [] }
   page.on('request', request => {
     if (request.resourceType() === 'image') state.images.push(request.url())
-    if (request.method() !== 'GET') state.writes.push(request.url())
+    if (isBusinessWrite({ method: request.method(), path: new URL(request.url()).pathname })) state.writes.push(request.url())
   })
   page.on('pageerror', error => state.errors.push(error.message))
   await page.route(url => url.pathname.startsWith('/api/'), route => {
@@ -58,8 +60,7 @@ test('R13 mobile starts with a compact clickable still and no atlas, leaving pho
 test('R13 breakpoint changes preserve the same player, consumed proposal hint and user pause', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await fixture(page, true)
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await freezeClock(page)
   await page.goto('/companion')
   await expect(player(page)).toHaveAttribute('data-animation-state', 'attention')
   await player(page).evaluate(element => { element.dataset.r13Identity = 'same-player' })

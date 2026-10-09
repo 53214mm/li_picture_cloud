@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { freezeClock } from './helpers/clock.js'
 import { writeFile } from 'node:fs/promises'
 
 const member = { id: '42', userAccount: 'body-fixture', userName: '测试用户', userRole: 'user' }
@@ -62,8 +63,7 @@ for (const [stage, label] of [['LIGHT', '光点'], ['SEEDLING', '幼体'], ['COM
 
 test('idle pauses for user, modal, offscreen, reduced motion and cleans up on navigation', async ({ page }) => {
   await fixture(page)
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await freezeClock(page)
   await page.goto('/companion')
   const player = await loaded(page)
   await expect(player).toHaveAttribute('data-playback', 'playing')

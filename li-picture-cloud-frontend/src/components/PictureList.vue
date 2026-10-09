@@ -121,6 +121,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
+import { formatDate } from '@/utils/date'
 const interaction = useCompanionInteractionStore()
 
 const props = defineProps({
@@ -174,9 +175,6 @@ function goDetail(id) {
   router.push(`/picture/${id}`)
 }
 
-function formatDate(d) {
-  return d ? new Date(d).toLocaleDateString('zh-CN') : '-'
-}
 </script>
 
 <style scoped>

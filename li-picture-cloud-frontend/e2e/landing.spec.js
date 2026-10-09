@@ -25,7 +25,15 @@ async function expectNoHorizontalOverflow(page) {
   })).toBe(true)
 }
 
-test('guest landing uses real guest destinations and the enabled companion entry', async ({ page }) => {
+async function expectCompanionEntry(page, testInfo, name, href) {
+  const section = page.locator('[aria-labelledby="companion-title"]')
+  if (testInfo.project.name === 'production-default') {
+    await expect(section.getByRole('link')).toHaveCount(0)
+    await expect(section.getByText('伙伴功能暂未开放。你可以先使用图片和空间功能。')).toBeVisible()
+  } else await expect(section.getByRole('link', { name })).toHaveAttribute('href', href)
+}
+
+test('guest landing uses guest destinations and respects the companion build flag', async ({ page }, testInfo) => {
   await fixture(page, null)
   await page.goto('/')
 
@@ -34,11 +42,10 @@ test('guest landing uses real guest destinations and the enabled companion entry
   await expect(hero.getByRole('link', { name: '注册', exact: true })).toHaveAttribute('href', '/register')
   await expect(hero.getByRole('link', { name: '登录', exact: true })).toHaveAttribute('href', '/login')
 
-  const companionSection = page.locator('[aria-labelledby="companion-title"]')
-  await expect(companionSection.getByRole('link', { name: '登录后查看伙伴 →' })).toHaveAttribute('href', '/login?redirect=/companion')
+  await expectCompanionEntry(page, testInfo, '登录后查看伙伴 →', '/login?redirect=/companion')
 })
 
-test('member landing leads to the existing space and enabled companion', async ({ page }) => {
+test('member landing leads to existing space and respects the companion build flag', async ({ page }, testInfo) => {
   await fixture(page, member)
   await page.goto('/')
 
@@ -47,8 +54,7 @@ test('member landing leads to the existing space and enabled companion', async (
   await expect(hero.getByRole('link', { name: '图库', exact: true })).toHaveAttribute('href', '/gallery')
   await expect(hero.getByRole('link', { name: '注册', exact: true })).toHaveCount(0)
 
-  const companionSection = page.locator('[aria-labelledby="companion-title"]')
-  await expect(companionSection.getByRole('link', { name: '进入伙伴 →' })).toHaveAttribute('href', '/companion')
+  await expectCompanionEntry(page, testInfo, '进入伙伴 →', '/companion')
 })
 
 for (const viewport of [

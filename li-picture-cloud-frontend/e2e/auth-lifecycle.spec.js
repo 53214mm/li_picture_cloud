@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { freezeClock } from './helpers/clock.js'
 
 const member = { id: '42', userAccount: 'auth-fixture', userName: '测试用户', userRole: 'user' }
 
@@ -66,8 +67,7 @@ for (const succeeds of [true, false]) {
 test('registration completed after leaving never installs a delayed redirect', async ({ page }) => {
   const { errors } = await fixture(page)
   const pending = await holdRequest(page, 'register', { code: 0, data: '43' })
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await freezeClock(page)
   await page.goto('/register')
   await fillForm(page, true)
   await page.getByRole('button', { name: '注册', exact: true }).click()
@@ -89,8 +89,7 @@ test('registration completed after leaving never installs a delayed redirect', a
 
 test('registration countdown is submit-locked and cancelled by Back/Forward navigation', async ({ page }) => {
   const { writes, errors } = await fixture(page)
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await freezeClock(page)
   await page.goto('/login')
   await page.getByRole('link', { name: /立即注册/ }).click()
   await fillForm(page, true)
@@ -110,8 +109,7 @@ test('registration countdown is submit-locked and cancelled by Back/Forward navi
 
 test('ordinary registration still navigates once after the existing delay', async ({ page }) => {
   const { writes, errors } = await fixture(page)
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await freezeClock(page)
   await page.goto('/register')
   await fillForm(page, true)
   await page.getByRole('button', { name: '注册', exact: true }).click()

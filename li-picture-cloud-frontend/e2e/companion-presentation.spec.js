@@ -39,7 +39,11 @@ async function fixture(page) {
       return new Promise((resolve, reject) => {
         globalThis.r06ChatReject = reject
         globalThis.r06ChatOpen = () => {
-          const stream = new ReadableStream({ start(controller) { globalThis.r06ChatController = controller } })
+          globalThis.r06ChatCancelled = false
+          const stream = new ReadableStream({
+            start(controller) { globalThis.r06ChatController = controller },
+            cancel() { globalThis.r06ChatCancelled = true }
+          })
           resolve(new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } }))
         }
       })
@@ -192,16 +196,25 @@ test('proposal action is bounded by its request and suppressed proposal never im
   expect(state.errors).toEqual([])
 })
 
-test('late chat chunks from the previous page cannot affect the next page or Shell', async ({ page }) => {
+test('leaving chat cancels its reader and late data cannot affect the next page or Shell', async ({ page }) => {
   const state = await fixture(page)
   await page.goto('/companion')
   await sendChat(page)
   await page.locator('.sidebar').getByRole('link', { name: '图库', exact: true }).click()
   await expect(page.locator('.sidebar .companion-presence')).toHaveAttribute('data-presentation-availability', 'unobserved')
+  await expect.poll(() => page.evaluate(() => globalThis.r06ChatCancelled)).toBe(true)
   await page.locator('.sidebar').getByRole('link', { name: '伙伴空间', exact: true }).click()
   await allSurfaces(page, 'activity', 'idle')
-  await chunk(page, 'data:我终于回来了\n\n')
-  await chunk(page, 'event:done\ndata:\n\n')
+  // A correctly cancelled native stream rejects late network chunks. Verify
+  // that rejection instead of treating enqueue-on-closed as an application bug.
+  const lateResult = await page.evaluate(() => {
+    try {
+      globalThis.r06ChatController.enqueue(new TextEncoder().encode('data:我终于回来了\n\nevent:done\ndata:\n\n'))
+      return 'accepted'
+    } catch (error) { return error.name }
+  })
+  expect(lateResult).toBe('TypeError')
+  await expect(page.getByText('我终于回来了', { exact: true })).toHaveCount(0)
   await allSurfaces(page, 'activity', 'idle')
   expect(state.errors).toEqual([])
 })

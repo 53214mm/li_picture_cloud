@@ -4,6 +4,8 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.github.benmanes.caffeine.cache.Cache;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.li.lipicturecloud.config.JacksonConfig;
 import com.li.lipicturecloud.common.BaseResponse;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
@@ -27,8 +29,10 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -219,20 +223,45 @@ class PictureControllerBatchCacheTest {
         assertThat(redisEntries).isEqualTo(existingEntries);
     }
 
-    private PictureVO readCachedPage() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void cacheHitsPreserveDateJsonAndExactIds(boolean redisHit) throws Exception {
+        storedPicture.setId(9223372036854775806L);
+        storedPicture.setCreateTime(new Date(1789971452000L));
+        storedPicture.setEditTime(new Date(1789971453000L));
+        storedPicture.setUpdateTime(new Date(1789971454000L));
+        storedPicture.setReviewTime(new Date(1789971455000L));
+        var builder = new Jackson2ObjectMapperBuilder()
+                .featuresToDisable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        new JacksonConfig().longToStringCustomizer().customize(builder);
+        var mapper = builder.build();
+        var first = mapper.readTree(mapper.writeValueAsString(readCachedResponse()));
+        if (redisHit) evictLocalCacheOnly();
+        var cached = readCachedResponse();
+        assertThat(mapper.readTree(mapper.writeValueAsString(cached))).isEqualTo(first);
+        assertThat(first.at("/data/records/0/id").asText()).isEqualTo("9223372036854775806");
+        assertThat(cached.getData().getRecords().getFirst()).isInstanceOf(PictureVO.class);
+        verifyDatabaseReads(1);
+        assertThat(redisReads).hasSize(redisHit ? 2 : 1);
+    }
+
+    private BaseResponse<Page<PictureVO>> readCachedResponse() {
         PictureQueryRequest query = new PictureQueryRequest();
         query.setCurrent(1);
         query.setPageSize(12);
         query.setSpaceId(SPACE_ID);
-        BaseResponse<Page<PictureVO>> response = controller.listPictureVOByPageWithCache(query, request);
+        return controller.listPictureVOByPageWithCache(query, request);
+    }
+
+    private PictureVO readCachedPage() {
+        BaseResponse<Page<PictureVO>> response = readCachedResponse();
         assertThat(response.getCode()).isZero();
-        // Cache hits deserialize a raw Page; inspect its serialized record shape in both paths.
-        Page<?> page = response.getData();
+        Page<PictureVO> page = response.getData();
         assertThat(page.getCurrent()).isEqualTo(1);
         assertThat(page.getSize()).isEqualTo(12);
         assertThat(page.getTotal()).isEqualTo(1);
         assertThat(page.getRecords()).hasSize(1);
-        return JSONUtil.toBean(JSONUtil.toJsonStr(page.getRecords().getFirst()), PictureVO.class);
+        return page.getRecords().getFirst();
     }
 
     private PictureEditByBatchRequest batchRequest() {

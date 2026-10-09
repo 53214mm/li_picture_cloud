@@ -1,3 +1,8 @@
+-- H2 does not implement these MySQL expressions. These aliases exist only in
+-- the disposable E2E fixture; production SQL/schema and migrations are unchanged.
+CREATE ALIAS IF NOT EXISTS DATE_FORMAT FOR "com.li.lipicturecloud.support.H2MySqlAnalyticsFunctions.dateFormat";
+CREATE ALIAS IF NOT EXISTS YEARWEEK FOR "com.li.lipicturecloud.support.H2MySqlAnalyticsFunctions.yearWeek";
+
 CREATE TABLE IF NOT EXISTS user (
     id BIGINT PRIMARY KEY,
     userAccount VARCHAR(256) NOT NULL,

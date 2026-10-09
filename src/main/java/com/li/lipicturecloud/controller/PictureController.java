@@ -2,6 +2,7 @@ package com.li.lipicturecloud.controller;
 
 
 import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.lang.TypeReference;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -279,7 +280,8 @@ public class PictureController {
         // 1. 先查本地缓存（Caffeine）
         String cachedResult = LOCAL_CACHE.getIfPresent(cacheKey);
         if (cachedResult != null) {
-            Page<PictureVO> pictureVOPage = JSONUtil.toBean(cachedResult, Page.class);
+            // Preserve Date fields; a raw Page turns them into Long values on cache hits.
+            Page<PictureVO> pictureVOPage = JSONUtil.toBean(cachedResult, new TypeReference<Page<PictureVO>>() {}, false);
             return ResultUtils.success(pictureVOPage);
         }
 
@@ -288,7 +290,7 @@ public class PictureController {
             cachedResult = stringRedisTemplate.opsForValue().get(redisKey);
             if (cachedResult != null) {
                 LOCAL_CACHE.put(cacheKey, cachedResult);
-                Page<PictureVO> pictureVOPage = JSONUtil.toBean(cachedResult, Page.class);
+                Page<PictureVO> pictureVOPage = JSONUtil.toBean(cachedResult, new TypeReference<Page<PictureVO>>() {}, false);
                 return ResultUtils.success(pictureVOPage);
             }
         } catch (Exception e) {

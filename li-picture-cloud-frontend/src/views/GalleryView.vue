@@ -141,6 +141,7 @@ import { useUserStore } from '@/stores/user'
 import { listPictureVOByPage, getPictureTagCategory } from '@/api/picture'
 import LpStateBlock from '@/components/ui/LpStateBlock.vue'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
+import { formatDate } from '@/utils/date'
 const interaction = useCompanionInteractionStore()
 
 const router = useRouter()
@@ -292,9 +293,6 @@ function clearFilters() {
   handleSearch()
 }
 
-function formatDate(d) {
-  return d ? new Date(d).toLocaleDateString('zh-CN') : '-'
-}
 </script>
 
 <style scoped>

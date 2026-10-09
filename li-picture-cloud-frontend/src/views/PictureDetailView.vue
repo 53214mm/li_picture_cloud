@@ -201,6 +201,7 @@ import { SPACE_TYPE } from '@/constants/space'
 import { collaborationMode } from '@/utils/spaceAccess'
 import { COMPANION_UI_ENABLED } from '@/config/features'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
+import { formatDate } from '@/utils/date'
 const companionEnabled = COMPANION_UI_ENABLED
 const interaction = useCompanionInteractionStore()
 
@@ -381,11 +382,6 @@ async function handleDelete() {
     alert(e.message || '删除失败')
   }
 }
-
-function formatDate(d) {
-  return d ? new Date(d).toLocaleDateString('zh-CN') : '-'
-}
-
 function formatSize(bytes) {
   if (!bytes) return '-'
   if (bytes < 1024) return bytes + ' B'

@@ -162,8 +162,8 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space> imp
         QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
         fillAnalyzeQueryWrapper(spaceCategoryAnalyzeRequest, queryWrapper);
 
-        // SQL: SELECT category, COUNT(*) AS count, SUM(picSize) AS totalSize GROUP BY category
-        queryWrapper.select("category AS category", "COUNT(*) AS count", "SUM(picSize) AS totalSize")
+        // Keep map aliases lowercase so JDBC identifier folding preserves their keys.
+        queryWrapper.select("category AS category", "COUNT(*) AS count", "SUM(picSize) AS total_size")
                 .groupBy("category");
 
         return pictureService.getBaseMapper().selectMaps(queryWrapper)
@@ -172,7 +172,7 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space> imp
                     String category = result.get("category") != null
                             ? result.get("category").toString() : "未分类";
                     Long count = ((Number) result.get("count")).longValue();
-                    Long totalSize = ((Number) result.get("totalSize")).longValue();
+                    Long totalSize = ((Number) result.get("total_size")).longValue();
                     return new SpaceCategoryAnalyzeResponse(category, count, totalSize);
                 })
                 .collect(Collectors.toList());

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { freezeClock } from './helpers/clock.js'
 
 const specimen = { id: '7001', lifeStage: 'LIGHT', lifeExperience: '42', level: 1, levelStartExperience: '0', nextLevelExperience: '100', revision: '9', traits: {}, skills: [] }
 const proposal = { id: '7010', status: 'PENDING', content: '生气、庆祝、说话都不是动作信号', opportunityType: 'WEEKLY_REVIEW', impulseScore: 2 }
@@ -69,8 +70,7 @@ async function hidden(page, value) {
 
 test('a finite proposal cue plays actual atlas frames once, then idle, with static secondary surfaces', async ({ page }, testInfo) => {
   const state = await fixture(page, true)
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await freezeClock(page)
   const player = await loaded(page)
   await intent(page, 'attention')
   await expect(player).toHaveAttribute('data-animation-state', 'attention')
@@ -96,8 +96,7 @@ test('a finite proposal cue plays actual atlas frames once, then idle, with stat
 
 test('focus renders a small pose and blink; streaming handoff preserves the cycle', async ({ page }, testInfo) => {
   const state = await fixture(page)
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await freezeClock(page)
   const player = await loaded(page)
   await expect(player).toHaveAttribute('data-playback', 'playing')
   await chat(page)
@@ -158,8 +157,7 @@ test('Chat, Feed and Proposal compete through R06 and recover without replaying 
 
 test('hidden and user-paused renderers use the latest state on return, with no hint catch-up', async ({ page }) => {
   const state = await fixture(page, true)
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await freezeClock(page)
   const player = await loaded(page)
   await expect(player).toHaveAttribute('data-animation-state', 'attention')
   await hidden(page, true)

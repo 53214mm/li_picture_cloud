@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { isBusinessWrite } from './helpers/request-policy.js'
 
 const companion = { id: '7001', lifeStage: 'LIGHT', revision: '9', lifeExperience: '42', level: 1, levelStartExperience: '0', nextLevelExperience: '100', traits: {}, skills: [] }
 const ok = (route, data) => route.fulfill({ json: { code: 0, data } })
@@ -13,6 +14,7 @@ async function fixture(page, overrides = {}) {
     state.calls.push({ path, method: route.request().method() })
     if (path === '/api/user/current' || path === '/api/user/login') return ok(route, state.user)
     if (path === '/api/user/logout') return ok(route, true)
+    if (path === '/api/spaceUser/list/my') return ok(route, [])
     if (path === '/api/companion/me') return ok(route, { companion: state.companion, mood: null, relationship: null, recentGrowth: [], nutrition: {}, chatPolicy: 'DEMO' })
     if (path === '/api/companion/chat/history') return ok(route, { records: state.messages })
     if (path === '/api/companion/chat/stream') {
@@ -42,7 +44,7 @@ test('R12 avatar opens chat in place, lazy reads only, and retains a draft acros
   await shell(page).click()
   await expect(input).toBeEnabled()
   await expect(input).toHaveValue('还没发送的草稿')
-  expect(state.calls.filter(call => call.method === 'POST')).toEqual([])
+  expect(state.calls.filter(isBusinessWrite)).toEqual([])
   expect(state.calls.filter(call => call.path.startsWith('/api/companion/')).every(call => ['/api/companion/me', '/api/companion/chat/history'].includes(call.path))).toBe(true)
   expect(state.errors).toEqual([])
 })
@@ -71,7 +73,7 @@ test('R12 absent companion does not load history or manufacture a chat session',
   await shell(page).click()
   await expect(dialog(page).getByText('还没有唤醒伙伴。可以先到伙伴空间看看。')).toBeVisible()
   await expect(dialog(page).getByLabel('对伙伴说的话')).toHaveCount(0)
-  expect(state.calls.filter(call => call.path.endsWith('/chat/history') || call.method === 'POST')).toEqual([])
+  expect(state.calls.filter(call => call.path.endsWith('/chat/history') || isBusinessWrite(call))).toEqual([])
 })
 
 test('R12 uncertain chat is not retried and requires explicit history refresh before sending again', async ({ page }) => {
@@ -105,7 +107,7 @@ test('R12 pending proposal is a passive avatar hint and previews only the existi
   await expect(dialog(page).getByText('一起看看最近的图片？', { exact: true })).toBeVisible()
   expect(state.calls.filter(call => call.path.endsWith('/proposals/active'))).toHaveLength(1)
   expect(state.calls.filter(call => call.path.endsWith('/contract'))).toHaveLength(1)
-  expect(state.calls.filter(call => call.method === 'POST')).toEqual([])
+  expect(state.calls.filter(isBusinessWrite)).toEqual([])
   await dialog(page).getByRole('button', { name: '前往回应这条提议' }).click()
   await expect(page.locator('#proposal-title')).toBeFocused()
   expect(state.errors).toEqual([])

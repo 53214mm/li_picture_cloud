@@ -52,6 +52,27 @@ async function fixture(page, user = member) {
   return state
 }
 
+test('dates remain valid after leaving and returning to a cached gallery', async ({ page }) => {
+  await fixture(page)
+  let reads = 0
+  await page.route('**/api/picture/list/page/vo/cache', route => {
+    reads += 1
+    const createTime = reads === 1 ? '2026-09-21T06:17:32.000+00:00' : '1789971452000'
+    return route.fulfill({ json: { code: 0, data: { records: [{ ...records[0], createTime }], total: 1 } } })
+  })
+  await page.goto('/gallery')
+  await expect(page.locator('.card-meta')).toContainText('2026/9/21')
+  await page.locator('.sidebar').getByRole('button', { name: '空间', exact: true }).click()
+  await page.locator('.sidebar').getByRole('link', { name: '我的空间', exact: true }).click()
+  await expect(page).toHaveURL(/\/space\/my$/)
+  await page.locator('.sidebar').getByRole('link', { name: '图库', exact: true }).click()
+  await expect(page.locator('.card-meta')).toContainText('2026/9/21')
+  expect(reads).toBe(2)
+  await page.reload()
+  await expect(page.locator('.card-meta')).toContainText('2026/9/21')
+  await expect(page.locator('.gallery-page')).not.toContainText('Invalid Date')
+})
+
 test('list failure is distinct from empty, clears stale pagination and can retry', async ({ page }) => {
   const state = await fixture(page)
   await page.goto('/gallery')

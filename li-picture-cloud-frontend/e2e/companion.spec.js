@@ -214,6 +214,58 @@ test('rendering Lingye preserves the existing identity, growth, history and cont
   expect(writes).toEqual([])
 })
 
+test('real quick chat shares one send and persisted history with the full Home view', async ({ page }) => {
+  await login(page)
+  const errors = []
+  const calls = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', request => {
+    const path = new URL(request.url()).pathname
+    if (path.startsWith('/api/companion/')) calls.push(path)
+  })
+  await page.goto('/gallery')
+  const entry = page.locator('.sidebar').getByRole('button', { name: '和绫页互动' })
+  await expect(entry).toBeVisible()
+  expect(calls).toEqual([])
+  await entry.click()
+  const drawer = page.getByRole('dialog', { name: '和绫页互动' })
+  const input = drawer.getByLabel('对伙伴说的话')
+  await expect(input).toBeEnabled()
+  await expect(drawer.locator('.chat-card')).toHaveAttribute('data-chat-ready', 'true')
+  const message = '从真实快捷对话交接到留影小屋'
+  await input.fill(message)
+  await drawer.locator('.chat-input').evaluate(form => { form.requestSubmit(); form.requestSubmit() })
+  await expect(drawer.getByText(message, { exact: true })).toHaveCount(1)
+  await expect(input).toBeEnabled()
+  await expect(input).toHaveValue('')
+  expect(calls.filter(path => path === '/api/companion/chat/stream')).toHaveLength(1)
+
+  await input.fill('切换入口后保留的未发送草稿')
+  await drawer.getByRole('button', { name: /打开完整对话/ }).click()
+  await expect(page).toHaveURL(/\/companion$/)
+  await expect(page.locator('#companion-chat-input')).toBeFocused()
+  await expect(page.locator('#companion-chat-input')).toHaveValue('切换入口后保留的未发送草稿')
+  await expect(page.locator('.chat-card').getByText(message, { exact: true })).toHaveCount(1)
+  // Crossing routes releases the last owner, so Home deliberately reads the
+  // persisted history again. Two views mounted together must reuse that read.
+  expect(calls.filter(path => path === '/api/companion/chat/history')).toHaveLength(2)
+  await page.locator('.portrait-interaction').click()
+  await expect(drawer.locator('.chat-card')).toHaveAttribute('data-chat-ready', 'true')
+  await expect(input).toHaveValue('切换入口后保留的未发送草稿')
+  await expect(drawer.getByText(message, { exact: true })).toHaveCount(1)
+  expect(calls.filter(path => path === '/api/companion/chat/history')).toHaveLength(2)
+  await drawer.getByRole('button', { name: /打开完整对话/ }).click()
+  await expect(page.locator('#companion-chat-input')).toBeFocused()
+  const history = await page.request.get('/api/companion/chat/history')
+  const historyBody = await history.json()
+  expect(historyBody.code).toBe(0)
+  expect(historyBody.data.records.filter(record => record.content === message)).toHaveLength(1)
+  await page.reload()
+  await expect(page.locator('.chat-card').getByText(message, { exact: true })).toHaveCount(1)
+  expect(calls.filter(path => path === '/api/companion/chat/stream')).toHaveLength(1)
+  expect(errors).toEqual([])
+})
+
 test('memory lifecycle supports confirm correct ignore and delete', async ({ page }) => {
   await login(page)
   await page.goto('/companion')

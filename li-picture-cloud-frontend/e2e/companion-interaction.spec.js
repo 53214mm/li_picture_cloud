@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { freezeClock } from './helpers/clock.js'
 
 const member = { id: '42', userName: 'R08', userRole: 'user' }
 const specimen = { id: '7001', lifeStage: 'LIGHT', lifeExperience: '42', level: 1, levelStartExperience: '0', nextLevelExperience: '100', revision: '9', traits: {}, skills: [] }
@@ -160,8 +161,7 @@ test('closing an inspection discards its late reply; arrival rechecks revoked ac
 
 test('R07 arbitrates hover/focus, modal interruption, pause and reduced motion', async ({ page }) => {
   const state = await fixture(page)
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await freezeClock(page)
   await page.goto('/companion')
   const player = page.locator('.sprite-player')
   const body = page.locator('.body-ground')
