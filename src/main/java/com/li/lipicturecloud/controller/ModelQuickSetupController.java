@@ -24,6 +24,7 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -91,13 +92,28 @@ public class ModelQuickSetupController {
         long userId = userId(request);
         QuickConnectionView connected = quickSetupService.connect(userId, provider(body.getProvider()),
                 body.getApiKey(), body.getModelCode());
+        selectModelChat(userId);
+        return ResultUtils.success(connected);
+    }
+
+    @RateLimit(maxRequests = 10, windowSeconds = 60, message = "连接请求过于频繁，请稍后再试")
+    @PostMapping("/connections/{id}/use")
+    @AuthCheck
+    public BaseResponse<QuickConnectionView> useExisting(@PathVariable long id,
+                                                         HttpServletRequest request) {
+        long userId = userId(request);
+        QuickConnectionView connected = quickSetupService.useExisting(userId, id);
+        selectModelChat(userId);
+        return ResultUtils.success(connected);
+    }
+
+    private void selectModelChat(long userId) {
         // 连上自己的模型后，伙伴聊天直接改用它；切换失败不影响已建好的连接。
         try {
             chatModeService.choose(userId, CompanionChatMode.MODEL);
         } catch (RuntimeException modeFailure) {
             log.warn("model_quick_setup_chat_mode_not_switched subjectId={}", userId);
         }
-        return ResultUtils.success(connected);
     }
 
     @GetMapping("/current")

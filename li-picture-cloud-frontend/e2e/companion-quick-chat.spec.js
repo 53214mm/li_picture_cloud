@@ -15,7 +15,7 @@ async function fixture(page, overrides = {}) {
     if (path === '/api/user/current' || path === '/api/user/login') return ok(route, state.user)
     if (path === '/api/user/logout') return ok(route, true)
     if (path === '/api/spaceUser/list/my') return ok(route, [])
-    if (path === '/api/companion/me') return ok(route, { companion: state.companion, mood: null, relationship: null, recentGrowth: [], nutrition: {}, chatPolicy: 'DEMO' })
+    if (path === '/api/companion/me') return ok(route, { companion: state.companion, mood: null, relationship: null, recentGrowth: [], nutrition: {}, chatPolicy: 'DEMO', chatMode: state.chatMode })
     if (path === '/api/companion/chat/history') return ok(route, { records: state.messages })
     if (path === '/api/companion/chat/stream') {
       const { message } = route.request().postDataJSON()
@@ -74,6 +74,68 @@ test('R12 absent companion does not load history or manufacture a chat session',
   await expect(dialog(page).getByText('还没有唤醒伙伴。可以先到伙伴空间看看。')).toBeVisible()
   await expect(dialog(page).getByLabel('对伙伴说的话')).toHaveCount(0)
   expect(state.calls.filter(call => call.path.endsWith('/chat/history') || isBusinessWrite(call))).toEqual([])
+})
+
+for (const width of [1280, 375]) test(`daily companion keeps the composer near the portrait with long history at ${width}px`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: 850 })
+  const messages = Array.from({ length: 24 }, (_, i) => [
+    { role: 'USER', content: `过去的问题 ${i}` },
+    { role: 'COMPANION', content: `过去的回应 ${i}` }
+  ]).flat()
+  messages.push({ role: 'USER', content: '今天想出去走走' }, { role: 'COMPANION', content: '好呀。\n\n带上相机，去看看路边的花吧。' })
+  const state = await fixture(page, { messages, chatMode: {
+    mode: 'MODEL', modelAvailable: true, modelSource: 'OWN', modelBroken: false, providerLabel: 'DeepSeek', modelCode: 'deepseek-flash'
+  } })
+  await page.goto('/companion')
+  const card = page.locator('#habitat-chat .chat-card')
+  const input = card.getByLabel('对伙伴说的话')
+  await expect(card).toHaveAttribute('data-chat-ready', 'true')
+  await card.scrollIntoViewIfNeeded()
+  await expect(input).toBeInViewport()
+  await expect(card.getByRole('log')).toContainText('今天想出去走走')
+  await expect(card.getByRole('group', { name: '聊天模式' })).not.toBeVisible()
+  await expect(card.getByText('过去的问题 0', { exact: true })).not.toBeVisible()
+  const composerOffset = () => input.evaluate(el => el.getBoundingClientRect().top - el.closest('.chat-card').getBoundingClientRect().top)
+  const before = await composerOffset()
+  expect(before).toBeLessThan(260)
+  const memories = card.locator('.chat-memories summary')
+  await memories.click()
+  await expect(card.getByRole('region', { name: '之前的对话' })).toBeVisible()
+  await card.locator('.chat-scroll').scrollIntoViewIfNeeded()
+  await card.locator('.chat-scroll').evaluate(el => { el.scrollTop = 0 })
+  await expect(card.getByText('过去的问题 0', { exact: true })).toBeInViewport()
+  await expect(input).toHaveValue('')
+  expect(await composerOffset()).toBeCloseTo(before, 0)
+  await memories.click()
+  await input.fill('那就出发吧')
+  await input.press('Enter')
+  await expect(card.getByRole('log')).toContainText('听见了。')
+  await expect(card.getByText('今天想出去走走', { exact: true })).not.toBeVisible()
+  expect(await composerOffset()).toBeCloseTo(before, 0)
+  expect(state.calls.filter(call => call.path.endsWith('/chat/stream'))).toHaveLength(1)
+  expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth)).toBe(true)
+  await card.evaluate(el => el.scrollIntoView({ block: 'center', behavior: 'instant' }))
+  await card.screenshot({ path: testInfo.outputPath('daily-companion.png') })
+  expect(state.errors).toEqual([])
+})
+
+test('daily companion preserves streamed paragraphs and keeps long replies below the composer', async ({ page }) => {
+  await fixture(page)
+  const reply = '第一段。\n\n' + '一起慢慢看看今天的照片。'.repeat(70)
+  await page.route('**/api/companion/chat/stream', route => route.fulfill({
+    contentType: 'text/event-stream', body: reply.split('\n').map(line => `data:${line}`).join('\n') + '\n\nevent:done\ndata:\n\n'
+  }))
+  await page.goto('/companion')
+  const card = page.locator('#habitat-chat .chat-card')
+  const input = card.getByLabel('对伙伴说的话')
+  await expect(card).toHaveAttribute('data-chat-ready', 'true')
+  await input.fill('聊聊今天吧')
+  await input.press('Enter')
+  await expect(card.locator('.moment-content')).toHaveText(reply)
+  await expect(input).toBeEnabled()
+  await expect(input).toBeInViewport()
+  expect(await card.locator('.moment-content').evaluate(el => globalThis.getComputedStyle(el).whiteSpace)).toBe('pre-wrap')
+  await expect(card.getByRole('button', { name: '刷新对话' })).toHaveCount(0)
 })
 
 test('R12 uncertain chat is not retried and requires explicit history refresh before sending again', async ({ page }) => {

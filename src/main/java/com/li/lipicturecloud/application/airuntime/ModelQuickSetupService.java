@@ -19,9 +19,12 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 模型快速连接：用户只选供应商、填 API Key、选模型，其余步骤由平台完成。
@@ -52,6 +55,7 @@ public class ModelQuickSetupService {
     private final ModelCapabilityProfileService profileService;
     private final ModelUsageService usageService;
     private final TransactionTemplate transaction;
+    private final ByokConnectionResolver connectionResolver;
 
     public ModelQuickSetupService(ModelCatalogClient catalogClient,
                                   EndpointAllowlist allowlist,
@@ -62,7 +66,8 @@ public class ModelQuickSetupService {
                                   TaskRoutingRuleRepository routingRepository,
                                   ModelCapabilityProfileService profileService,
                                   ModelUsageService usageService,
-                                  PlatformTransactionManager transactionManager) {
+                                  PlatformTransactionManager transactionManager,
+                                  ByokConnectionResolver connectionResolver) {
         this.catalogClient = catalogClient;
         this.allowlist = allowlist;
         this.credentialService = credentialService;
@@ -73,6 +78,7 @@ public class ModelQuickSetupService {
         this.profileService = profileService;
         this.usageService = usageService;
         this.transaction = new TransactionTemplate(transactionManager);
+        this.connectionResolver = connectionResolver;
     }
 
     /** 第一步：用 API Key 读取可选模型。目录不可读时退回平台推荐模型，凭据留到最小对话时验证。 */
@@ -103,9 +109,17 @@ public class ModelQuickSetupService {
         failIfUnreachable(catalogClient.probeChat(preset.endpoint(), key, provider, model));
 
         ModelConnection connection = transaction.execute(status -> {
+            String displayName = nextConnectionName(subjectId, preset.label());
             CredentialVault credential = credentialService.store(subjectId, provider, key);
-            ModelConnection created = connectionService.create(subjectId, provider, preset.label(),
+            ModelConnection created = connectionService.create(subjectId, provider, displayName,
                     preset.endpoint(), model, credential.id());
+            // A name collision can return another request's row. It was not verified
+            // with this key/model, so roll back rather than silently selecting it.
+            if (!Objects.equals(created.credentialId(), credential.id())
+                    || created.provider() != provider || !created.modelCode().equals(model)
+                    || !created.endpointUri().equals(preset.endpoint())) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "连接名称刚被其他请求使用，请重试");
+            }
             ModelConnection enabled = connectionService.enable(created.id(), subjectId);
             profileService.snapshotWithVerifiedText(enabled, subjectId);
             routingService.upsert(subjectId, ModelTask.LANGUAGE_AGENT, enabled.id());
@@ -113,6 +127,37 @@ public class ModelQuickSetupService {
         });
         recordVerification(Objects.requireNonNull(connection, "connection"), subjectId);
         return current(subjectId);
+    }
+
+    /** Verify and route a saved connection without requesting the user's key again. */
+    public QuickConnectionView useExisting(long subjectId, long connectionId) {
+        checkIdentity(subjectId);
+        ModelRouteDecision verified = connectionResolver.resolveByok(subjectId, connectionId, "聊天");
+        ModelConnection observed = verified.connection();
+        failIfUnreachable(catalogClient.probeChat(observed.endpointUri(), verified.apiKey(),
+                observed.provider(), observed.modelCode()));
+        ModelConnection connection = transaction.execute(status -> {
+            ModelRouteDecision latest = connectionResolver.resolveByok(subjectId, connectionId, "聊天");
+            if (!latest.equals(verified)) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "连接在验证期间发生变化，请重试");
+            }
+            profileService.snapshotWithVerifiedText(latest.connection(), subjectId);
+            routingService.upsert(subjectId, ModelTask.LANGUAGE_AGENT, connectionId);
+            return latest.connection();
+        });
+        recordVerification(Objects.requireNonNull(connection, "connection"), subjectId);
+        return current(subjectId);
+    }
+
+    private String nextConnectionName(long subjectId, String label) {
+        Set<String> names = connectionRepository.findByOwnerId(subjectId).stream()
+                .map(connection -> connection.displayName().toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        String candidate = label;
+        for (int suffix = 2; names.contains(candidate.toLowerCase(Locale.ROOT)); suffix++) {
+            candidate = label + " " + suffix;
+        }
+        return candidate;
     }
 
     /** 当前语言任务使用的模型摘要。 */

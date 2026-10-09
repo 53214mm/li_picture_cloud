@@ -46,7 +46,7 @@ class CompanionChatPersistenceIntegrationTest {
         CompanionChatMessage first = messageRepository.append(
                 CompanionChatMessage.user(701L, 7L, "第一句", NOW));
         CompanionChatMessage second = messageRepository.append(
-                CompanionChatMessage.companion(701L, 7L, "第二句", "internal", "demo-v1", NOW.plusSeconds(1)));
+                CompanionChatMessage.companion(701L, 7L, "第二句\n\n下一段\r\n\t缩进", "DEEPSEEK", "deepseek-flash", NOW.plusSeconds(1)));
 
         assertThat(first.id()).isPositive();
         assertThat(second.id()).isPositive();
@@ -55,6 +55,8 @@ class CompanionChatPersistenceIntegrationTest {
         assertThat(recent).hasSize(2);
         assertThat(recent.get(0).id()).isEqualTo(second.id());
         assertThat(recent.get(0).role()).isEqualTo(CompanionChatRole.COMPANION);
+        assertThat(recent.get(0).content()).isEqualTo("第二句\n\n下一段\r\n\t缩进");
+        assertThat(recent.get(0).modelCode()).isEqualTo("deepseek-flash");
         assertThat(recent.get(1).content()).isEqualTo("第一句");
     }
 

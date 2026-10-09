@@ -2,7 +2,7 @@
   <section class="quick" aria-labelledby="quick-title">
     <header class="quick-head">
       <h2 id="quick-title">AI 模型</h2>
-      <p>选一个厂商，填入 API Key，平台会自动连接并列出可用模型。</p>
+      <p>直接选用已保存的连接，或选择厂商、填写 API Key 来连接新模型。</p>
     </header>
 
     <div class="quick-status" :data-status="status.tone" data-testid="quick-status">
@@ -32,6 +32,27 @@
     </div>
 
     <p v-if="notice" class="quick-notice" role="status">{{ notice }}</p>
+
+    <section v-if="showWizard" class="saved-connections" aria-labelledby="saved-connections-title">
+      <h3 id="saved-connections-title">已保存的连接</h3>
+      <p v-if="savedState === 'loading'" class="step-hint">正在读取已保存的连接…</p>
+      <div v-else-if="savedState === 'error'" class="step-error" role="alert">
+        暂时读不到已保存的连接。
+        <LpButton variant="quiet" size="sm" :disabled="busy" @click="loadSaved">重试读取连接</LpButton>
+      </div>
+      <template v-else-if="availableSaved.length">
+        <p class="step-hint">无需重填 API Key。选择后会发送一次极短的测试对话，验证通过后用于伙伴聊天。</p>
+        <ul class="saved-list">
+          <li v-for="item in availableSaved" :key="item.id" class="saved-item">
+            <div><strong>{{ item.displayName }}</strong><p class="step-hint">{{ item.modelCode }}</p></div>
+            <LpButton :aria-label="`使用 ${item.displayName} 聊天`" :disabled="busy" @click="useSaved(item.id)">
+              {{ phase === 'connecting' ? '正在验证…' : '验证并用于聊天' }}
+            </LpButton>
+          </li>
+        </ul>
+      </template>
+      <p v-else class="step-hint">{{ savedConnections.length ? '其他已保存连接需要先在高级设置中启用并绑定 API Key。' : '还没有已保存的连接，可以在下方添加。' }}</p>
+    </section>
 
     <ol v-if="showWizard" class="quick-steps">
       <li class="step" :class="{ done: provider }">
@@ -101,6 +122,8 @@ import {
   discoverQuickModels,
   getQuickConnection,
   listQuickProviders,
+  listModelConnections,
+  useSavedQuickConnection,
   useQuickPlatform
 } from '@/api/modelGateway'
 import { describeQuickConnection, filterModels, quickConnectError } from '@/presentation/modelQuickConnect'
@@ -122,6 +145,10 @@ const phase = ref('idle')
 const error = ref('')
 const notice = ref('')
 const editing = ref(false)
+const savedConnections = ref([])
+const savedState = ref('loading')
+const availableSaved = computed(() => savedConnections.value.filter(item =>
+  item.enabled && item.credentialId && String(item.id) !== String(current.value?.connectionId)))
 
 const busy = computed(() => phase.value !== 'idle')
 const status = computed(() => describeQuickConnection(current.value))
@@ -132,7 +159,18 @@ const showWizard = computed(() => currentState.value === 'ready' && (current.val
 onMounted(() => {
   loadCurrent()
   loadProviders()
+  loadSaved()
 })
+
+async function loadSaved() {
+  savedState.value = 'loading'
+  try {
+    savedConnections.value = await listModelConnections()
+    savedState.value = 'ready'
+  } catch {
+    savedState.value = 'error'
+  }
+}
 
 async function loadCurrent() {
   currentState.value = 'loading'
@@ -212,9 +250,29 @@ async function connect() {
     editing.value = false
     resetWizard()
     notice.value = '已连接。伙伴聊天已切换为使用这个模型。'
+    loadSaved()
     emit('changed')
   } catch (failure) {
     error.value = quickConnectError(failure, '连接失败，请稍后重试')
+  } finally {
+    phase.value = 'idle'
+  }
+}
+
+async function useSaved(id) {
+  if (busy.value) return
+  phase.value = 'connecting'
+  error.value = ''
+  notice.value = ''
+  try {
+    current.value = await useSavedQuickConnection(id)
+    currentState.value = 'ready'
+    editing.value = false
+    resetWizard()
+    notice.value = '已连接。伙伴聊天已切换为使用这个模型。'
+    emit('changed')
+  } catch (failure) {
+    error.value = quickConnectError(failure, '验证失败，请检查已有连接后重试')
   } finally {
     phase.value = 'idle'
   }
@@ -237,13 +295,17 @@ async function switchToPlatform() {
   }
 }
 
-defineExpose({ reload: loadCurrent })
+defineExpose({ reload: () => { loadCurrent(); loadSaved() } })
 </script>
 
 <style scoped>
 .quick { display: grid; gap: var(--lp-space-5); padding: var(--lp-space-6); border: 1px solid var(--lp-border); border-radius: var(--lp-radius-l); background: var(--lp-surface-elevated); box-shadow: var(--lp-shadow-s); }
 .quick-head h2 { font-size: var(--lp-font-size-h2); line-height: var(--lp-line-height-h2); }
 .quick-head p { margin-top: var(--lp-space-2); color: var(--lp-text-secondary); font-size: var(--lp-font-size-small); }
+.saved-connections { display: grid; gap: var(--lp-space-3); }
+.saved-list { display: grid; gap: var(--lp-space-2); padding: 0; list-style: none; }
+.saved-item { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--lp-space-3); padding: var(--lp-space-3); border: 1px solid var(--lp-border); border-radius: var(--lp-radius-s); }
+.saved-item > div { min-width: 0; overflow-wrap: anywhere; }
 
 .quick-status { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--lp-space-4); align-items: center; padding: var(--lp-space-4) var(--lp-space-5); border-radius: var(--lp-radius-m); background: var(--lp-bg-subtle); }
 .quick-status[data-status="connected"] { background: var(--lp-success-soft); }

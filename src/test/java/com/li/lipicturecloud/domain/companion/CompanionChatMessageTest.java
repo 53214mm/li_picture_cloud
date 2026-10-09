@@ -32,6 +32,17 @@ class CompanionChatMessageTest {
     }
 
     @Test
+    void companionReplyPreservesParagraphsAndIndentation() {
+        String reply = "你好。\n\n今天怎么样？\r\n\t我在这里。";
+        assertThat(CompanionChatMessage.companion(11L, 7L, reply,
+                "DEEPSEEK", "deepseek-flash", NOW).content()).isEqualTo(reply);
+        assertThatThrownBy(() -> CompanionChatMessage.companion(11L, 7L, "你好\u0000呀",
+                "DEEPSEEK", "deepseek-flash", NOW)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CompanionChatMessage.user(11L, 7L, "第一行\n第二行", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void rejectsEmptyOversizedOrControlCharacters() {
         assertThatThrownBy(() -> CompanionChatMessage.user(11L, 7L, "   ", NOW))
                 .isInstanceOf(IllegalArgumentException.class);

@@ -19,8 +19,8 @@ export function describeQuickConnection(view) {
   }
   return {
     tone: 'platform',
-    title: '还没有连接自己的模型',
-    detail: '现在使用平台默认。连接后，伙伴聊天会改用你的模型。'
+    title: '伙伴聊天正在使用平台默认',
+    detail: '可在下方选用已保存的连接，或添加新模型用于聊天。'
   }
 }
 

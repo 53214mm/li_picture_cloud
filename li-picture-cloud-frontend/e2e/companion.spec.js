@@ -85,7 +85,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByTestId('relationship-value-tacit')).toHaveText('1')
   await expect(page.getByTestId('relationship-value-recentFeedback')).toHaveText('5')
   // 站内对话与主动提案面板：Demo 档聊天不调模型，契约默认关闭所以没有主动提案。
-  await expect(page.getByText('和伙伴说说话')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '和绫页聊聊' })).toBeVisible()
   await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。')).toBeVisible()
   // Demo 档对话：发送一条消息收到确定性回复，用户气泡与伙伴气泡都在。
   await page.getByLabel('对伙伴说的话').fill('你好呀')

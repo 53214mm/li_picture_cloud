@@ -27,6 +27,7 @@ export const discoverQuickModels = (provider, apiKey) =>
 export const connectQuickModel = (provider, apiKey, modelCode) =>
   request.post('/model/quick/connect', { provider, apiKey, modelCode })
 export const getQuickConnection = () => request.get('/model/quick/current')
+export const useSavedQuickConnection = id => request.post(`/model/quick/connections/${id}/use`)
 export const useQuickPlatform = () => request.delete('/model/quick/current')
 
 export const listModelUsage = (limit = 50) => request.get('/model/usage', { params: { limit } })

@@ -6,8 +6,8 @@ const KEY = 'sk-quick-e2e-0001'
 const DEEPSEEK_MODELS = ['deepseek-chat', 'deepseek-reasoner']
 const PROVIDERS = ['DEEPSEEK', 'OPENAI', 'ANTHROPIC', 'GOOGLE', 'MOONSHOT', 'DASHSCOPE', 'SILICONFLOW', 'ZHIPU']
 
-async function fixture(page, { current = { status: 'PLATFORM' }, models = DEEPSEEK_MODELS, listed = true } = {}) {
-  const state = { calls: [], errors: [], current }
+async function fixture(page, { current = { status: 'PLATFORM' }, models = DEEPSEEK_MODELS, listed = true, saved = [] } = {}) {
+  const state = { calls: [], errors: [], current, savedError: null, savedListError: false }
   page.on('pageerror', error => state.errors.push(error.message))
   await page.route(url => url.pathname.startsWith('/api/'), async route => {
     const request = route.request()
@@ -15,6 +15,14 @@ async function fixture(page, { current = { status: 'PLATFORM' }, models = DEEPSE
     const body = request.postDataJSON?.() ?? null
     state.calls.push({ path: url.pathname, method: request.method(), query: url.search, body })
     if (url.pathname === '/api/user/current') return ok(route, { id: '42', userName: 'Quick', userRole: 'user' })
+    if (url.pathname === '/api/model/connections') return state.savedListError ? fail(route, '读取失败') : ok(route, saved)
+    if (url.pathname.match(/^\/api\/model\/quick\/connections\/[^/]+\/use$/)) {
+      if (state.savedError) return fail(route, state.savedError)
+      const id = url.pathname.split('/').at(-2)
+      const existing = saved.find(item => String(item.id) === id)
+      state.current = { status: 'CONNECTED', provider: existing.provider, providerLabel: 'DeepSeek', modelCode: existing.modelCode, connectionId: existing.id }
+      return ok(route, state.current)
+    }
     if (url.pathname === '/api/model/quick/providers') {
       return ok(route, PROVIDERS.map(provider => ({ provider, label: provider, recommendedModel: 'x' })))
     }
@@ -40,11 +48,46 @@ async function fixture(page, { current = { status: 'PLATFORM' }, models = DEEPSE
 
 const status = page => page.getByTestId('quick-status')
 
+test('saved enabled connection can be used without entering its key again', async ({ page }, testInfo) => {
+  const id = '2056693890067525634'
+  const state = await fixture(page, { saved: [
+    { id, displayName: 'deepseek', provider: 'DEEPSEEK', modelCode: 'deepseek-flash', enabled: true, credentialId: '51' }
+  ] })
+  await page.goto('/model-gateway')
+  await expect(page.getByText('已保存的连接', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '使用 deepseek 聊天', exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('saved-connection.png'), fullPage: true })
+  await page.getByRole('button', { name: '使用 deepseek 聊天', exact: true }).click()
+  await expect(status(page)).toContainText('DeepSeek · deepseek-flash')
+  const call = state.calls.find(item => item.path === `/api/model/quick/connections/${id}/use`)
+  expect(call.method).toBe('POST')
+  expect(call.body).toBeNull()
+  expect(state.calls.some(item => item.path === '/api/model/quick/connect')).toBe(false)
+})
+
+test('saved connection failures keep the selection available for retry', async ({ page }) => {
+  const state = await fixture(page, { saved: [
+    { id: '9', displayName: 'deepseek', provider: 'DEEPSEEK', modelCode: 'deepseek-flash', enabled: true, credentialId: '51' }
+  ] })
+  state.savedError = 'API Key 无效或没有权限，请检查后重试'
+  state.savedListError = true
+  await page.goto('/model-gateway')
+  await expect(page.getByText('暂时读不到已保存的连接。')).toBeVisible()
+  state.savedListError = false
+  await page.getByRole('button', { name: '重试读取连接' }).click()
+  await page.getByRole('button', { name: '使用 deepseek 聊天', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveText(state.savedError)
+  await expect(status(page)).toContainText('伙伴聊天正在使用平台默认')
+  state.savedError = null
+  await page.getByRole('button', { name: '使用 deepseek 聊天', exact: true }).click()
+  await expect(status(page)).toContainText('DeepSeek · deepseek-flash')
+})
+
 test('choose vendor, paste key, pick a model and connect in one flow', async ({ page }, testInfo) => {
   const state = await fixture(page)
   await page.goto('/model-gateway')
   await expect(page.getByRole('heading', { name: '模型连接', level: 1 })).toBeVisible()
-  await expect(status(page)).toContainText('还没有连接自己的模型')
+  await expect(status(page)).toContainText('伙伴聊天正在使用平台默认')
   // Manual management stays folded and unloaded until asked for.
   expect(state.calls.some(call => call.path === '/api/model/credentials')).toBe(false)
 
@@ -92,7 +135,7 @@ test('rejected keys and unusable models explain themselves without leaving the f
   await page.getByTestId('quick-models').getByRole('radio', { name: /stub-unavailable-model/ }).check()
   await page.getByRole('button', { name: '完成连接' }).click()
   await expect(page.getByRole('alert')).toHaveText('这个模型不能用于对话，请换一个模型')
-  await expect(status(page)).toContainText('还没有连接自己的模型')
+  await expect(status(page)).toContainText('伙伴聊天正在使用平台默认')
 
   // Switching vendor clears the key and the model list.
   await page.getByRole('button', { name: /智谱/ }).click()
@@ -129,7 +172,7 @@ test('connected models can be replaced or dropped back to the platform default',
   await expect(page.getByRole('button', { name: /OpenAI/ })).toHaveCount(0)
 
   await page.getByRole('button', { name: '改用平台默认' }).click()
-  await expect(status(page)).toContainText('还没有连接自己的模型')
+  await expect(status(page)).toContainText('伙伴聊天正在使用平台默认')
   await expect(page.getByText('已改用平台默认。之前的连接仍保留在高级设置里。')).toBeVisible()
   expect(state.calls.filter(call => call.path === '/api/model/quick/current' && call.method === 'DELETE')).toHaveLength(1)
 

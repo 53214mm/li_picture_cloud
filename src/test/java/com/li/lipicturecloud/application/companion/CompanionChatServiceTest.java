@@ -321,6 +321,26 @@ class CompanionChatServiceTest {
     }
 
     @Test
+    void byokMultilineReplyCompletesAndPersistsInsteadOfFailingAfterStreaming() {
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(persistedCompanion()));
+        when(languageRouter.decide(7L)).thenReturn(ModelRouteDecision.byok(byokConnection(), "sk-secret"));
+        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(), anyList()))
+                .thenReturn("系统提示");
+        when(languageInvoker.stream(any(ModelRouteDecision.class), anyList()))
+                .thenReturn(Flux.just("你好呀。", "\n\n", "今天有什么想分享的？"));
+
+        assertThat(String.join("", service.chat(subject, "你好").collectList().block()))
+                .isEqualTo("你好呀。\n\n今天有什么想分享的？");
+        ArgumentCaptor<CompanionChatMessage> saved = ArgumentCaptor.forClass(CompanionChatMessage.class);
+        verify(messageRepository, times(2)).append(saved.capture());
+        assertThat(saved.getAllValues().get(1).content()).isEqualTo("你好呀。\n\n今天有什么想分享的？");
+        verify(modelUsageService).recordSuccess(7L, ModelTask.LANGUAGE_AGENT, 9L,
+                ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK);
+        verify(modelUsageService, never()).recordFailure(anyLong(), any(), any(), any(), anyString(), any(), anyString());
+    }
+
+    @Test
     void byokFailureRecordsSafeCodeAndNeverFallsBackToPlatform() {
         Companion companion = persistedCompanion();
         properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);

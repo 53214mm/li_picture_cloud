@@ -67,7 +67,7 @@ class ModelQuickSetupServiceTest {
     private ModelQuickSetupService serviceAllowing(String... hosts) {
         return new ModelQuickSetupService(catalogClient, new PropertyEndpointAllowlist(List.of(hosts)),
                 credentialService, connectionService, connectionRepository, routingService,
-                routingRepository, profileService, usageService, transactionManager);
+                routingRepository, profileService, usageService, transactionManager, mock(ByokConnectionResolver.class));
     }
 
     @Test
@@ -178,6 +178,24 @@ class ModelQuickSetupServiceTest {
 
         when(connectionRepository.findById(9L)).thenReturn(Optional.empty());
         assertThat(service.current(USER).status()).isEqualTo(QuickConnectionView.Status.BROKEN);
+    }
+
+    @Test
+    void concurrentNameWinnerIsNeverUsedAsTheVerifiedConnection() {
+        when(catalogClient.probeChat(any(), anyString(), any(), anyString()))
+                .thenReturn(ConnectivityResult.success());
+        when(credentialService.store(USER, ModelProvider.DEEPSEEK, "sk")).thenReturn(
+                CredentialVault.restore(99L, USER, ModelProvider.DEEPSEEK, "1234", "cipher",
+                        CredentialVault.ALGORITHM_AES_GCM_V1, 0L));
+        when(connectionService.create(anyLong(), any(), anyString(), any(), anyString(), any()))
+                .thenReturn(ModelConnection.restore(9L, USER, ModelProvider.DEEPSEEK, "DeepSeek",
+                        DEEPSEEK, "old-model", 5L, true, 1L));
+        assertThatThrownBy(() -> service.connect(USER, ModelProvider.DEEPSEEK, "sk", "new-model"))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("请重试");
+        verify(connectionService, never()).enable(anyLong(), anyLong());
+        verify(profileService, never()).snapshotWithVerifiedText(any(), anyLong());
+        verify(routingService, never()).upsert(anyLong(), any(), any());
+        verify(transactionManager).rollback(any());
     }
 
     @Test
