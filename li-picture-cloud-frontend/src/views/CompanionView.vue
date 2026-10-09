@@ -1,6 +1,7 @@
 <template>
   <div class="companion-page">
     <div class="habitat-container">
+      <router-link class="btn btn-outline" to="/companion/rehearsal">绫页鲜活伙伴 · 进入试演台</router-link>
       <section v-if="authError" class="state-panel state-error" role="alert">
         <span class="state-kicker">登录状态</span>
         <h1>暂时无法确认登录状态</h1>

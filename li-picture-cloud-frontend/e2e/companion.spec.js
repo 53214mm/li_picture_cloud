@@ -90,7 +90,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   // Demo 档对话：发送一条消息收到确定性回复，用户气泡与伙伴气泡都在。
   await page.getByLabel('对伙伴说的话').fill('你好呀')
   await page.getByRole('button', { name: '发送' }).click()
-  await expect(page.getByText('我在听。你可以和我聊聊图片，或者从图库里挑一张喂给我，我会慢慢记住我们的经历。'))
+  await expect(page.getByText('绫页在这儿，AI 身份，脑洞营业中。这条是演示回复，真聊还得切到真实模型。'))
     .toBeVisible()
   await expect(page.getByText('你好呀')).toBeVisible()
 

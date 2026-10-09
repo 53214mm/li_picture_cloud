@@ -176,8 +176,8 @@ class CompanionChatServiceTest {
 
         String reply = service.chat(subject, "你好呀").blockLast();
 
-        assertThat(reply).contains("我在听");
-        assertThat(reply).contains("喂给我");
+        assertThat(reply).contains("演示回复");
+        assertThat(reply).contains("绫页").doesNotContain("喂", "？");
     }
 
     @Test
@@ -446,8 +446,9 @@ class CompanionChatServiceTest {
         assertThat(saved.getValue().joy()).isEqualByComparingTo("10.00");
     }
 
-    @Test
-    void modelContextReceivesDecayedMoodAndOnlyUsableConfirmedMemories() {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"你好", "图片 101"})
+    void modelContextReceivesDecayedMoodAndOnlyRelevantUsableConfirmedMemories(String query) {
         Companion companion = persistedCompanion();
         properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
         ChatModel chatModel = mock(ChatModel.class);
@@ -471,7 +472,7 @@ class CompanionChatServiceTest {
         when(memoryService.confirmedMemoriesUsableBy(companion, subject, 100))
                 .thenReturn(List.of(usable));
 
-        service.chat(subject, "你好").blockLast();
+        service.chat(subject, query).blockLast();
 
         ArgumentCaptor<CompanionMood> moodCaptor = ArgumentCaptor.forClass(CompanionMood.class);
         @SuppressWarnings("unchecked")
@@ -480,8 +481,11 @@ class CompanionChatServiceTest {
                 moodCaptor.capture(), memoryCaptor.capture());
         // 上下文中的情绪是衰减后的当前值（30-2*5=20），记忆只含撤权守卫放行的确认记忆。
         assertThat(moodCaptor.getValue().energy()).isEqualByComparingTo("20.00");
-        assertThat(memoryCaptor.getValue()).hasSize(1);
-        assertThat(memoryCaptor.getValue().get(0).content()).isEqualTo("伙伴记得一张明亮的图片。");
+        if (query.equals("你好")) {
+            assertThat(memoryCaptor.getValue()).isEmpty(); // 无关的问候不召回最新图片
+        } else {
+            assertThat(memoryCaptor.getValue()).containsExactly(usable);
+        }
     }
 
     @Test

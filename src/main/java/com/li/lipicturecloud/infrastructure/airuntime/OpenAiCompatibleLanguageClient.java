@@ -51,6 +51,16 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
 
     @Override
     public Flux<String> stream(ModelRouteDecision route, List<ChatTurn> turns) {
+        return streamInternal(route, turns, null);
+    }
+
+    @Override
+    public Flux<String> streamBounded(ModelRouteDecision route, List<ChatTurn> turns, int maxTokens) {
+        if (maxTokens < 1 || maxTokens > 256) throw new IllegalArgumentException("Invalid output token bound");
+        return streamInternal(route, turns, maxTokens);
+    }
+
+    private Flux<String> streamInternal(ModelRouteDecision route, List<ChatTurn> turns, Integer maxTokens) {
         Objects.requireNonNull(route, "route");
         if (!route.isByok()) {
             throw new IllegalArgumentException("BYOK client only handles BYOK routes");
@@ -67,7 +77,7 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
                     .timeout(timeout)
                     .header("Authorization", "Bearer " + route.apiKey())
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(encodeBody(route, turns)))
+                    .POST(HttpRequest.BodyPublishers.ofString(encodeBody(route, turns, maxTokens)))
                     .build();
         } catch (IOException bodyFailure) {
             throw new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
@@ -96,6 +106,10 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
     }
 
     String encodeBody(ModelRouteDecision route, List<ChatTurn> turns) throws IOException {
+        return encodeBody(route, turns, null);
+    }
+
+    String encodeBody(ModelRouteDecision route, List<ChatTurn> turns, Integer maxTokens) throws IOException {
         StringBuilder messages = new StringBuilder();
         for (ChatTurn turn : turns) {
             if (messages.length() > 0) {
@@ -108,7 +122,8 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
                     .append('}');
         }
         return "{\"model\":\"" + route.connection().modelCode()
-                + "\",\"messages\":[" + messages + "],\"stream\":true}";
+                + "\",\"messages\":[" + messages + "],\"stream\":true"
+                + (maxTokens == null ? "" : ",\"max_tokens\":" + maxTokens) + "}";
     }
 
     String extractDelta(String line) {

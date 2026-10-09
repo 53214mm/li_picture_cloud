@@ -55,7 +55,7 @@ class RoutedVisualObservationProviderTest {
     private static final String VALID_CANDIDATE = """
             {"mood":"JOYFUL","sceneComplexity":2,"energy":3,"socialPresence":true,
             "motionPotential":2,"creativity":3,"confidence":0.84,
-            "companionMessage":"我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。"}
+            "visibleObservations":"画面使用明亮暖色，几个人物相邻站立，背景包含建筑与树木。", "uncertainInterpretation":""}
             """;
 
     @BeforeEach

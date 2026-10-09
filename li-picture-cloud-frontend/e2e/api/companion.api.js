@@ -6,7 +6,7 @@ import { FixtureSession, requireFixtureEnvironment } from './http-fixture.js'
 // external model, COS upload, production credential, or default npm test hook.
 // The owning runner starts a fresh isolated backend and sets both guard values.
 const FIXTURE_PASSWORD = 'LocalUser123!'
-const DEMO_REPLY = '我在听。你可以和我聊聊图片，或者从图库里挑一张喂给我，我会慢慢记住我们的经历。'
+const DEMO_REPLY = '绫页在这儿，AI 身份，脑洞营业中。这条是演示回复，真聊还得切到真实模型。'
 const MOOD_AXES = ['energy', 'joy', 'loneliness', 'inspiration', 'irritation']
 
 function decimalId(value) {

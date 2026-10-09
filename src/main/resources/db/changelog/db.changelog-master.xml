@@ -30,4 +30,5 @@
              relativeToChangelogFile="true"/>
     <include file="changes/2026-10-09-companion-chat-preference.xml"
              relativeToChangelogFile="true"/>
+    <include file="changes/2026-10-09-companion-presence.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

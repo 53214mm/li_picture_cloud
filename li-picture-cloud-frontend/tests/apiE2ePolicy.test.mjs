@@ -30,6 +30,7 @@ test('API fixture command pins profiles, local stores, demo behavior and every e
     '--spring.datasource.username=sa', '--spring.datasource.password=', '--spring.datasource.driver-class-name=org.h2.Driver',
     '--spring.data.redis.host=127.0.0.1', '--spring.data.redis.port=6380', '--spring.data.redis.password=', '--spring.data.redis.database=15',
     '--app.companion.nutrition-policy=DEMO_ONLY', '--app.companion.chat-policy=DEMO_ONLY',
+    '--app.companion.presence.real-enabled=false',
     '--app.creation.artwork-stub=true', '--app.model.credential.connectivity-stub=true',
     '--app.model.credential.language-stub=true', '--app.model.credential.image-stub=true',
     '--spring.ai.mcp.client.enabled=false', '--app.mcp.enabled=false', '--app.collaboration.store=memory'
@@ -47,15 +48,15 @@ test('API fixture rejects database names that can inject H2 connection options',
 
 test('API suite inventory is deterministic and includes each real business story', () => {
   assert.deepEqual(apiE2eFiles([
-    'story.api.js', 'http-fixture.js', 'recipe.api.js', 'protocol.api.js', 'gateway.api.js', 'companion.api.js'
+    'story.api.js', 'http-fixture.js', 'recipe.api.js', 'protocol.api.js', 'gateway.api.js', 'presence.api.js', 'companion.api.js'
   ]), [
-    'e2e/api/companion.api.js', 'e2e/api/gateway.api.js', 'e2e/api/protocol.api.js',
+    'e2e/api/companion.api.js', 'e2e/api/gateway.api.js', 'e2e/api/presence.api.js', 'e2e/api/protocol.api.js',
     'e2e/api/recipe.api.js', 'e2e/api/story.api.js'
   ])
 })
 
 test('API suite rejects every missing required story rather than reporting a partial green', () => {
-  const names = ['companion.api.js', 'gateway.api.js', 'protocol.api.js', 'recipe.api.js', 'story.api.js']
+  const names = ['companion.api.js', 'gateway.api.js', 'presence.api.js', 'protocol.api.js', 'recipe.api.js', 'story.api.js']
   for (const missing of names) {
     assert.throws(() => apiE2eFiles(names.filter(name => name !== missing)), { message: `Required API check is missing: ${missing}` })
   }

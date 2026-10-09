@@ -39,6 +39,11 @@ class CompanionSchemaMigrationTest {
             assertCreationTables(dataSource, 1);
             assertRecipeTables(dataSource, 1);
 
+            assertThat(new JdbcTemplate(dataSource).queryForObject(
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'COMPANION_PRESENCE_USAGE'", Integer.class)).isEqualTo(1);
+            rollback(dataSource, 1);
+            assertThat(new JdbcTemplate(dataSource).queryForObject(
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'COMPANION_PRESENCE_USAGE'", Integer.class)).isZero();
             assertChatPreferenceTable(dataSource, 1);
             rollback(dataSource, chatPreferenceChangeSetCount(dataSource));
             // 聊天模式偏好表回滚后，观测索引与其余伙伴表不受影响。

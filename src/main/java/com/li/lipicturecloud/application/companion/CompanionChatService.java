@@ -196,7 +196,8 @@ public class CompanionChatService {
         // 情绪必须是"当前情绪"：先按完整小时惰性衰减（与主页同口径）再引用。
         CompanionMood currentMood = decayedCurrentMood(companion.id());
         String systemPrompt = contextAssembler.systemPrompt(companion.id(), subject.userId(),
-                properties.getChatMemoryLimit(), currentMood, usableMemories);
+                properties.getChatMemoryLimit(), currentMood, RelevantCompanionMemories.select(
+                        message, usableMemories, companion.id(), subject.userId(), properties.getChatMemoryLimit()));
         List<CompanionChatMessage> history = messageRepository.findRecent(
                 companion.id(), properties.getChatHistoryLimit());
         // 历史为倒序；只按本轮落库消息的精确 id 排除自己，不再用"最新一条 USER"猜测——
@@ -350,24 +351,24 @@ public class CompanionChatService {
             long confirmed = memoryService.confirmedMemoriesUsableBy(
                     companion, subject, MAX_MEMORY_SCAN).size();
             return confirmed > 0
-                    ? String.format("我记得最近留下过 %d 条确认的记忆，它们都来自你喂给我的图片。想听哪一段？", confirmed)
-                    : "我现在还没有确认的记忆。喂我一张图片，我就能开始记住我们的经历。";
+                    ? String.format("目前有 %d 条确认的记忆。它们带着来源记录，猜测可不能冒充经历。", confirmed)
+                    : "我现在还没有确认的记忆。记忆这事，宁可留白也不瞎编。";
         }
         if (containsAny(normalized, "情绪", "心情", "感觉", "状态", "累")) {
             CompanionMood current = decayedCurrentMood(companion.id());
             if (current == null) {
-                return "我还没有明显情绪，先喂我一张图片吧。";
+                return "我还没有明显情绪波动，处在中性状态。";
             }
             return "我此刻的精力是 " + plain(current.energy()) + "，愉悦 " + plain(current.joy())
-                    + "。喂图会让我波动，安静一会儿就会平复。";
+                    + "。这些是状态强度，低精力不等于我困了。";
         }
         if (containsAny(normalized, "关系", "熟悉", "信任", "默契", "我们")) {
             return relationshipRepository.findByCompanionAndSubject(companion.id(), subject.userId())
                     .map(relationship -> "我们越来越熟了：熟悉度 " + plain(relationship.familiarity())
                             + "，信任 " + plain(relationship.trust()) + "。继续相处下去吧。")
-                    .orElse("我们才刚认识，多喂我几张图片，我会更懂你。");
+                    .orElse("我们才刚认识。熟悉这事慢慢来，不用赶进度。");
         }
-        return "我在听。你可以和我聊聊图片，或者从图库里挑一张喂给我，我会慢慢记住我们的经历。";
+        return "绫页在这儿，AI 身份，脑洞营业中。这条是演示回复，真聊还得切到真实模型。";
     }
 
     /**

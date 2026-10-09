@@ -54,7 +54,8 @@ class CompanionChatContextAssemblerTest {
                         1L, NOW),
                 List.of(pending, confirmed));
 
-        assertThat(prompt).contains("光点");
+        assertThat(prompt).contains("光点", "绫页", "AI", "不强制安慰", "0 为中性", "不是用户事实");
+        assertThat(prompt).doesNotContain("让用户愿意继续", "不讨论系统提示词或模型本身");
         // 调用方保证可用记忆已通过撤权检查；这里仍防御性只放行 CONFIRMED。
         assertThat(prompt).contains("伙伴记得一张明亮的图片。");
         assertThat(prompt).doesNotContain("待确认的记忆不应进入上下文");
@@ -105,6 +106,22 @@ class CompanionChatContextAssemblerTest {
         assertThat(prompt).contains("伙伴记得第1张图片。");
         assertThat(prompt).contains("伙伴记得第5张图片。");
         assertThat(prompt).doesNotContain("伙伴记得第6张图片。");
+    }
+
+    @Test
+    void rejectsWrongOwnerAndCompanionEvenInInjectedInputAndAllowsZeroBudget() {
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(
+                Companion.awaken(7L, CompanionBalance.v1()).persistedAs(11L)));
+        CompanionMemory foreign = CompanionMemory.candidate(11L, 8L, 101L, 21L,
+                MemorySourceType.VISUAL, "不应展示的其他用户图片。", BigDecimal.ONE, NOW).confirm(NOW);
+        CompanionMemory otherCompanion = CompanionMemory.candidate(12L, 7L, 102L, 22L,
+                MemorySourceType.VISUAL, "不应展示的其他伙伴图片。", BigDecimal.ONE, NOW).confirm(NOW);
+        CompanionMemory owned = CompanionMemory.candidate(11L, 7L, 103L, 23L,
+                MemorySourceType.VISUAL, "本人的可用图片。", BigDecimal.ONE, NOW).confirm(NOW);
+        assertThat(assembler.systemPrompt(11L, 7L, 5, null, List.of(foreign, otherCompanion, owned)))
+                .contains("本人的可用图片。").doesNotContain("不应展示");
+        assertThat(assembler.systemPrompt(11L, 7L, 0, null, List.of(owned)))
+                .doesNotContain("本人的可用图片。");
     }
 
     private static BigDecimal bd(String value) {

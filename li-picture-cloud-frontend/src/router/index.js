@@ -77,6 +77,11 @@ const routes = [
 // 这是构建期开关：默认生产包没有伙伴路由/chunk，后端开关与它都开启时才形成完整入口。
 if (COMPANION_UI_ENABLED) {
   routes.push({
+    path: '/companion/rehearsal',
+    name: 'companion-rehearsal',
+    component: () => import('@/views/CompanionRehearsalView.vue')
+  })
+  routes.push({
     path: '/companion',
     name: 'companion',
     component: () => import('@/views/CompanionView.vue'),

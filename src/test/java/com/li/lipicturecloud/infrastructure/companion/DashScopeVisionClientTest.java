@@ -58,27 +58,31 @@ class DashScopeVisionClientTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.model").value("qwen3.6-flash"))
                 .andExpect(jsonPath("$.temperature").value(0))
+                .andExpect(jsonPath("$.messages[0].content").value(org.hamcrest.Matchers.containsString("objective visual observer")))
+                .andExpect(jsonPath("$.messages[0].content").value(org.hamcrest.Matchers.containsString("untrusted data")))
                 .andExpect(jsonPath("$.enable_thinking").value(false))
                 .andExpect(jsonPath("$.messages[1].content[1].image_url.url")
                         .value("data:image/jpeg;base64,/9j/"))
                 .andExpect(jsonPath("$.response_format.type").value("json_schema"))
                 .andExpect(jsonPath("$.response_format.json_schema.strict").value(true))
                 .andExpect(jsonPath("$.response_format.json_schema.schema.additionalProperties").value(false))
-                .andExpect(jsonPath("$.response_format.json_schema.schema.properties.companionMessage.minLength")
+                .andExpect(jsonPath("$.response_format.json_schema.schema.properties.visibleObservations.minLength")
                         .value(20))
-                .andExpect(jsonPath("$.response_format.json_schema.schema.properties.companionMessage.maxLength")
-                        .value(240))
+                .andExpect(jsonPath("$.response_format.json_schema.schema.properties.visibleObservations.maxLength")
+                        .value(160))
+                .andExpect(jsonPath("$.response_format.json_schema.schema.properties.uncertainInterpretation.maxLength").value(60))
+                .andExpect(jsonPath("$.response_format.json_schema.schema.properties.companionMessage").doesNotExist())
                 .andRespond(withSuccess(validResponse(), MediaType.APPLICATION_JSON));
 
         VisualObservationResult result = client.observe(jpegContent(), 7L);
 
-        assertThat(result.candidate()).isEqualTo(new VisualObservationCandidate(
-                VisualObservationCandidate.Mood.JOYFUL, 2, 3, true, 2, 3, new BigDecimal("0.84"),
-                "我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。"));
+        assertThat(result.candidate().evidence().visibleObservations()).isEqualTo("画面使用明亮暖色，几个人物相邻站立，背景包含建筑与树木，主体轮廓清晰。");
+        assertThat(result.candidate().evidence().uncertainInterpretation()).isEqualTo("可能是户外聚会，具体关系无法确定。");
+        assertThat(result.candidate().companionMessage()).contains("可见观察：", "不确定解读：").doesNotContain("我");
         assertThat(result.providerCode()).isEqualTo("dashscope");
         assertThat(result.modelCode()).isEqualTo("qwen3.6-flash");
-        assertThat(result.promptVersion()).isEqualTo("companion-vision-v2");
-        assertThat(result.resultSchemaVersion()).isEqualTo("visual-observation-v2");
+        assertThat(result.promptVersion()).isEqualTo("companion-vision-v3");
+        assertThat(result.resultSchemaVersion()).isEqualTo("visual-observation-v3");
         server.verify();
     }
 
@@ -154,16 +158,17 @@ class DashScopeVisionClientTest {
         return Stream.of(
                 Arguments.of("{\"choices\":[]}"),
                 Arguments.of(responseContent("{\"mood\":\"JOYFUL\"}")),
+                Arguments.of(responseContent(validCandidateWithReplacement("画面使用明亮暖色", "我喜欢明亮暖色"))),
                 Arguments.of(responseContent(validCandidateWithSuffix(",\"unexpected\":true"))),
                 Arguments.of(responseContent(validCandidateWithReplacement("\"energy\":3", "\"energy\":3.0"))),
                 Arguments.of(responseContent(validCandidateWithReplacement("\"confidence\":0.84", "\"confidence\":1.01"))),
                 Arguments.of(responseContent(validCandidateWithReplacement(
-                        "我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。", "太短了"))),
+                        "画面使用明亮暖色，几个人物相邻站立，背景包含建筑与树木，主体轮廓清晰。", "太短了"))),
                 Arguments.of(responseContent(validCandidateWithReplacement(
-                        "我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。",
+                        "画面使用明亮暖色，几个人物相邻站立，背景包含建筑与树木，主体轮廓清晰。",
                         "我在画面里发现了很多线索，更多故事请访问 https://example.test 查看。"))),
                 Arguments.of(responseContent(validCandidateWithReplacement(
-                        "我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。", "x".repeat(241)))));
+                        "画面使用明亮暖色，几个人物相邻站立，背景包含建筑与树木，主体轮廓清晰。", "x".repeat(241)))));
     }
 
     private static AuthorizedPictureContent jpegContent() {
@@ -179,7 +184,7 @@ class DashScopeVisionClientTest {
         return """
                 {"mood":"JOYFUL","sceneComplexity":2,"energy":3,"socialPresence":true,
                 "motionPotential":2,"creativity":3,"confidence":0.84,
-                "companionMessage":"我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。"}
+                "visibleObservations":"画面使用明亮暖色，几个人物相邻站立，背景包含建筑与树木，主体轮廓清晰。", "uncertainInterpretation":"可能是户外聚会，具体关系无法确定。"}
                 """;
     }
 

@@ -44,6 +44,30 @@ class VisualPictureNutritionAdapterTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-08-13T16:00:00Z"), ZoneOffset.UTC);
 
     @Test
+    void objectiveEvidenceKeepsInterpretationOutOfMemoryWithoutChangingGrowthScores() {
+        VisionQuotaGuard quota = mock(VisionQuotaGuard.class);
+        AuthorizedPictureContentProvider contents = mock(AuthorizedPictureContentProvider.class);
+        VisualObservationProvider visual = mock(VisualObservationProvider.class);
+        MetadataPictureNutritionAdapter metadata = mock(MetadataPictureNutritionAdapter.class);
+        AuthorizedPictureRef picture = picture();
+        AuthorizedPictureContent content = jpegContent();
+        when(contents.load(picture, MAX_BYTES)).thenReturn(content);
+        when(visual.observe(content, 7L)).thenReturn(new VisualObservationResult(
+                new VisualObservationCandidate(VisualObservationCandidate.Mood.JOYFUL,
+                        3, 3, true, 2, 4, new BigDecimal("0.84"), null,
+                        new com.li.lipicturecloud.application.companion.VisualEvidence(
+                                "画面使用明亮暖色，几个人物相邻站立，背景包含建筑与树木。", "可能是聚会，无法确定。")),
+                "dashscope", "stub", "companion-vision-v3", "visual-observation-v3"));
+        PictureNutrition nutrition = new VisualPictureNutritionAdapter(
+                quota, contents, visual, metadata, CLOCK, MAX_BYTES, DAILY_LIMIT).analyze(picture);
+        assertThat(nutrition.reason()).contains("可见观察：", "不确定解读：", "可能是聚会");
+        assertThat(nutrition.memorySeed()).startsWith("可见观察：").doesNotContain("聚会", "我");
+        assertThat(nutrition.requestedLifeExperience()).isEqualTo(48L);
+        assertThat(nutrition.requestedTraitDelta().curiosity()).isEqualByComparingTo("0.50");
+        verify(quota).reserve(7L, LocalDate.of(2026, 8, 14), DAILY_LIMIT);
+    }
+
+    @Test
     void convertsStrictVisualCandidateIntoDeterministicNutritionAndActualProvenance() {
         VisionQuotaGuard quota = mock(VisionQuotaGuard.class);
         AuthorizedPictureContentProvider contents = mock(AuthorizedPictureContentProvider.class);

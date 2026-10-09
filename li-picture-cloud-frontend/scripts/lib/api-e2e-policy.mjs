@@ -2,7 +2,7 @@ import { delimiter, join } from 'node:path'
 
 export const API_E2E_URL = 'http://127.0.0.1:18124/api'
 export const API_E2E_OPT_IN = 'owned-test-e2e'
-const REQUIRED_API_FILES = ['companion.api.js', 'gateway.api.js', 'protocol.api.js', 'recipe.api.js', 'story.api.js']
+const REQUIRED_API_FILES = ['companion.api.js', 'gateway.api.js', 'presence.api.js', 'protocol.api.js', 'recipe.api.js', 'story.api.js']
 
 export function apiE2eFiles(names) {
   const files = names.filter(name => name.endsWith('.api.js')).sort()
@@ -41,6 +41,7 @@ export function backendArguments(classpath, databaseName) {
     '--spring.data.redis.password=', '--spring.data.redis.database=15',
     '--app.companion.enabled=true', '--app.companion.feeding-enabled=true',
     '--app.companion.nutrition-policy=DEMO_ONLY', '--app.companion.chat-policy=DEMO_ONLY',
+    '--app.companion.presence.real-enabled=false',
     '--app.creation.artwork-stub=true', '--app.model.credential.connectivity-stub=true',
     '--app.model.credential.language-stub=true', '--app.model.credential.image-stub=true',
     '--app.mcp.enabled=false', '--spring.ai.mcp.client.enabled=false',
