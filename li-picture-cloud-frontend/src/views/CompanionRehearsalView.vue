@@ -52,6 +52,15 @@
         </section>
       </div>
       <section class="card"><h2>普通聊天一直都在</h2><p>试演与聊天独立。发送消息仍走原有聊天服务，可能按你的普通聊天模式消耗额度。</p><button type="button" @click="openReply">{{ chatOpen ? '回到聊天输入框' : '打开普通聊天' }}</button></section>
+      <section class="card" aria-labelledby="clear-title" data-testid="clear-chat">
+        <h2 id="clear-title">从干净的对话开始</h2>
+        <p>旧的聊天记录会作为上下文发给模型，旧版口吻容易把她带偏。清空后只删除你和绫页的聊天消息；记忆、图片、成长和用量记录都不受影响，且无法恢复。</p>
+        <div v-if="!confirmingClear"><button type="button" :disabled="clearing || chat.state?.phase !== 'idle'" @click="confirmingClear = true">清空对话记录</button></div>
+        <div v-else class="control-row"><strong>确定清空全部聊天记录？</strong>
+          <button type="button" class="danger" :disabled="clearing" @click="clearHistory">{{ clearing ? '正在清空…' : '确定清空' }}</button>
+          <button type="button" :disabled="clearing" @click="confirmingClear = false">取消</button></div>
+        <p v-if="clearMessage" role="status">{{ clearMessage }}</p>
+      </section>
       <div v-if="chatOpen" ref="chatHost"><button type="button" @click="closeReply">收起聊天并继续试演</button><p v-if="!chatMode && !chatError">正在读取聊天模式…</p><CompanionChatPanel v-if="chatMode" :key="String(user.currentUser.id)" :presentation="presentation" :chat-mode="chatMode" compact /></div>
       <p v-if="chatError" role="alert">{{ chatError }}</p>
     </template>
@@ -82,6 +91,9 @@ const chatOpen = ref(false)
 const chatHost = ref(null)
 const chatMode = shallowRef(null)
 const chatError = ref('')
+const confirmingClear = ref(false)
+const clearing = ref(false)
+const clearMessage = ref('')
 let eventSequence = 0; let ownerGeneration = 0
 function formatExpiry(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '未知' : date.toLocaleTimeString() }
 function describeReason(reason) { return ({ DEMO: '固定演示规则，不是模型生成', COOLDOWN: '服务端冷却中，未生成新回应', SESSION_BUDGET: '服务端本次预算已用完', SESSION_EXPIRED: '服务端会话已到期，请关闭后重新开启', STALE_EVENT: '事件已过期', DUPLICATE_EVENT: '重复事件已忽略', USER_MESSAGE_PRIORITY: '优先等待用户聊天', UNAVAILABLE: '服务暂不可用', MUTED: '已静音', BUSY: '正在处理前一个事件', SUPERSEDED: '已被新事件替代', EVENT_LIMIT: '事件上限已到' })[reason] || '服务端未给出可显示的原因' }
@@ -90,6 +102,18 @@ function configure(patch) { session.configure(patch); stopTransport() }
 function changeTransport(mode) { configure({ enabled: false }); transportMode.value = mode }
 function closeReply() { chatOpen.value = false; configure({ userBusy: chat.state?.phase !== 'idle' }) }
 function run(kind) { session.run({ id: `rehearsal-${++eventSequence}`, kind, occurredAt: Date.now() }) }
+async function clearHistory() {
+  const generation = ownerGeneration
+  clearing.value = true
+  clearMessage.value = ''
+  try {
+    const deleted = await chat.clearHistory()
+    if (generation !== ownerGeneration) return
+    clearMessage.value = deleted == null ? '绫页还在回复，等她说完再清空。' : `已清空 ${deleted} 条聊天记录。`
+    confirmingClear.value = false
+  } catch { if (generation === ownerGeneration) clearMessage.value = '清空失败，请稍后重试。' }
+  finally { if (generation === ownerGeneration) clearing.value = false }
+}
 async function openReply() {
   configure({ userBusy: true })
   const generation = ownerGeneration
@@ -105,6 +129,7 @@ async function openReply() {
 watch(() => chat.state?.phase, phase => configure({ userBusy: chatOpen.value || phase !== 'idle' }), { flush: 'sync', immediate: true })
 watch(() => user.currentUser?.id, () => {
   ownerGeneration++; session.reset(); stopTransport(); transportMode.value = 'LOCAL'; chatOpen.value = false; chatMode.value = null; chatError.value = ''
+  confirmingClear.value = false; clearMessage.value = ''
 }, { flush: 'sync' })
 function visibility() { configure({ visible: document.visibilityState === 'visible' }) }
 onMounted(() => { visibility(); document.addEventListener('visibilitychange', visibility) })
@@ -113,5 +138,5 @@ onBeforeUnmount(() => { ownerGeneration++; session.reset(); stopTransport(); doc
 <style scoped>
 .rehearsal { max-width: 1040px; margin: 0 auto; padding: 24px; color: #37463b; }
 .intro { margin-bottom: 24px; }.eyebrow { color: #68765c; font-size: .8rem; }h1 { font-size: clamp(1.5rem, 4vw, 2.2rem); margin: .6rem 0; }h2 { font-size: 1.15rem; margin: 0 0 1rem; }p { line-height: 1.7; margin: .6rem 0; }a { color: #426c4a; }
-.card { padding: 24px; border: 1px solid #dce1d2; border-radius: 18px; background: #fffdf7; margin-bottom: 20px; min-width: 0; }.workspace { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }.control-row,.scenarios { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }label { display: inline-flex; gap: 8px; align-items: center; min-height: 44px; flex-wrap: wrap; }fieldset { border: 1px solid #dce1d2; border-radius: 10px; margin-top: 16px; }fieldset label { margin-right: 16px; }button, select, input[type=number] { min-height: 44px; border: 1px solid #87977f; border-radius: 8px; padding: 8px 12px; background: #fffefa; color: #37463b; font: inherit; }button { cursor: pointer; }button:hover:not(:disabled) { background: #edf0e3; }button:disabled { opacity: .5; cursor: not-allowed; }.limit { width: 5rem; }.stage-note { color: #68765c; font-size: .8rem; }.result { background: #eff2e8; border-radius: 12px; padding: 16px; min-height: 100px; }pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #eff2e8; padding: 16px; border-radius: 10px; font-size: .8rem; }.inspector p,fieldset p { font-size: .85rem; }button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible { outline: 3px solid #617c56; outline-offset: 3px; }@media(max-width: 767px) { .rehearsal { padding: 12px; }.workspace { grid-template-columns: 1fr; gap: 0; }.card { padding: 18px; } }
+.card { padding: 24px; border: 1px solid #dce1d2; border-radius: 18px; background: #fffdf7; margin-bottom: 20px; min-width: 0; }.workspace { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }.control-row,.scenarios { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }label { display: inline-flex; gap: 8px; align-items: center; min-height: 44px; flex-wrap: wrap; }fieldset { border: 1px solid #dce1d2; border-radius: 10px; margin-top: 16px; }fieldset label { margin-right: 16px; }button, select, input[type=number] { min-height: 44px; border: 1px solid #87977f; border-radius: 8px; padding: 8px 12px; background: #fffefa; color: #37463b; font: inherit; }button { cursor: pointer; }button:hover:not(:disabled) { background: #edf0e3; }button:disabled { opacity: .5; cursor: not-allowed; }button.danger { border-color: #a6513d; color: #8a3b2a; }.limit { width: 5rem; }.stage-note { color: #68765c; font-size: .8rem; }.result { background: #eff2e8; border-radius: 12px; padding: 16px; min-height: 100px; }pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #eff2e8; padding: 16px; border-radius: 10px; font-size: .8rem; }.inspector p,fieldset p { font-size: .85rem; }button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible { outline: 3px solid #617c56; outline-offset: 3px; }@media(max-width: 767px) { .rehearsal { padding: 12px; }.workspace { grid-template-columns: 1fr; gap: 0; }.card { padding: 18px; } }
 </style>

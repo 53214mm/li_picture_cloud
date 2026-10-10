@@ -140,6 +140,12 @@ public class CompanionController {
         return ResultUtils.success(memoryService.memories(subject(request), limit));
     }
 
+    @DeleteMapping("/chat/history")
+    @AuthCheck
+    public BaseResponse<Integer> clearChatHistory(HttpServletRequest request) {
+        return ResultUtils.success(chatService.clearHistory(subject(request)));
+    }
+
     @PostMapping("/memories/{id}/confirm")
     @AuthCheck
     public BaseResponse<CompanionMemoryView> confirmMemory(@PathVariable("id") long memoryId,

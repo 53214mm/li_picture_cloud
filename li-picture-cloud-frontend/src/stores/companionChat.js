@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef, watch } from 'vue'
 import { useUserStore } from './user'
-import { listCompanionChatHistory, setCompanionChatMode } from '@/api/companion'
+import { clearCompanionChatHistory, listCompanionChatHistory, setCompanionChatMode } from '@/api/companion'
 import { streamCompanionChat } from '@/utils/companion'
 import { createCompanionChatSession } from '@/presentation/companionChatSession'
 
@@ -51,6 +51,13 @@ export const useCompanionChatStore = defineStore('companionChat', () => {
       if (cycle === modeGeneration) modeBusy.value = false
     }
   }
+  /** Delete the server history, then re-read it for any open panel. Refused while a reply is pending. */
+  async function clearHistory() {
+    if (state.value?.phase !== 'idle') return null
+    const deleted = await clearCompanionChatHistory()
+    await session.reload()
+    return deleted
+  }
   return { state, acquire, setDraft: session.setDraft, send: session.send, reload: session.reload,
-    mode, modeBusy, modeError, adoptMode, chooseMode }
+    mode, modeBusy, modeError, adoptMode, chooseMode, clearHistory }
 })

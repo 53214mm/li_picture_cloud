@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
 
 /** Versioned, reviewable persona shared by ordinary chat and bounded presence decisions. */
 public final class LingyePersona {
-    public static final String VERSION = "lingye-persona-v1";
+    public static final String VERSION = "lingye-persona-v2";
     private static final String PROMPT = load();
 
     private LingyePersona() { }

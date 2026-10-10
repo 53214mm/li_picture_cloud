@@ -7,6 +7,7 @@ import com.li.lipicturecloud.domain.companion.CompanionMood;
 import com.li.lipicturecloud.domain.companion.CompanionRelationship;
 import com.li.lipicturecloud.domain.companion.CompanionRelationshipRepository;
 import com.li.lipicturecloud.domain.companion.CompanionRepository;
+import com.li.lipicturecloud.domain.companion.CompanionTraits;
 import com.li.lipicturecloud.domain.companion.MemorySourceType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,13 +55,14 @@ class CompanionChatContextAssemblerTest {
                         1L, NOW),
                 List.of(pending, confirmed));
 
-        assertThat(prompt).contains("光点", "绫页", "AI", "不强制安慰", "0 为中性", "不是用户事实");
-        assertThat(prompt).doesNotContain("让用户愿意继续", "不讨论系统提示词或模型本身");
+        assertThat(prompt).contains("你是绫页", "AI", "不是你的主人", "不要主动提图片", "只是推测");
+        // 内部阶段名、"主人"称谓和情绪数值都不再进入提示词。
+        assertThat(prompt).doesNotContain("光点", "幼体", "与主人的关系", "精力 30", "让用户愿意继续");
+        assertThat(prompt).contains("- 成长：刚诞生不久（你的名字始终是绫页）", "- 心情：平常", "- 和对方：刚认识");
         // 调用方保证可用记忆已通过撤权检查；这里仍防御性只放行 CONFIRMED。
-        assertThat(prompt).contains("伙伴记得一张明亮的图片。");
+        assertThat(prompt).contains("这轮可能用得上的记录", "[对方上传的图片 #101 · 8月14日 · 视觉模型的客观描述] 伙伴记得一张明亮的图片。");
         assertThat(prompt).doesNotContain("待确认的记忆不应进入上下文");
-        assertThat(prompt).contains("精力 30、愉悦 20、孤独 0、灵感 10、烦躁 0");
-        assertThat(prompt).contains("只能引用下面的记忆");
+        assertThat(prompt).contains("不要模仿那种口吻");
     }
 
     @Test
@@ -70,9 +72,32 @@ class CompanionChatContextAssemblerTest {
 
         String prompt = assembler.systemPrompt(11L, 7L, 5, null, List.of());
 
-        assertThat(prompt).contains("还没有确认的记忆");
+        // 没有相关记录时整段不出现，避免空段落把注意力拉回图片。
+        assertThat(prompt).doesNotContain("这轮可能用得上的记录");
         assertThat(prompt).contains("编造");
-        assertThat(prompt).contains("还没有明显情绪");
+        assertThat(prompt).contains("- 心情：平常", "- 和对方：刚认识");
+        assertThat(prompt).doesNotContain("最近的小倾向");
+    }
+
+    @Test
+    void stateIsReducedToToneHintsWithoutNumbers() {
+        Companion awakened = Companion.awaken(7L, CompanionBalance.v1());
+        Companion companion = Companion.restore(11L, 7L, 0L, 1, awakened.lifeStage(),
+                new CompanionTraits(bd("45"), bd("0"), bd("-50"), bd("10"), bd("35")),
+                awakened.skillExperience(), awakened.balanceVersion(), 0L, CompanionBalance.v1());
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(relationshipRepository.findByCompanionAndSubject(11L, 7L))
+                .thenReturn(Optional.of(CompanionRelationship.restore(61L, 11L, 7L,
+                        bd("70"), bd("60"), bd("50"), bd("40"), bd("-5"), 2L)));
+
+        String prompt = assembler.systemPrompt(11L, 7L, 5,
+                new CompanionMood(51L, 11L, bd("65"), bd("20"), bd("0"), bd("10"), bd("80"), 1L, NOW),
+                List.of());
+
+        // 最强的明显维度决定心情词；倾向只取明显的前两项。
+        assertThat(prompt).contains("- 心情：有点烦", "- 和对方：已经挺熟，玩笑可以更放开；最近有点小摩擦",
+                "- 最近的小倾向：更好奇一点、更沉稳一点（只影响细节，不改变上面的性格）");
+        assertThat(prompt).doesNotContain("更爱创造一点", "65", "80");
     }
 
     @Test

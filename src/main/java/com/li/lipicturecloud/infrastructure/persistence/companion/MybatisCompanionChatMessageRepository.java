@@ -59,6 +59,12 @@ public class MybatisCompanionChatMessageRepository implements CompanionChatMessa
                 .stream().map(this::fromRow).toList();
     }
 
+    @Override
+    public int deleteByCompanion(long companionId) {
+        return messageMapper.delete(new LambdaQueryWrapper<CompanionChatMessageEntity>()
+                .eq(CompanionChatMessageEntity::getCompanionId, companionId));
+    }
+
     private CompanionChatMessage fromRow(CompanionChatMessageEntity row) {
         return new CompanionChatMessage(row.getId(), row.getCompanionId(), row.getSubjectId(),
                 CompanionChatRole.valueOf(row.getRole()), row.getContent(),

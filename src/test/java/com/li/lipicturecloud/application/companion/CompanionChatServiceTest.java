@@ -286,6 +286,19 @@ class CompanionChatServiceTest {
         assertThat(messages.get(1).getText()).isEqualTo("你好");
     }
 
+    @Test
+    void clearHistoryDeletesOnlyTheOwnCompanionsMessages() {
+        when(companionRepository.findByOwnerId(7L)).thenReturn(java.util.Optional.of(persistedCompanion()));
+        when(messageRepository.deleteByCompanion(11L)).thenReturn(4);
+
+        org.assertj.core.api.Assertions.assertThat(service.clearHistory(subject)).isEqualTo(4);
+        verify(messageRepository).deleteByCompanion(11L);
+
+        when(companionRepository.findByOwnerId(7L)).thenReturn(java.util.Optional.empty());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.clearHistory(subject))
+                .hasMessageContaining("请先唤醒伙伴");
+    }
+
     private Companion persistedCompanion() {
         return Companion.awaken(7L, CompanionBalance.v1()).persistedAs(11L);
     }

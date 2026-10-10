@@ -132,6 +132,18 @@ public class CompanionChatService {
     }
 
     /**
+     * 清空当前用户伙伴的对话记录（试演台用来从干净的上下文开始测人格）。
+     * 只删聊天消息：记忆、每日额度和模型用量记录保持不变。
+     */
+    public int clearHistory(AuthorizationSubject subject) {
+        Objects.requireNonNull(subject, "subject");
+        Companion companion = requireCompanion(subject);
+        int deleted = messageRepository.deleteByCompanion(companion.id());
+        log.info("companion_chat_history_cleared subjectId={} deleted={}", subject.userId(), deleted);
+        return deleted;
+    }
+
+    /**
      * 额度预占与用户消息落库同事务提交；流式回复在事务外异步产生，
      * 模型失败不退还额度（防滥用设计），也不会留下半截回复。
      *

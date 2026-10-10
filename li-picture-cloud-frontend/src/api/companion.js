@@ -15,6 +15,8 @@ export const deleteCompanionMemory = id => request.delete(`/companion/memories/$
 export const listCompanionChatHistory = (limit = 50, options = {}) =>
   request.get('/companion/chat/history', { ...options, params: { limit } })
 
+// Removes every chat message of the user's companion; memories and quotas stay.
+export const clearCompanionChatHistory = () => request.delete('/companion/chat/history')
 export const getCompanionChatMode = () => request.get('/companion/chat/mode')
 export const setCompanionChatMode = mode => request.put('/companion/chat/mode', { mode })
 
