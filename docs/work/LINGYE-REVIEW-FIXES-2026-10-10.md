@@ -35,7 +35,7 @@
 
 隔离 H2 新测试证明：删除经历失败回滚消息删除；写入中回复与清空串行；旧总结完成后不复活；新消息仍可继续；经历重复只写一次。251 条连续消息测试跨过两页，并检查同时间戳/登录边界。阻塞 summarizer stub 验证 worker 上限、32 queue、同伙伴去重及 afterCommit/rollback。
 
-最初仅加载测试 YAML 时遗漏 camelCase 映射，12 项 H2 错误；补回原项目非敏感映射设置后复跑。随后 1 项 Mockito 代理夹具错误改为委托 stub，最终 64/64。完整 clean 首次因正在写入的浏览器日志文件锁失败，随后完整 verify 从重新编译源码开始通过；不宣称 clean verify 通过。最后补强失败后恢复断言时，Mockito 重新设定抛异常桩触发原异常，改用 doReturn 后再次完整 verify，最终 915 项、0 失败/错误、4 跳过，09:51 UTC BUILD SUCCESS。验证日志移至 `evidence-nexus/`，不入库；Surefire/JaCoCo 在 target，浏览器痕迹在 frontend/test-results。启动的自有 Vite 已由 Playwright 清理；15173/18124/6380 检查无监听。
+最初仅加载测试 YAML 时遗漏 camelCase 映射，12 项 H2 错误；补回原项目非敏感映射设置后复跑。随后 1 项 Mockito 代理夹具错误改为委托 stub，最终 64/64。完整 clean 首次因正在写入的浏览器日志文件锁失败，随后完整 verify 从重新编译源码开始通过；不宣称 clean verify 通过。最后补强失败后恢复断言时，Mockito 重新设定抛异常桩触发原异常，改用 doReturn 后再次完整 verify，最终 915 项、0 失败/错误、4 跳过，09:51 UTC BUILD SUCCESS。验证日志移至 `evidence-nexus/`，不入库；Surefire/JaCoCo 在 target，浏览器痕迹在 li-picture-cloud-frontend/test-results。启动的自有 Vite 已由 Playwright 清理；15173/18124/6380 检查无监听。
 
 ## 安全复跑入口
 
