@@ -47,3 +47,11 @@ JAVA_TOOL_OPTIONS=-javaagent:/workspace/scratch/058c18b9b398/nexus-tool-cache/re
 - 最终检查日志保留在工作区之外 `nexus-tool-cache/logs/rehearsal-byok/`，不提交构建缓存或日志。
 
 真实模型、实际生产/用户数据库、MySQL/pgvector 实库与人工人格验收不属于离线测试的通过范围。本轮未跑独立真实 HTTP 全故事线；控制器通过 MockMvc 合约验证。
+
+
+## 发布检查点
+
+- 有效功能已非强制发布至 `184e99e3225f060fa2f028dcf608bd1e607831bd`，父提交 `9ac278d1f464722812c31b2a868533057002bff2`。
+- 经独立审阅及上述验证的本地源提交 `633de39fd03eda371aa5669c5c58191fd8ac9fe1`；源/发布树均为 `3b72cbc8d4317e5b06390a9fe0100fb31a9692da`。
+- 普通 HTTPS git push 缺少可用凭据提供器；使用现有 GitHub 连接创建同树提交，提交身份/时间导致 SHA 不同。以 expected HEAD 保护、`force=false` 更新唯一目标分支，并通过 git fetch 回读核实 HEAD/父链/tree。
+- 本节与 STATE 的后续提交只补发布记录，不改变经过验证的功能代码。未开 PR、合并 main、部署或开启真实模型开关。

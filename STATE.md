@@ -6,7 +6,7 @@
 - 试演台新增明确手动 BYOK 入口，复用当前账号 LANGUAGE_AGENT 连接。状态查询只读、不解密或探测、不调用 quick-use、不改变普通聊天路由；仅返回供应商/模型摘要。独立真实传输严格验证模式与相关性，悬浮伙伴默认 DEMO。
 - 真实服务端准入默认 false；选真实模式后仍需开启本页并手动点场景。保留用量/冷却/会话过期、聊天优先、取消和账号隔离。启用指引见 `docs/work/LINGYE-REHEARSAL-BYOK.md`，决策见 L-18。
 - 本轮验证：后端定向 32/32；完整 offline clean verify 920 项（916 通过、4 既有可选跳过），0 失败/错误，JaCoCo/package 通过；Node22 466/466、严格 lint 通过。独立 review 首个聊天优先守卫问题已修复/复核，无剩余阻断；两组 production build/budget 通过。Chromium 9 项因环境 IPC 启动失败，未进入页面断言，不能算浏览器通过。未进行收费模型、真实凭据、生产/用户数据库或人工人格验收。
-- 稳定修改与独立复核已完成，发布检查点另记于本轮工作文档。恢复以远端目标分支最新 HEAD 和提交记录为准；不从下方旧暂停状态续开发。
+- 功能发布检查点：`184e99e3225f060fa2f028dcf608bd1e607831bd`，tree `3b72cbc8d4317e5b06390a9fe0100fb31a9692da`；本地源 `633de39fd03eda371aa5669c5c58191fd8ac9fe1` 同树。expected HEAD 保护的非强制发布后已回读验证。后续仅补本文档记录，详见 LINGYE-REHEARSAL-BYOK；恢复以远端目标分支最新 HEAD 为准。
 
 ---
 
