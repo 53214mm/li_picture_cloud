@@ -122,3 +122,79 @@ test('canonical string sequence cannot bypass stop or abort during decision', as
     await assert.rejects(run, /superseded/)
   }
 })
+
+for (const mode of ['DEMO', 'BYOK']) {
+  test(`${mode} immutable transport validates both session and decision modes`, async () => {
+    const selected = { mode }
+    const f = apiFixture({
+      open: async data => { f.calls.push(['open', data]); return { sessionId: 'real-1', mode } },
+      decide: async data => ({ ...data, sequence: String(data.sequence), mode, action: 'SPEAK', text: 'verified result', reason: mode === 'BYOK' ? 'DECIDED' : 'DEMO' })
+    })
+    const transport = createPresenceTransport(f.api, selected)
+    selected.mode = mode === 'BYOK' ? 'DEMO' : 'BYOK'
+    const result = await transport.decide(sanitizePresenceEvent(event(), 1000), { mode: selected.mode })
+    assert.equal(f.calls[0][1].mode, mode); assert.equal(result.source, mode === 'BYOK' ? 'SERVER_BYOK' : 'SERVER_DEMO')
+    assert.equal(result.text, 'verified result')
+    await transport.stop()
+    const other = mode === 'BYOK' ? 'DEMO' : 'BYOK'
+    const wrongSession = apiFixture({ open: async () => ({ sessionId: 'wrong-mode', mode: other }) })
+    await assert.rejects(createPresenceTransport(wrongSession.api, { mode }).decide(sanitizePresenceEvent(event(), 1000)), /unexpected/)
+    assert.deepEqual(wrongSession.calls, [['close', 'wrong-mode']])
+    const wrongResult = apiFixture({ open: async () => ({ sessionId: 'matching', mode }), decide: async data => ({ ...data, mode: other, action: 'SPEAK' }) })
+    await assert.rejects(createPresenceTransport(wrongResult.api, { mode }).decide(sanitizePresenceEvent(event(), 1000)), /mismatched/)
+  })
+}
+
+test('invalid transport modes fail immediately without any IO', () => {
+  const f = apiFixture()
+  for (const mode of ['LOCAL', 'MODEL', 'QUICKUSE', '', null, {}, true]) assert.throws(() => createPresenceTransport(f.api, { mode }), /Unsupported/)
+  assert.deepEqual(f.calls, [])
+})
+
+test('BYOK rejects malformed correlation and noncanonical sequence strings', async () => {
+  for (const patch of [{ sessionId: 'other' }, { eventId: 'other' }, { sequence: '01' }, { sequence: '+1' }, { sequence: '1.0' }, { sequence: '9007199254740992' }, { sequence: null }, { sequence: true }, { mode: null }]) {
+    const f = apiFixture({ open: async () => ({ sessionId: 'real', mode: 'BYOK' }), decide: async data => ({ ...data, sequence: String(data.sequence), mode: 'BYOK', action: 'SPEAK', ...patch }) })
+    await assert.rejects(createPresenceTransport(f.api, { mode: 'BYOK' }).decide(sanitizePresenceEvent(event(), 1000)), /mismatched/)
+  }
+})
+
+for (const phase of ['open', 'decide']) {
+  for (const cause of ['stop', 'abort']) {
+    test(`BYOK ${cause} during ${phase} discards late output and never replays`, async () => {
+      const pending = deferred(); let sent
+      const f = apiFixture({
+        open: async () => { f.calls.push(['open']); return phase === 'open' ? pending.promise : { sessionId: 'real', mode: 'BYOK' } },
+        decide: async data => { sent = data; f.calls.push(['decide']); return pending.promise }
+      })
+      const controller = new globalThis.AbortController()
+      const transport = createPresenceTransport(f.api, { mode: 'BYOK' })
+      const run = transport.decide(sanitizePresenceEvent(event(), 1000), { signal: controller.signal })
+      for (let i = 0; i < 24; i++) await Promise.resolve()
+      const stopping = cause === 'stop' ? transport.stop() : null
+      if (cause === 'abort') controller.abort()
+      pending.resolve(phase === 'open' ? { sessionId: 'late', mode: 'BYOK' } : { ...sent, sequence: '1', mode: 'BYOK', action: 'SPEAK', text: 'late' })
+      await assert.rejects(run, /superseded/); await stopping
+      assert.equal(f.calls.filter(([name]) => name === 'decide').length, phase === 'open' ? 0 : 1)
+      if (phase === 'open') assert.deepEqual(f.calls.at(-1), ['close', 'late'])
+      await transport.stop()
+    })
+  }
+}
+
+test('switching from pending DEMO creation to BYOK drains the old session before opening real mode', async () => {
+  const opening = deferred(); const calls = []
+  const api = {
+    open: async data => { calls.push(`open:${data.mode}`); return data.mode === 'DEMO' ? opening.promise : { sessionId: 'new-real', mode: 'BYOK' } },
+    close: async id => { calls.push(`close:${id}`) },
+    decide: async data => { calls.push(`decide:${data.sessionId}`); return { ...data, sequence: String(data.sequence), mode: 'BYOK', action: 'SILENT' } }
+  }
+  const demo = createPresenceTransport(api); const real = createPresenceTransport(api, { mode: 'BYOK' })
+  const old = demo.decide(sanitizePresenceEvent(event(), 1000)); const rejected = assert.rejects(old, /superseded/)
+  for (let i = 0; i < 24; i++) await Promise.resolve()
+  const stopping = demo.stop(); const next = real.decide(sanitizePresenceEvent(event('real-event'), 1000))
+  for (let i = 0; i < 24; i++) await Promise.resolve()
+  assert.deepEqual(calls, ['open:DEMO'])
+  opening.resolve({ sessionId: 'old-demo', mode: 'DEMO' }); await rejected; await stopping; await next
+  assert.deepEqual(calls, ['open:DEMO', 'close:old-demo', 'open:BYOK', 'decide:new-real'])
+  await real.stop()
+})

@@ -213,6 +213,41 @@ class CompanionPresenceServiceTest {
         assertThat(service.decide(7,event(session,1,"PAGE_ENTER")).reason()).isEqualTo("SUPERSEDED");
         verifyNoInteractions(invoker);
     }
+    @Test void statusIsReadOnlySafeAndGated() throws Exception {
+        service = service(false, true);
+        assertThat(service.status(7).reason()).isEqualTo("DISABLED");
+        service = service(true, false);
+        assertThat(service.status(7).reason()).isEqualTo("REAL_DISABLED");
+        verifyNoInteractions(router, invoker, quota, usage, companions, messages);
+        service = service(true, true);
+        assertThat(service.status(7).reason()).isEqualTo("BYOK_REQUIRED");
+        when(router.inspectCurrentByok(7)).thenThrow(new IllegalStateException("secret endpoint credential"));
+        assertThat(service.status(7)).isEqualTo(new PresenceAvailabilityView(true,true,false,"UNAVAILABLE",null));
+        doReturn(Optional.of(route.connection())).when(router).inspectCurrentByok(7);
+        var status = service.status(7);
+        assertThat(status.available()).isTrue();
+        assertThat(status.connection().provider()).isEqualTo(ModelProvider.DEEPSEEK);
+        assertThat(status.connection().modelCode()).isEqualTo("deepseek-chat");
+        String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(status);
+        assertThat(json).doesNotContain("apiKey", "credential", "endpoint", "fixture-only", "subjectId");
+        assertThatThrownBy(() -> service.status(0)).isInstanceOf(BusinessException.class);
+        verify(router, never()).decide(anyLong());
+        verifyNoInteractions(invoker, quota, usage, companions, messages);
+    }
+
+    @Test void routeChangedAfterStatusIsRecheckedAtDispatchWithoutFallback() {
+        when(router.inspectCurrentByok(7)).thenReturn(Optional.of(route.connection()));
+        assertThat(service.status(7).available()).isTrue();
+        var session = open("BYOK", 2, false);
+        when(router.decide(7)).thenReturn(ModelRouteDecision.platform());
+        assertThat(service.decide(7,event(session,1,"PAGE_ENTER")).reason()).isEqualTo("BYOK_REQUIRED");
+        verifyNoInteractions(invoker);
+        when(router.decide(7)).thenThrow(new IllegalStateException("connection deleted"));
+        clock.advance(15);
+        assertThat(service.decide(7,event(session,2,"PAGE_ENTER")).reason()).isEqualTo("UNAVAILABLE");
+        verifyNoInteractions(invoker);
+    }
+
     static class MutableClock extends Clock {
         Instant now = Instant.parse("2026-10-09T15:00:00Z");
         public ZoneId getZone() { return ZoneOffset.UTC; }

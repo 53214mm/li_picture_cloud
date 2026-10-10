@@ -38,7 +38,8 @@ export function createPresenceSession({ decide = simulatePresence, now = Date.no
     for (const key of ['enabled', 'paused', 'muted', 'visible', 'userBusy']) if (typeof patch[key] === 'boolean') safe[key] = patch[key]
     if (Number.isInteger(patch.limit) && patch.limit >= 1 && patch.limit <= 12) safe.limit = patch.limit
     if (['LOW', 'NORMAL'].includes(patch.intensity)) safe.intensity = patch.intensity
-    // A mode change is deliberately not accepted until a verified real adapter exists.
+    // Transport mode is selected outside this local safety/budget controller.
+    // Arbitrary settings must never select a paid adapter.
     cancel({ ...safe, reason: '', ...(safe.enabled === false || safe.visible === false ? { input: null } : {}) })
   }
   async function run(raw) {

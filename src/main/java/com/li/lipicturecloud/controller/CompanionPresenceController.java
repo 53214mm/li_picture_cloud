@@ -25,6 +25,11 @@ public class CompanionPresenceController {
         return org.springframework.http.ResponseEntity.badRequest().body(ResultUtils.error(40000, "主动事件参数无效"));
     }
     @AuthCheck
+    @GetMapping("/status")
+    public BaseResponse<PresenceAvailabilityView> status(HttpServletRequest request) {
+        return ResultUtils.success(service.status(users.getLoginUserEntity(request).getId()));
+    }
+    @AuthCheck
     @PostMapping("/session")
     public BaseResponse<PresenceSessionView> open(@RequestBody PresenceSessionRequest body, HttpServletRequest request) {
         return ResultUtils.success(service.open(users.getLoginUserEntity(request).getId(), body));

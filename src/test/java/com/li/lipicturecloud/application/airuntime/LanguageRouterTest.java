@@ -23,7 +23,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.when;
 
 class LanguageRouterTest {
@@ -171,6 +171,51 @@ class LanguageRouterTest {
         assertThatThrownBy(() -> router.decide(7L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不在允许清单内");
+    }
+
+    @Test
+    void inspectionReturnsOnlyCurrentConfigurationWithoutDecryptingOrMutating() {
+        assertThat(router.inspectCurrentByok(7)).isEmpty();
+        when(routingRepository.findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT))
+                .thenReturn(Optional.of(TaskRoutingRule.create(7L, ModelTask.LANGUAGE_AGENT, null).withId(1L)));
+        assertThat(router.inspectCurrentByok(7)).isEmpty();
+        when(routingRepository.findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT))
+                .thenReturn(Optional.of(TaskRoutingRule.create(7L, ModelTask.LANGUAGE_AGENT, 9L).withId(1L)));
+        when(connectionRepository.findById(9L)).thenReturn(Optional.of(connection()));
+        when(vaultRepository.findById(5L)).thenReturn(Optional.of(credential()));
+        when(profileService.findLatest(9L)).thenReturn(Optional.of(textProfile()));
+        assertThat(router.inspectCurrentByok(7)).contains(connection());
+        verifyNoInteractions(cipher);
+        verify(routingRepository, times(3)).findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT);
+        verifyNoMoreInteractions(routingRepository);
+        assertThatThrownBy(() -> router.inspectCurrentByok(0)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void inspectionRejectsMissingForeignDisabledUnboundBlockedAndIncapableConnections() {
+        when(routingRepository.findBySubjectAndTask(7L, ModelTask.LANGUAGE_AGENT))
+                .thenReturn(Optional.of(TaskRoutingRule.create(7L, ModelTask.LANGUAGE_AGENT, 9L).withId(1L)));
+        assertThatThrownBy(() -> router.inspectCurrentByok(7)).isInstanceOf(BusinessException.class);
+        for (ModelConnection invalid : List.of(
+                ModelConnection.restore(9L, 8L, ModelProvider.DEEPSEEK, "foreign", URI.create("https://api.deepseek.com/v1"), "deepseek-chat", 5L, true, 0),
+                connection().disable(),
+                ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK, "unbound", URI.create("https://api.deepseek.com/v1"), "deepseek-chat", null, true, 0),
+                ModelConnection.restore(9L, 7L, ModelProvider.DEEPSEEK, "blocked", URI.create("https://blocked.example/v1"), "deepseek-chat", 5L, true, 0))) {
+            when(connectionRepository.findById(9L)).thenReturn(Optional.of(invalid));
+            assertThatThrownBy(() -> router.inspectCurrentByok(7)).isInstanceOf(BusinessException.class);
+        }
+        when(connectionRepository.findById(9L)).thenReturn(Optional.of(connection()));
+        assertThatThrownBy(() -> router.inspectCurrentByok(7)).isInstanceOf(BusinessException.class);
+        when(vaultRepository.findById(5L)).thenReturn(Optional.of(CredentialVault.restore(5L, 8L,
+                ModelProvider.DEEPSEEK, "1234", "cipher", CredentialVault.ALGORITHM_AES_GCM_V1, 0L)));
+        assertThatThrownBy(() -> router.inspectCurrentByok(7)).isInstanceOf(BusinessException.class);
+        when(vaultRepository.findById(5L)).thenReturn(Optional.of(credential()));
+        assertThatThrownBy(() -> router.inspectCurrentByok(7)).isInstanceOf(BusinessException.class);
+        when(profileService.findLatest(9L)).thenReturn(Optional.of(ModelCapabilityProfile.snapshot(9L, 7L,
+                ModelProvider.DEEPSEEK, "deepseek-chat", ModelCapabilities.of(false, true, false, false,
+                false, false, false, null, ModelCapabilities.UNKNOWN, null), Instant.now()).withId(2L)));
+        assertThatThrownBy(() -> router.inspectCurrentByok(7)).isInstanceOf(BusinessException.class);
+        verifyNoInteractions(cipher);
     }
 
     @Test

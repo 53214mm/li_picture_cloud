@@ -35,6 +35,19 @@ class CompanionPresenceControllerTest {
         mvc.perform(delete("/companion/presence/session/server-id")).andExpect(status().isOk());
         verify(presence).close(7L,"server-id");
     }
+    @Test void statusUsesAuthenticatedOwnerAndReturnsOnlySafeSummary() throws Exception {
+        when(presence.status(7L)).thenReturn(new PresenceAvailabilityView(true, true, true, "READY",
+                new PresenceAvailabilityView.ConnectionSummary(com.li.lipicturecloud.domain.airuntime.ModelProvider.DEEPSEEK, "deepseek-chat")));
+        mvc.perform(get("/companion/presence/status").param("owner", "8"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.available").value(true))
+                .andExpect(jsonPath("$.data.connection.modelCode").value("deepseek-chat"))
+                .andExpect(jsonPath("$.data.connection.apiKey").doesNotExist());
+        verify(presence).status(7L);
+        verifyNoMoreInteractions(presence);
+        when(users.getLoginUserEntity(any(HttpServletRequest.class))).thenThrow(new BusinessException(ErrorCode.NOT_LOGIN_ERROR));
+        mvc.perform(get("/companion/presence/status")).andExpect(jsonPath("$.code").value(40100));
+        verifyNoMoreInteractions(presence);
+    }
     @Test void unknownOwnerAndDomFieldsAreRejected() throws Exception {
         for(String field : new String[]{"userId", "owner", "dom", "password"})
             mvc.perform(post("/companion/presence/session").contentType(MediaType.APPLICATION_JSON)

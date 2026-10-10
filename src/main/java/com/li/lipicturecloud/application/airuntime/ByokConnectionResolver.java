@@ -35,6 +35,16 @@ public class ByokConnectionResolver {
      * 绝不静默回退平台钱包。
      */
     public ModelRouteDecision resolveByok(long subjectId, long connectionId, String taskLabel) {
+        ValidatedConnection validated = validate(subjectId, connectionId, taskLabel);
+        return ModelRouteDecision.byok(validated.connection(), cipher.decrypt(validated.credential()));
+    }
+
+    /** Read-only configuration inspection: never decrypts credentials or contacts a provider. */
+    public ModelConnection inspectByok(long subjectId, long connectionId, String taskLabel) {
+        return validate(subjectId, connectionId, taskLabel).connection();
+    }
+
+    private ValidatedConnection validate(long subjectId, long connectionId, String taskLabel) {
         ModelConnection connection = connectionRepository.findById(connectionId)
                 .filter(owned -> owned.subjectId() == subjectId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_ERROR,
@@ -57,6 +67,7 @@ public class ByokConnectionResolver {
                 .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_ERROR,
                         taskLabel + "任务路由的凭据不存在，请修复或清除路由规则"));
 
-        return ModelRouteDecision.byok(connection, cipher.decrypt(credential));
+        return new ValidatedConnection(connection, credential);
     }
+    private record ValidatedConnection(ModelConnection connection, CredentialVault credential) {}
 }

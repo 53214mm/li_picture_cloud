@@ -84,6 +84,10 @@ app:
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:*}
   companion:
     enabled: ${COMPANION_ENABLED:true}
+    presence:
+      enabled: ${COMPANION_PRESENCE_ENABLED:true}
+      # Only permits explicit rehearsal BYOK opt-in; floating presence remains DEMO.
+      real-enabled: ${COMPANION_PRESENCE_REAL_ENABLED:false}
     feeding-enabled: ${COMPANION_FEEDING_ENABLED:true}
     processing-timeout: ${COMPANION_PROCESSING_TIMEOUT:5m}
     nutrition-policy: ${COMPANION_NUTRITION_POLICY:METADATA_ONLY}

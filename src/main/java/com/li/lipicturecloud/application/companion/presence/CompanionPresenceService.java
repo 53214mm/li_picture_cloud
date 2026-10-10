@@ -48,6 +48,22 @@ public class CompanionPresenceService {
         this.enabled = enabled; this.realEnabled = realEnabled;
     }
 
+    public PresenceAvailabilityView status(long owner) {
+        checkOwner(owner);
+        if (!enabled) return new PresenceAvailabilityView(false, realEnabled, false, "DISABLED", null);
+        if (!realEnabled) return new PresenceAvailabilityView(true, false, false, "REAL_DISABLED", null);
+        try {
+            var connection = router.inspectCurrentByok(owner);
+            if (connection.isEmpty()) return new PresenceAvailabilityView(true, true, false, "BYOK_REQUIRED", null);
+            var current = connection.get();
+            return new PresenceAvailabilityView(true, true, true, "READY",
+                    new PresenceAvailabilityView.ConnectionSummary(current.provider(), current.modelCode()));
+        } catch (RuntimeException failure) {
+            // Configuration errors may contain sensitive diagnostics; expose only a stable safe reason.
+            return new PresenceAvailabilityView(true, true, false, "UNAVAILABLE", null);
+        }
+    }
+
     public synchronized PresenceSessionView open(long owner, PresenceSessionRequest request) {
         checkOwner(owner);
         if (request == null) throw bad();
