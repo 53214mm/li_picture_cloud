@@ -84,6 +84,8 @@ public class CompanionChatService {
     private final com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService trialLedger;
     private final CompanionChatModeService chatModeService;
     private final CompanionMemoryRecall memoryRecall;
+    private final CompanionChatSessions sessions;
+    private final CompanionEpisodeService episodes;
     private final Clock clock;
 
     public CompanionChatService(CompanionRepository companionRepository,
@@ -102,6 +104,8 @@ public class CompanionChatService {
                                 com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService trialLedger,
                                 CompanionChatModeService chatModeService,
                                 CompanionMemoryRecall memoryRecall,
+                                CompanionChatSessions sessions,
+                                CompanionEpisodeService episodes,
                                 Clock clock) {
         this.companionRepository = companionRepository;
         this.messageRepository = messageRepository;
@@ -119,13 +123,18 @@ public class CompanionChatService {
         this.trialLedger = trialLedger;
         this.chatModeService = chatModeService;
         this.memoryRecall = memoryRecall;
+        this.sessions = sessions;
+        this.episodes = episodes;
         this.clock = clock;
     }
 
     public ChatHistoryView history(AuthorizationSubject subject, int limit) {
         Objects.requireNonNull(subject, "subject");
         Companion companion = requireCompanion(subject);
-        List<CompanionChatMessage> recent = messageRepository.findRecent(companion.id(), boundedLimit(limit));
+        // 只返回当前这一段对话：重新登录或隔了很久之后，聊天列表从空白开始（旧消息仍在库里，用来整理经历）。
+        List<CompanionChatMessage> recent = sessions.current(subject.userId(),
+                messageRepository.findRecent(companion.id(), boundedLimit(limit)), clock.instant())
+                .messagesNewestFirst();
         List<ChatMessageView> records = new ArrayList<>(recent.size());
         // 存储为倒序；历史按时间正序返回，便于前端直接追加渲染。
         for (int i = recent.size() - 1; i >= 0; i--) {
@@ -136,13 +145,15 @@ public class CompanionChatService {
 
     /**
      * 清空当前用户伙伴的对话记录（试演台用来从干净的上下文开始测人格）。
-     * 只删聊天消息：记忆、每日额度和模型用量记录保持不变。
+     * 删聊天消息和从聊天整理出的经历：图片记忆、每日额度和模型用量记录保持不变。
      */
     public int clearHistory(AuthorizationSubject subject) {
         Objects.requireNonNull(subject, "subject");
         Companion companion = requireCompanion(subject);
         int deleted = messageRepository.deleteByCompanion(companion.id());
-        log.info("companion_chat_history_cleared subjectId={} deleted={}", subject.userId(), deleted);
+        int forgotten = episodes.clear(companion.id());
+        log.info("companion_chat_history_cleared subjectId={} deleted={} episodes={}",
+                subject.userId(), deleted, forgotten);
         return deleted;
     }
 
@@ -190,7 +201,7 @@ public class CompanionChatService {
     private Flux<String> modelReply(Companion companion, AuthorizationSubject subject,
                                     CompanionChatMessage currentMessage, String message,
                                     Instant now, ModelRouteDecision route, boolean platformReserved) {
-        List<ChatTurn> turns = assembleTurns(companion, subject, currentMessage, message);
+        List<ChatTurn> turns = assembleTurns(companion, subject, currentMessage, message, route, now);
         if (route.isByok()) {
             return byokReply(companion, subject, route, turns, now);
         }
@@ -199,10 +210,13 @@ public class CompanionChatService {
 
     /**
      * 组装上下文与历史（预算守卫同模型路径）：先完成记忆撤权守卫与情绪惰性衰减，
-     * 再拼接系统提示 + 预算内历史（旧→新）+ 当前消息。
+     * 再拼接系统提示 + 当前这一段对话的预算内历史（旧→新）+ 当前消息。
+     *
+     * <p>更早的对话不原样发给模型：新的一段开始时先把上一段整理成经历，再按相关程度想起来。</p>
      */
     private List<ChatTurn> assembleTurns(Companion companion, AuthorizationSubject subject,
-                                         CompanionChatMessage currentMessage, String message) {
+                                         CompanionChatMessage currentMessage, String message,
+                                         ModelRouteDecision route, Instant now) {
         // 记忆进入模型上下文前必须通过来源撤权检查：真实撤权记忆被排除并落库失效，
         // 授权基础设施异常让本轮请求失败并回滚（fail-closed，绝不把无法确认权限的
         // 记忆发送给外部模型）。
@@ -210,19 +224,26 @@ public class CompanionChatService {
                 companion, subject, MAX_MEMORY_SCAN);
         // 情绪必须是"当前情绪"：先按完整小时惰性衰减（与主页同口径）再引用。
         CompanionMood currentMood = decayedCurrentMood(companion.id());
-        String systemPrompt = contextAssembler.systemPrompt(companion.id(), subject.userId(),
-                properties.getChatMemoryLimit(), currentMood, memoryRecall.recall(
-                        message, usableMemories, companion.id(), subject.userId(), properties.getChatMemoryLimit()));
-        List<CompanionChatMessage> history = messageRepository.findRecent(
-                companion.id(), properties.getChatHistoryLimit());
         // 历史为倒序；只按本轮落库消息的精确 id 排除自己，不再用"最新一条 USER"猜测——
         // 并发窗口的 USER 消息即使时间/位置更新也不会被误跳过，自己的消息也不会被重复加入。
+        List<CompanionChatMessage> others = messageRepository.findRecent(
+                        companion.id(), properties.getChatHistoryLimit() + 1).stream()
+                .filter(past -> !Objects.equals(past.id(), currentMessage.id()))
+                .limit(properties.getChatHistoryLimit())
+                .toList();
+        CompanionChatSessions.Session session = sessions.current(subject.userId(), others, now);
+        // 每轮都检查：没有待整理的旧对话时只是两次很小的查询；上次整理失败也会在这里补上。
+        episodes.consolidate(companion.id(), subject.userId(), route, session.start(), currentMessage.id());
+        CompanionChatContextAssembler.Conversation conversation = new CompanionChatContextAssembler.Conversation(
+                now, session.previousMessageAt(), session.continuing(),
+                episodes.recall(message, companion.id(), subject.userId()));
+        String systemPrompt = contextAssembler.systemPrompt(companion.id(), subject.userId(),
+                properties.getChatMemoryLimit(), currentMood, memoryRecall.recall(
+                        message, usableMemories, companion.id(), subject.userId(), properties.getChatMemoryLimit()),
+                conversation);
         int used = codePoints(systemPrompt) + codePoints(message) + PER_MESSAGE_OVERHEAD;
         List<CompanionChatMessage> included = new ArrayList<>();
-        for (CompanionChatMessage past : history) {
-            if (Objects.equals(past.id(), currentMessage.id())) {
-                continue;
-            }
+        for (CompanionChatMessage past : session.messagesNewestFirst()) {
             int size = codePoints(past.content()) + PER_MESSAGE_OVERHEAD;
             if (used + size > properties.getChatContextBudget()) {
                 break;

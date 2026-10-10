@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <preConditions onFail="HALT" onError="HALT">
+        <and>
+            <or>
+                <not><tableExists tableName="companion_chat_episode"/></not>
+                <and>
+                    <columnExists tableName="companion_chat_episode" columnName="id"/>
+                    <columnExists tableName="companion_chat_episode" columnName="companionId"/>
+                    <columnExists tableName="companion_chat_episode" columnName="subjectId"/>
+                    <columnExists tableName="companion_chat_episode" columnName="firstMessageId"/>
+                    <columnExists tableName="companion_chat_episode" columnName="lastMessageId"/>
+                    <columnExists tableName="companion_chat_episode" columnName="startedTime"/>
+                    <columnExists tableName="companion_chat_episode" columnName="endedTime"/>
+                    <columnExists tableName="companion_chat_episode" columnName="summary"/>
+                    <columnExists tableName="companion_chat_episode" columnName="modelProvider"/>
+                    <columnExists tableName="companion_chat_episode" columnName="modelCode"/>
+                    <columnExists tableName="companion_chat_episode" columnName="createTime"/>
+                </and>
+            </or>
+            <or>
+                <not><tableExists tableName="companion_chat_boundary"/></not>
+                <and>
+                    <columnExists tableName="companion_chat_boundary" columnName="id"/>
+                    <columnExists tableName="companion_chat_boundary" columnName="subjectId"/>
+                    <columnExists tableName="companion_chat_boundary" columnName="loginTime"/>
+                    <columnExists tableName="companion_chat_boundary" columnName="updateTime"/>
+                </and>
+            </or>
+        </and>
+    </preConditions>
+
+    <!--
+      一段结束的聊天整理成的"经历"。summary 为空表示这段没有值得记住的事，
+      但仍占位推进整理进度。同一伙伴同一段只整理一次（companionId + lastMessageId 唯一）。
+    -->
+    <changeSet id="20261010-02" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion_chat_episode"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion_chat_episode (
+    id BIGINT PRIMARY KEY,
+    companionId BIGINT NOT NULL,
+    subjectId BIGINT NOT NULL,
+    firstMessageId BIGINT NOT NULL,
+    lastMessageId BIGINT NOT NULL,
+    startedTime TIMESTAMP NOT NULL,
+    endedTime TIMESTAMP NOT NULL,
+    summary VARCHAR(512) NOT NULL DEFAULT '',
+    modelProvider VARCHAR(64) NULL,
+    modelCode VARCHAR(64) NULL,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_companion_chat_episode_last UNIQUE (companionId, lastMessageId)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion_chat_episode"/></rollback>
+    </changeSet>
+
+    <!-- 每个用户最近一次登录的时间：登录后开始新的一段对话。 -->
+    <changeSet id="20261010-03" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion_chat_boundary"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion_chat_boundary (
+    id BIGINT PRIMARY KEY,
+    subjectId BIGINT NOT NULL,
+    loginTime TIMESTAMP NOT NULL,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_companion_chat_boundary_subject UNIQUE (subjectId)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion_chat_boundary"/></rollback>
+    </changeSet>
+</databaseChangeLog>

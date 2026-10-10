@@ -4,19 +4,14 @@ import com.li.lipicturecloud.domain.companion.CompanionMemory;
 import com.li.lipicturecloud.domain.companion.MemoryStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -40,18 +35,13 @@ public class CompanionMemoryRecall {
     /** 对方在问"喂过哪些图、记不记得图"这类整体问题，而不是某一张。 */
     private static final Pattern ASKS_ABOUT_PICTURES = Pattern.compile(
             "(喂|发|给|传|上传).{0,6}(图|照片)|(哪些|什么|几张|多少).{0,4}(图|照片)|记(得|住).{0,8}(图|照片)|(图|照片).{0,6}记(得|住)");
-    private static final Pattern CJK = Pattern.compile("[\\p{IsHan}]+");
-    private static final Pattern LATIN = Pattern.compile("[a-z0-9][a-z0-9_-]{2,39}");
-    /** 太常见、不足以说明在聊同一张图的两字组合。 */
-    private static final Set<String> STOP_BIGRAMS = Set.of("图片", "照片", "这张", "那张", "一张", "之前", "记得",
-            "还记", "什么", "哪些", "我们", "你的", "我的", "可能", "画面", "一个", "没有", "这个", "那个", "观察",
-            "可见", "推测", "意义", "角色", "出处", "对方", "上传", "喂过", "给你", "你还", "现在", "今天");
 
     private final CompanionMemoryIndex index;
     private final PictureLabelProvider labels;
     private final double minSimilarity;
 
-    public CompanionMemoryRecall(CompanionMemoryIndex index, PictureLabelProvider labels,
+    public CompanionMemoryRecall(@Qualifier("companionMemoryIndex") CompanionMemoryIndex index,
+                                 PictureLabelProvider labels,
                                  @Value("${app.companion.memory-vector.min-similarity:0.45}") double minSimilarity) {
         this.index = Objects.requireNonNull(index, "index");
         this.labels = Objects.requireNonNull(labels, "labels");
@@ -72,23 +62,27 @@ public class CompanionMemoryRecall {
         Map<Long, PictureLabel> pictureLabels = labels.labels(owned.stream()
                 .map(CompanionMemory::pictureId).filter(Objects::nonNull).distinct().toList());
         Map<Long, CompanionMemory> byId = new LinkedHashMap<>();
-        owned.forEach(memory -> byId.put(memory.id(), memory));
+        Map<Long, String> documents = new LinkedHashMap<>();
+        owned.forEach(memory -> {
+            byId.put(memory.id(), memory);
+            documents.put(memory.id(), documentText(memory, labelOf(memory, pictureLabels)));
+        });
 
         LinkedHashSet<Long> selected = new LinkedHashSet<>(mentionedPictures(query, owned));
         String source = "LEXICAL";
         if (index.available()) {
             try {
-                reconcile(owned, pictureLabels, companionId, subjectId);
+                RecallIndexSync.reconcile(index, companionId, subjectId, documents, MAX_INDEX_PER_TURN);
                 index.search(companionId, subjectId, query, bounded * 2 + 2).stream()
                         .filter(hit -> hit.similarity() >= minSimilarity && byId.containsKey(hit.memoryId()))
                         .sorted(Comparator.comparingDouble(CompanionMemoryIndex.Hit::similarity).reversed())
                         .forEach(hit -> selected.add(hit.memoryId()));
                 source = "VECTOR";
             } catch (CompanionMemoryIndex.IndexUnavailableException unavailable) {
-                selected.addAll(lexical(query, owned, pictureLabels));
+                selected.addAll(RecallIndexSync.lexical(query, documents));
             }
         } else {
-            selected.addAll(lexical(query, owned, pictureLabels));
+            selected.addAll(RecallIndexSync.lexical(query, documents));
         }
         List<RecalledMemory> recalled = selected.stream()
                 .map(byId::get).filter(Objects::nonNull).limit(bounded)
@@ -100,25 +94,6 @@ public class CompanionMemoryRecall {
                 : List.of();
         log.debug("companion_memory_recall subjectId={} source={} recalled={}", subjectId, source, recalled.size());
         return new MemoryRecall(recalled, recent, pictureCount(owned));
-    }
-
-    /** 补齐向量库缺少或被纠正过的记忆，并清掉已不可用的旧向量。 */
-    private void reconcile(List<CompanionMemory> owned, Map<Long, PictureLabel> pictureLabels,
-                           long companionId, long subjectId) {
-        Map<Long, String> indexed = index.fingerprints(companionId, subjectId);
-        List<CompanionMemoryIndex.Entry> missing = new ArrayList<>();
-        for (CompanionMemory memory : owned) {
-            String text = documentText(memory, labelOf(memory, pictureLabels));
-            String fingerprint = fingerprint(text);
-            if (!fingerprint.equals(indexed.get(memory.id())) && missing.size() < MAX_INDEX_PER_TURN) {
-                missing.add(new CompanionMemoryIndex.Entry(memory.id(), text, fingerprint));
-            }
-        }
-        index.upsert(companionId, subjectId, missing);
-        Set<Long> live = new LinkedHashSet<>();
-        owned.forEach(memory -> live.add(memory.id()));
-        List<Long> stale = indexed.keySet().stream().filter(id -> !live.contains(id)).toList();
-        index.remove(stale);
     }
 
     /** 记得的图片张数；没有来源图片的记忆各算一条。 */
@@ -135,40 +110,6 @@ public class CompanionMemoryRecall {
                 && ids.contains(String.valueOf(memory.pictureId()))).map(CompanionMemory::id).toList();
     }
 
-    /** 字面兜底：对方这句话与记忆内容、图片名、标签共享的两字组合越多越靠前。 */
-    static List<Long> lexical(String query, List<CompanionMemory> owned, Map<Long, PictureLabel> pictureLabels) {
-        Set<String> terms = terms(query);
-        if (terms.isEmpty()) {
-            return List.of();
-        }
-        Map<Long, Integer> scores = new LinkedHashMap<>();
-        for (CompanionMemory memory : owned) {
-            Set<String> documentTerms = terms(documentText(memory, labelOf(memory, pictureLabels)));
-            int score = (int) terms.stream().filter(documentTerms::contains).count();
-            if (score > 0) {
-                scores.put(memory.id(), score);
-            }
-        }
-        return scores.entrySet().stream()
-                .sorted(Map.Entry.<Long, Integer>comparingByValue().reversed())
-                .map(Map.Entry::getKey).toList();
-    }
-
-    static Set<String> terms(String text) {
-        String lower = text.toLowerCase(Locale.ROOT);
-        Set<String> terms = new LinkedHashSet<>();
-        CJK.matcher(lower).results().map(match -> match.group()).forEach(run -> {
-            for (int i = 0; i + 1 < run.length(); i++) {
-                String bigram = run.substring(i, i + 2);
-                if (!STOP_BIGRAMS.contains(bigram)) {
-                    terms.add(bigram);
-                }
-            }
-        });
-        LATIN.matcher(lower).results().map(match -> match.group()).forEach(terms::add);
-        return terms;
-    }
-
     static String documentText(CompanionMemory memory, PictureLabel label) {
         String described = label == null ? "" : label.describe();
         return described.isEmpty() ? memory.content() : described + " " + memory.content();
@@ -176,15 +117,6 @@ public class CompanionMemoryRecall {
 
     private static PictureLabel labelOf(CompanionMemory memory, Map<Long, PictureLabel> pictureLabels) {
         return memory.pictureId() == null ? null : pictureLabels.get(memory.pictureId());
-    }
-
-    private static String fingerprint(String text) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(text.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException(impossible);
-        }
     }
 
     /** 一条想起的记忆，带上对方给图片写的名字和标签（可能为空）。 */

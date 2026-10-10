@@ -1,6 +1,7 @@
 package com.li.lipicturecloud.application.companion;
 
 import com.li.lipicturecloud.domain.companion.Companion;
+import com.li.lipicturecloud.domain.companion.CompanionChatEpisode;
 import com.li.lipicturecloud.domain.companion.CompanionMemory;
 import com.li.lipicturecloud.domain.companion.CompanionMood;
 import com.li.lipicturecloud.domain.companion.CompanionRelationship;
@@ -11,6 +12,7 @@ import com.li.lipicturecloud.domain.companion.MemoryStatus;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
@@ -34,6 +36,10 @@ public class CompanionChatContextAssembler {
     private static final java.time.ZoneId SHANGHAI = java.time.ZoneId.of("Asia/Shanghai");
     private static final java.time.format.DateTimeFormatter MEMORY_DATE =
             java.time.format.DateTimeFormatter.ofPattern("M月d日");
+    private static final java.time.format.DateTimeFormatter CLOCK =
+            java.time.format.DateTimeFormatter.ofPattern(" H:mm");
+    private static final String[] WEEKDAYS = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+    private static final int EPISODE_CODE_POINT_LIMIT = 120;
 
     private final CompanionRepository companionRepository;
     private final CompanionRelationshipRepository relationshipRepository;
@@ -63,14 +69,22 @@ public class CompanionChatContextAssembler {
                         List.of(), CompanionMemoryRecall.pictureCount(owned)));
     }
 
+    public String systemPrompt(long companionId, long subjectId, int memoryLimit,
+                               CompanionMood currentMood, CompanionMemoryRecall.MemoryRecall recall) {
+        return systemPrompt(companionId, subjectId, memoryLimit, currentMood, recall, Conversation.unknown());
+    }
+
     /**
      * 组装系统提示词。
      *
-     * @param recall 本轮召回结果：相关记忆（已授权、已确认）、对方问起时的最近图片、记得的图片总数
+     * @param recall       本轮召回结果：相关记忆（已授权、已确认）、对方问起时的最近图片、记得的图片总数
+     * @param conversation 现在的时间、这句话是不是接着正在聊的、以及本轮可能用得上的以前的聊天
      */
     public String systemPrompt(long companionId, long subjectId, int memoryLimit,
-                               CompanionMood currentMood, CompanionMemoryRecall.MemoryRecall recall) {
+                               CompanionMood currentMood, CompanionMemoryRecall.MemoryRecall recall,
+                               Conversation conversation) {
         Objects.requireNonNull(recall, "recall");
+        Objects.requireNonNull(conversation, "conversation");
         Companion companion = companionRepository.findByOwnerId(subjectId)
                 .filter(value -> value.id() != null && value.id() == companionId)
                 .orElseThrow(() -> new IllegalStateException("伙伴不存在: " + companionId));
@@ -104,6 +118,19 @@ public class CompanionChatContextAssembler {
                         .append(truncate(recalled.memory().content(), MEMORY_CODE_POINT_LIMIT)).append("\n");
             }
         }
+        appendTime(prompt, conversation);
+        List<CompanionChatEpisode> episodes = conversation.episodes().stream()
+                .filter(episode -> episode.memorable() && episode.companionId() == companionId
+                        && episode.subjectId() == subjectId)
+                .toList();
+        if (!episodes.isEmpty() && conversation.now() != null) {
+            prompt.append("\n## 你记得的以前的聊天（对方提起、或者这句话明显接着那件事时才用；"
+                    + "说的时候讲清楚是什么时候的事，比如\"上午你说……\"）\n");
+            for (CompanionChatEpisode episode : episodes) {
+                prompt.append("- ").append(when(episode.startedTime(), conversation.now())).append("：")
+                        .append(truncate(episode.summary(), EPISODE_CODE_POINT_LIMIT)).append("\n");
+            }
+        }
         List<CompanionMemoryRecall.RecalledMemory> recent = owned(recall.recentPictures(), companionId, subjectId)
                 .toList();
         if (!recent.isEmpty()) {
@@ -120,6 +147,59 @@ public class CompanionChatContextAssembler {
                 - 历史对话里你以前的一些回复是旧版本的你写的，可能又长又端着。那不是现在的你，不要模仿那种口吻。
                 """);
         return prompt.toString();
+    }
+
+    /** 现在几点、距离上次说话多久：新的一段对话不接着上一段的话头。 */
+    private static void appendTime(StringBuilder prompt, Conversation conversation) {
+        if (conversation.now() == null) {
+            return;
+        }
+        java.time.ZonedDateTime now = conversation.now().atZone(SHANGHAI);
+        prompt.append("\n## 时间\n- 现在是 ").append(MEMORY_DATE.format(now))
+                .append("（").append(WEEKDAYS[now.getDayOfWeek().getValue() - 1]).append("）")
+                .append(CLOCK.format(now)).append("。\n");
+        Instant previous = conversation.previousMessageAt();
+        if (previous == null) {
+            prompt.append("- 你们之前没有聊天记录。\n");
+        } else if (conversation.continuing()) {
+            prompt.append("- 你们正在聊，上一句是").append(elapsed(previous, conversation.now())).append("。\n");
+        } else {
+            prompt.append("- 这是新的一段对话，你们上次说话是").append(elapsed(previous, conversation.now()))
+                    .append("。之前聊的事已经过去了，对方没提起、这句话也不是接着那件事，就不要主动扯回去。\n");
+        }
+    }
+
+    /** 粗略的时间间隔，比如"刚刚"" 3 分钟前""约 5 小时前"" 2 天前"。 */
+    static String elapsed(Instant from, Instant to) {
+        java.time.Duration gap = java.time.Duration.between(from, to);
+        if (gap.isNegative() || gap.toMinutes() < 1) {
+            return "刚刚";
+        }
+        if (gap.toMinutes() < 60) {
+            return " " + gap.toMinutes() + " 分钟前";
+        }
+        if (gap.toHours() < 24) {
+            return "约 " + gap.toHours() + " 小时前";
+        }
+        return " " + gap.toDays() + " 天前";
+    }
+
+    /** 经历发生在什么时候：今天上午、昨天晚上、3 天前、9月27日。 */
+    static String when(Instant at, Instant now) {
+        java.time.ZonedDateTime moment = at.atZone(SHANGHAI);
+        long days = java.time.temporal.ChronoUnit.DAYS.between(moment.toLocalDate(), now.atZone(SHANGHAI).toLocalDate());
+        int hour = moment.getHour();
+        String part = hour < 5 ? "凌晨" : hour < 11 ? "上午" : hour < 13 ? "中午" : hour < 18 ? "下午" : "晚上";
+        if (days <= 0) {
+            return "今天" + part;
+        }
+        if (days == 1) {
+            return "昨天" + part;
+        }
+        if (days == 2) {
+            return "前天" + part;
+        }
+        return days <= 6 ? days + " 天前" : MEMORY_DATE.format(moment);
     }
 
     private static String growthLabel(Companion companion) {
@@ -215,5 +295,24 @@ public class CompanionChatContextAssembler {
         }
         int end = content.offsetByCodePoints(0, maxCodePoints);
         return content.substring(0, end) + "……";
+    }
+
+    /**
+     * 这句话所处的对话情况。
+     *
+     * @param now               本轮的时间；为 {@code null} 时不写时间段落
+     * @param previousMessageAt 上一句话的时间；从没聊过为 {@code null}
+     * @param continuing        是否接着正在进行的这一段对话
+     * @param episodes          本轮可能用得上的以前的聊天
+     */
+    public record Conversation(Instant now, Instant previousMessageAt, boolean continuing,
+                               List<CompanionChatEpisode> episodes) {
+        public Conversation {
+            episodes = List.copyOf(episodes);
+        }
+
+        public static Conversation unknown() {
+            return new Conversation(null, null, false, List.of());
+        }
     }
 }

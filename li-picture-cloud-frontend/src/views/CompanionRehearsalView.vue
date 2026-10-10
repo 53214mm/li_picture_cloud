@@ -54,7 +54,7 @@
       <section class="card"><h2>普通聊天一直都在</h2><p>试演与聊天独立。发送消息仍走原有聊天服务，可能按你的普通聊天模式消耗额度。</p><button type="button" @click="openReply">{{ chatOpen ? '回到聊天输入框' : '打开普通聊天' }}</button></section>
       <section class="card" aria-labelledby="clear-title" data-testid="clear-chat">
         <h2 id="clear-title">从干净的对话开始</h2>
-        <p>旧的聊天记录会作为上下文发给模型，旧版口吻容易把她带偏。清空后只删除你和绫页的聊天消息；记忆、图片、成长和用量记录都不受影响，且无法恢复。</p>
+        <p>旧的聊天记录会作为上下文发给模型，旧版口吻容易把她带偏。清空后删除你和绫页的聊天消息，以及从聊天里整理出的经历；图片记忆、成长和用量记录都不受影响，且无法恢复。</p>
         <div v-if="!confirmingClear"><button type="button" :disabled="clearing || chat.state?.phase !== 'idle'" @click="confirmingClear = true">清空对话记录</button></div>
         <div v-else class="control-row"><strong>确定清空全部聊天记录？</strong>
           <button type="button" class="danger" :disabled="clearing" @click="clearHistory">{{ clearing ? '正在清空…' : '确定清空' }}</button>

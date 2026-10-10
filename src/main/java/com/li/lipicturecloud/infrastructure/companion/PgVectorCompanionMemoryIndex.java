@@ -17,45 +17,40 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
- * 记忆向量索引：PostgreSQL + pgvector，余弦距离 + HNSW。
+ * 记忆向量索引：PostgreSQL + pgvector，余弦距离 + HNSW。图片记忆和聊天经历各用一张表。
  *
  * <p>表在首次使用时创建（不属于 MySQL 的 Liquibase 迁移）。连续失败后进入冷却期，期间直接
- * 报不可用，避免每轮聊天都卡在连不上的向量库上。</p>
+ * 报不可用，避免每轮聊天都卡在连不上的向量库上。连接池归 {@link CompanionVectorStore} 管。</p>
  */
 public class PgVectorCompanionMemoryIndex implements CompanionMemoryIndex {
 
     private static final Logger log = LoggerFactory.getLogger(PgVectorCompanionMemoryIndex.class);
     private static final Duration COOL_DOWN = Duration.ofMinutes(1);
+    public static final String MEMORY_TABLE = "companion_memory_vector";
+    public static final String EPISODE_TABLE = "companion_episode_vector";
+    private static final java.util.regex.Pattern TABLE_NAME = java.util.regex.Pattern.compile("[a-z_]{1,48}");
 
     private final JdbcTemplate jdbc;
     private final DashScopeTextEmbedder embedder;
     private final Clock clock;
     private volatile boolean schemaReady;
     private volatile Instant unavailableUntil = Instant.MIN;
-    private final AutoCloseable resource;
+    private final String table;
 
     public PgVectorCompanionMemoryIndex(JdbcTemplate jdbc, DashScopeTextEmbedder embedder, Clock clock) {
-        this(jdbc, embedder, clock, null);
+        this(jdbc, embedder, clock, MEMORY_TABLE);
     }
 
-    /** @param resource the connection pool owned by this index, closed on shutdown */
+    /** @param table 向量表名（只允许小写字母和下划线，会直接拼进 SQL） */
     public PgVectorCompanionMemoryIndex(JdbcTemplate jdbc, DashScopeTextEmbedder embedder, Clock clock,
-                                        AutoCloseable resource) {
+                                        String table) {
         this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
         this.embedder = Objects.requireNonNull(embedder, "embedder");
         this.clock = Objects.requireNonNull(clock, "clock");
-        this.resource = resource;
-    }
-
-    @Override
-    public void close() {
-        if (resource != null) {
-            try {
-                resource.close();
-            } catch (Exception ignored) {
-                // Shutdown only.
-            }
+        if (table == null || !TABLE_NAME.matcher(table).matches()) {
+            throw new IllegalArgumentException("invalid vector table name");
         }
+        this.table = table;
     }
 
     @Override
@@ -67,7 +62,7 @@ public class PgVectorCompanionMemoryIndex implements CompanionMemoryIndex {
     public Map<Long, String> fingerprints(long companionId, long subjectId) {
         return guarded(() -> {
             Map<Long, String> fingerprints = new LinkedHashMap<>();
-            jdbc.query("SELECT memory_id, fingerprint FROM companion_memory_vector WHERE companion_id = ? AND subject_id = ?",
+            jdbc.query("SELECT memory_id, fingerprint FROM " + table + " WHERE companion_id = ? AND subject_id = ?",
                     row -> { fingerprints.put(row.getLong(1), row.getString(2)); }, companionId, subjectId);
             return fingerprints;
         });
@@ -86,12 +81,11 @@ public class PgVectorCompanionMemoryIndex implements CompanionMemoryIndex {
                 rows.add(new Object[]{entry.memoryId(), companionId, subjectId, entry.fingerprint(),
                         literal(vectors.get(i))});
             }
-            jdbc.batchUpdate("""
-                    INSERT INTO companion_memory_vector (memory_id, companion_id, subject_id, fingerprint, embedding, updated_at)
-                    VALUES (?, ?, ?, ?, CAST(? AS vector), now())
-                    ON CONFLICT (memory_id) DO UPDATE SET fingerprint = EXCLUDED.fingerprint,
-                        embedding = EXCLUDED.embedding, updated_at = now()
-                    """, rows);
+            jdbc.batchUpdate("INSERT INTO " + table
+                    + " (memory_id, companion_id, subject_id, fingerprint, embedding, updated_at)"
+                    + " VALUES (?, ?, ?, ?, CAST(? AS vector), now())"
+                    + " ON CONFLICT (memory_id) DO UPDATE SET fingerprint = EXCLUDED.fingerprint,"
+                    + " embedding = EXCLUDED.embedding, updated_at = now()", rows);
             return null;
         });
     }
@@ -102,7 +96,7 @@ public class PgVectorCompanionMemoryIndex implements CompanionMemoryIndex {
             return;
         }
         guarded(() -> {
-            jdbc.batchUpdate("DELETE FROM companion_memory_vector WHERE memory_id = ?",
+            jdbc.batchUpdate("DELETE FROM " + table + " WHERE memory_id = ?",
                     memoryIds.stream().map(id -> new Object[]{id}).toList());
             return null;
         });
@@ -112,13 +106,9 @@ public class PgVectorCompanionMemoryIndex implements CompanionMemoryIndex {
     public List<Hit> search(long companionId, long subjectId, String query, int limit) {
         return guarded(() -> {
             String vector = literal(embedder.embed(query));
-            return jdbc.query("""
-                    SELECT memory_id, 1 - (embedding <=> CAST(? AS vector)) AS similarity
-                    FROM companion_memory_vector
-                    WHERE companion_id = ? AND subject_id = ?
-                    ORDER BY embedding <=> CAST(? AS vector)
-                    LIMIT ?
-                    """, (row, index) -> new Hit(row.getLong(1), row.getDouble(2)),
+            return jdbc.query("SELECT memory_id, 1 - (embedding <=> CAST(? AS vector)) AS similarity FROM " + table
+                    + " WHERE companion_id = ? AND subject_id = ? ORDER BY embedding <=> CAST(? AS vector) LIMIT ?",
+                    (row, index) -> new Hit(row.getLong(1), row.getDouble(2)),
                     vector, companionId, subjectId, vector, Math.max(1, Math.min(limit, 50)));
         });
     }
@@ -133,7 +123,7 @@ public class PgVectorCompanionMemoryIndex implements CompanionMemoryIndex {
         } catch (RuntimeException failure) {
             unavailableUntil = clock.instant().plus(COOL_DOWN);
             // 只记异常类型：不记录记忆文本、向量或连接串。
-            log.warn("companion_memory_vector_unavailable exceptionType={}", failure.getClass().getName());
+            log.warn("companion_memory_vector_unavailable table={} exceptionType={}", table, failure.getClass().getName());
             throw new IndexUnavailableException("memory vector index failed", failure);
         }
     }
@@ -147,14 +137,14 @@ public class PgVectorCompanionMemoryIndex implements CompanionMemoryIndex {
                 return;
             }
             jdbc.execute("CREATE EXTENSION IF NOT EXISTS vector");
-            jdbc.execute("CREATE TABLE IF NOT EXISTS companion_memory_vector ("
+            jdbc.execute("CREATE TABLE IF NOT EXISTS " + table + " ("
                     + "memory_id BIGINT PRIMARY KEY, companion_id BIGINT NOT NULL, subject_id BIGINT NOT NULL, "
                     + "fingerprint VARCHAR(64) NOT NULL, embedding vector(" + embedder.dimensions() + ") NOT NULL, "
                     + "updated_at TIMESTAMPTZ NOT NULL DEFAULT now())");
-            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_companion_memory_vector_owner "
-                    + "ON companion_memory_vector (companion_id, subject_id)");
-            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_companion_memory_vector_hnsw "
-                    + "ON companion_memory_vector USING hnsw (embedding vector_cosine_ops)");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_" + table + "_owner "
+                    + "ON " + table + " (companion_id, subject_id)");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_" + table + "_hnsw "
+                    + "ON " + table + " USING hnsw (embedding vector_cosine_ops)");
             schemaReady = true;
         }
     }

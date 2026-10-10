@@ -178,4 +178,54 @@ class CompanionChatContextAssemblerTest {
     private static BigDecimal bd(String value) {
         return new BigDecimal(value);
     }
+
+    @Test
+    void aNewConversationKnowsTheTimeAndLetsTheOldTopicGo() {
+        Companion companion = Companion.awaken(7L, CompanionBalance.v1()).persistedAs(11L);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        // 北京时间 10月10日 周六 15:20；上午 9:40 聊过秋招。
+        Instant now = Instant.parse("2026-10-10T07:20:00Z");
+        Instant morning = Instant.parse("2026-10-10T01:40:00Z");
+        com.li.lipicturecloud.domain.companion.CompanionChatEpisode episode =
+                new com.li.lipicturecloud.domain.companion.CompanionChatEpisode(5L, 11L, 7L, 40L, 41L, morning, morning,
+                        "对方秋招投了三家，二面在下周。", "dashscope", "qwen3.8-max", morning);
+        com.li.lipicturecloud.domain.companion.CompanionChatEpisode foreign =
+                new com.li.lipicturecloud.domain.companion.CompanionChatEpisode(6L, 11L, 8L, 50L, 51L, morning, morning,
+                        "别人的经历", "dashscope", "qwen3.8-max", morning);
+
+        String prompt = assembler.systemPrompt(11L, 7L, 5, null, CompanionMemoryRecall.MemoryRecall.empty(),
+                new CompanionChatContextAssembler.Conversation(now, morning, false, List.of(episode, foreign)));
+
+        assertThat(prompt).contains("- 现在是 10月10日（周六） 15:20。",
+                "这是新的一段对话，你们上次说话是约 5 小时前", "不要主动扯回去",
+                "## 你记得的以前的聊天", "- 今天上午：对方秋招投了三家，二面在下周。");
+        assertThat(prompt).doesNotContain("别人的经历");
+    }
+
+    @Test
+    void aRunningConversationIsNotTreatedAsNew() {
+        Companion companion = Companion.awaken(7L, CompanionBalance.v1()).persistedAs(11L);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        Instant now = Instant.parse("2026-10-10T07:20:00Z");
+
+        String running = assembler.systemPrompt(11L, 7L, 5, null, CompanionMemoryRecall.MemoryRecall.empty(),
+                new CompanionChatContextAssembler.Conversation(now, now.minusSeconds(180), true, List.of()));
+        String first = assembler.systemPrompt(11L, 7L, 5, null, CompanionMemoryRecall.MemoryRecall.empty(),
+                new CompanionChatContextAssembler.Conversation(now, null, false, List.of()));
+        String legacy = assembler.systemPrompt(11L, 7L, 5, null, List.of());
+
+        assertThat(running).contains("你们正在聊，上一句是 3 分钟前。").doesNotContain("新的一段对话", "以前的聊天");
+        assertThat(first).contains("你们之前没有聊天记录。");
+        assertThat(legacy).doesNotContain("## 时间");
+    }
+
+    @Test
+    void episodeTimesAreDescribedRelativeToNow() {
+        Instant now = Instant.parse("2026-10-10T07:20:00Z"); // 北京时间 15:20
+        assertThat(CompanionChatContextAssembler.when(Instant.parse("2026-10-10T11:30:00Z").minusSeconds(3600 * 4), now))
+                .isEqualTo("今天下午");
+        assertThat(CompanionChatContextAssembler.when(Instant.parse("2026-10-09T12:00:00Z"), now)).isEqualTo("昨天晚上");
+        assertThat(CompanionChatContextAssembler.when(Instant.parse("2026-10-06T02:00:00Z"), now)).isEqualTo("4 天前");
+        assertThat(CompanionChatContextAssembler.when(Instant.parse("2026-09-27T02:00:00Z"), now)).isEqualTo("9月27日");
+    }
 }

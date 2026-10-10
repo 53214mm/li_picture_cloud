@@ -78,6 +78,8 @@ class CompanionChatServiceTest {
     private com.li.lipicturecloud.application.airuntime.ModelUsageService modelUsageService;
     private com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService trialLedger;
     private CompanionChatService service;
+    private com.li.lipicturecloud.domain.companion.ChatSessionBoundaryRepository boundaries;
+    private CompanionEpisodeService episodes;
 
     @BeforeEach
     void setUp() {
@@ -93,6 +95,8 @@ class CompanionChatServiceTest {
         languageInvoker = mock(com.li.lipicturecloud.application.airuntime.LanguageModelInvoker.class);
         modelUsageService = mock(com.li.lipicturecloud.application.airuntime.ModelUsageService.class);
         trialLedger = mock(com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService.class);
+        boundaries = mock(com.li.lipicturecloud.domain.companion.ChatSessionBoundaryRepository.class);
+        episodes = mock(CompanionEpisodeService.class);
         when(messageRepository.append(any())).thenAnswer(invocation ->
                 invocation.<CompanionChatMessage>getArgument(0).withId(51L));
         when(messageRepository.findRecent(anyLong(), anyInt())).thenReturn(List.of());
@@ -105,6 +109,7 @@ class CompanionChatServiceTest {
                 modelUsageService, trialLedger, chatModeService(properties),
                 new CompanionMemoryRecall(new com.li.lipicturecloud.infrastructure.companion.UnavailableCompanionMemoryIndex(),
                         ids -> java.util.Map.of(), 0.45),
+                new CompanionChatSessions(boundaries, properties), episodes,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -167,7 +172,7 @@ class CompanionChatServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(error -> ((BusinessException) error).getCode())
                 .isEqualTo(ErrorCode.OPERATION_ERROR.getCode());
-        verify(contextAssembler, never()).systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(CompanionMemoryRecall.MemoryRecall.class));
+        verify(contextAssembler, never()).systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class));
         verify(chatModelProvider, never()).getIfAvailable();
         verify(memoryService).confirmedMemoriesUsableBy(companion, subject, 100);
     }
@@ -238,7 +243,7 @@ class CompanionChatServiceTest {
         when(chunk.getResult()).thenReturn(generation);
         when(generation.getOutput()).thenReturn(new AssistantMessage("伙伴的回复"));
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class))).thenReturn("系统提示");
+        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class))).thenReturn("系统提示");
         // 三条历史（倒序），每条 120 码点；预算 400 只装得下最近的约两条。
         String longText = "历史消息".repeat(30);
         CompanionChatMessage latest = CompanionChatMessage.companion(companion.id(), 7L, longText,
@@ -246,7 +251,7 @@ class CompanionChatServiceTest {
         CompanionChatMessage middle = CompanionChatMessage.user(companion.id(), 7L, longText, NOW.plusSeconds(2));
         CompanionChatMessage oldest = CompanionChatMessage.companion(companion.id(), 7L, longText,
                 "internal", "demo-v1", NOW.plusSeconds(1));
-        when(messageRepository.findRecent(companion.id(), 20))
+        when(messageRepository.findRecent(companion.id(), 21))
                 .thenReturn(List.of(latest, middle, oldest));
 
         String reply = service.chat(subject, "你好").blockLast();
@@ -273,8 +278,8 @@ class CompanionChatServiceTest {
         when(chunk.getResult()).thenReturn(generation);
         when(generation.getOutput()).thenReturn(new AssistantMessage("伙伴的回复"));
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class))).thenReturn("系统提示");
-        when(messageRepository.findRecent(companion.id(), 20))
+        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class))).thenReturn("系统提示");
+        when(messageRepository.findRecent(companion.id(), 21))
                 .thenReturn(List.of(CompanionChatMessage.companion(companion.id(), 7L,
                         "历史消息".repeat(30), "internal", "demo-v1", NOW.plusSeconds(3))));
 
@@ -296,6 +301,8 @@ class CompanionChatServiceTest {
 
         org.assertj.core.api.Assertions.assertThat(service.clearHistory(subject)).isEqualTo(4);
         verify(messageRepository).deleteByCompanion(11L);
+        // 从聊天整理出的经历一起清掉，否则"干净的上下文"里还会想起旧聊天。
+        verify(episodes).clear(11L);
 
         when(companionRepository.findByOwnerId(7L)).thenReturn(java.util.Optional.empty());
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.clearHistory(subject))
@@ -320,7 +327,7 @@ class CompanionChatServiceTest {
         when(languageInvoker.stream(any(ModelRouteDecision.class), anyList()))
                 .thenReturn(Flux.just("你", "好"));
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class))).thenReturn("系统提示");
+        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class))).thenReturn("系统提示");
 
         String reply = String.join("", service.chat(subject, "在吗").collectList().block());
 
@@ -341,7 +348,7 @@ class CompanionChatServiceTest {
         properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(persistedCompanion()));
         when(languageRouter.decide(7L)).thenReturn(ModelRouteDecision.byok(byokConnection(), "sk-secret"));
-        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(CompanionMemoryRecall.MemoryRecall.class)))
+        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class)))
                 .thenReturn("系统提示");
         when(languageInvoker.stream(any(ModelRouteDecision.class), anyList()))
                 .thenReturn(Flux.just("你好呀。", "\n\n", "今天有什么想分享的？"));
@@ -366,7 +373,7 @@ class CompanionChatServiceTest {
                 .thenReturn(Flux.error(new ModelInvocationException(
                         ConnectivityResult.CREDENTIAL_REJECTED, "rejected")));
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class))).thenReturn("系统提示");
+        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class))).thenReturn("系统提示");
 
         assertThatThrownBy(() -> service.chat(subject, "在吗").blockLast())
                 .isInstanceOf(ModelInvocationException.class);
@@ -401,7 +408,7 @@ class CompanionChatServiceTest {
         Companion companion = persistedCompanion();
         properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class))).thenReturn("系统提示");
+        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class))).thenReturn("系统提示");
         ChatModel chatModel = mock(ChatModel.class);
         ChatResponse chunk = mock(ChatResponse.class);
         Generation generation = mock(Generation.class);
@@ -475,7 +482,7 @@ class CompanionChatServiceTest {
         when(chunk.getResult()).thenReturn(generation);
         when(generation.getOutput()).thenReturn(new AssistantMessage("伙伴的回复"));
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(CompanionMemoryRecall.MemoryRecall.class)))
+        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class)))
                 .thenReturn("系统提示");
         CompanionMood stale = new CompanionMood(51L, companion.id(),
                 bd("30.00"), bd("20.00"), bd("0.00"), bd("0.00"), bd("0.00"),
@@ -494,7 +501,7 @@ class CompanionChatServiceTest {
         ArgumentCaptor<CompanionMemoryRecall.MemoryRecall> memoryCaptor =
                 ArgumentCaptor.forClass(CompanionMemoryRecall.MemoryRecall.class);
         verify(contextAssembler).systemPrompt(eq(11L), eq(7L), eq(5),
-                moodCaptor.capture(), memoryCaptor.capture());
+                moodCaptor.capture(), memoryCaptor.capture(), any(CompanionChatContextAssembler.Conversation.class));
         // 她知道自己记得 1 张图，但只有相关时才拿到内容。
         assertThat(memoryCaptor.getValue().pictureCount()).isEqualTo(1);
         // 上下文中的情绪是衰减后的当前值（30-2*5=20），记忆只含撤权守卫放行的确认记忆。
@@ -519,7 +526,7 @@ class CompanionChatServiceTest {
         when(chunk.getResult()).thenReturn(generation);
         when(generation.getOutput()).thenReturn(new AssistantMessage("伙伴的回复"));
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(CompanionMemoryRecall.MemoryRecall.class)))
+        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class)))
                 .thenReturn("系统提示");
         // 本窗消息 id=51；并发另一窗口的消息 id=60 且时间更新（倒序时排在前面）。
         // 按"最新一条 USER"猜测会把 60 误当成本窗消息跳过；按精确 id 排除则 51 不重复、60 保留。
@@ -527,7 +534,7 @@ class CompanionChatServiceTest {
                 .withId(51L);
         CompanionChatMessage otherWindow = CompanionChatMessage.user(
                 companion.id(), 7L, "另一个窗口的问题", NOW.plusSeconds(60)).withId(60L);
-        when(messageRepository.findRecent(companion.id(), 20))
+        when(messageRepository.findRecent(companion.id(), 21))
                 .thenReturn(List.of(otherWindow, current));
 
         service.chat(subject, "你好").blockLast();
@@ -546,7 +553,7 @@ class CompanionChatServiceTest {
         Companion companion = persistedCompanion();
         properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class))).thenReturn("系统提示");
+        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class))).thenReturn("系统提示");
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModelProvider.getIfAvailable()).thenReturn(chatModel);
         // 模型流持续生成（不完成也不失败）：模拟客户端断开后由控制器取消订阅。
@@ -572,7 +579,7 @@ class CompanionChatServiceTest {
         when(languageInvoker.stream(any(ModelRouteDecision.class), anyList()))
                 .thenReturn(Flux.never());
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class))).thenReturn("系统提示");
+        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class))).thenReturn("系统提示");
 
         Disposable subscription = service.chat(subject, "在吗").subscribe();
         subscription.dispose();
@@ -589,5 +596,60 @@ class CompanionChatServiceTest {
 
     private static BigDecimal bd(String value) {
         return new BigDecimal(value);
+    }
+
+    @Test
+    void aNewSessionSendsNoOldHistoryAndConsolidatesThePreviousOne() {
+        Companion companion = persistedCompanion();
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatResponse chunk = mock(ChatResponse.class);
+        Generation generation = mock(Generation.class);
+        when(chatModelProvider.getIfAvailable()).thenReturn(chatModel);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(chunk));
+        when(chunk.getResult()).thenReturn(generation);
+        when(generation.getOutput()).thenReturn(new AssistantMessage("伙伴的回复"));
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(),
+                any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class)))
+                .thenReturn("系统提示");
+        // 上午聊的秋招，5 小时后再来一句：上午那段不再原样发给模型，而是先整理成经历。
+        CompanionChatMessage morning = CompanionChatMessage.user(companion.id(), 7L, "秋招好焦虑",
+                NOW.minus(java.time.Duration.ofHours(5))).withId(40L);
+        when(messageRepository.findRecent(companion.id(), 21)).thenReturn(List.of(morning));
+
+        service.chat(subject, "晚上吃什么").blockLast();
+
+        ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).stream(captor.capture());
+        assertThat(captor.getValue().getInstructions()).extracting(Message::getText)
+                .containsExactly("系统提示", "晚上吃什么");
+        verify(episodes).consolidate(eq(11L), eq(7L), any(), eq(NOW), eq(51L));
+        ArgumentCaptor<CompanionChatContextAssembler.Conversation> conversation =
+                ArgumentCaptor.forClass(CompanionChatContextAssembler.Conversation.class);
+        verify(contextAssembler).systemPrompt(eq(11L), eq(7L), eq(5), any(),
+                any(CompanionMemoryRecall.MemoryRecall.class), conversation.capture());
+        assertThat(conversation.getValue().continuing()).isFalse();
+        assertThat(conversation.getValue().previousMessageAt()).isEqualTo(morning.createdTime());
+        assertThat(conversation.getValue().now()).isEqualTo(NOW);
+    }
+
+    @Test
+    void historyOnlyShowsTheCurrentSession() {
+        Companion companion = persistedCompanion();
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        CompanionChatMessage beforeLogin = CompanionChatMessage.user(companion.id(), 7L, "登录前", NOW.minusSeconds(600));
+        CompanionChatMessage afterLogin = CompanionChatMessage.user(companion.id(), 7L, "登录后", NOW.minusSeconds(60));
+        when(messageRepository.findRecent(companion.id(), 50)).thenReturn(List.of(afterLogin, beforeLogin));
+        when(boundaries.lastLogin(7L)).thenReturn(Optional.of(NOW.minusSeconds(300)));
+
+        assertThat(service.history(subject, 50).records())
+                .extracting(record -> record.content()).containsExactly("登录后");
+
+        // 没有重新登录，但已经隔了 3 小时：聊天列表也从空白开始。
+        when(boundaries.lastLogin(7L)).thenReturn(Optional.empty());
+        when(messageRepository.findRecent(companion.id(), 50)).thenReturn(List.of(
+                CompanionChatMessage.user(companion.id(), 7L, "很久以前", NOW.minus(java.time.Duration.ofHours(3)))));
+        assertThat(service.history(subject, 50).records()).isEmpty();
     }
 }

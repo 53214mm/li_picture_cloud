@@ -45,6 +45,8 @@ public class CompanionFeatureProperties {
     private int chatMemoryLimit = 5;
     /** MODEL 档每轮提示词（系统提示 + 历史 + 当前消息）的总码点预算，超出部分从最旧历史截断。 */
     private int chatContextBudget = 12000;
+    /** 距离上一句超过这么久，就算新的一段对话：之前的聊天整理成经历，不再原样发给模型。 */
+    private Duration chatSessionGap = Duration.ofHours(2);
 
     /** 伙伴对话策略。 */
     public enum CompanionChatPolicy {

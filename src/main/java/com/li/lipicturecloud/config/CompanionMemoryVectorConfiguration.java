@@ -2,6 +2,7 @@ package com.li.lipicturecloud.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.li.lipicturecloud.application.companion.CompanionMemoryIndex;
+import com.li.lipicturecloud.infrastructure.companion.CompanionVectorStore;
 import com.li.lipicturecloud.infrastructure.companion.DashScopeTextEmbedder;
 import com.li.lipicturecloud.infrastructure.companion.PgVectorCompanionMemoryIndex;
 import com.li.lipicturecloud.infrastructure.companion.UnavailableCompanionMemoryIndex;
@@ -21,7 +22,8 @@ import java.time.Duration;
  * 绫页记忆的向量检索：pgvector（{@code pgvector.datasource.*}）+ 百炼向量模型。
  *
  * <p>两者任一未配置时使用空实现，召回自动退回字面匹配。连接池只给索引自己用，不注册成
- * Spring {@code DataSource} Bean，避免影响主库 MySQL 的自动配置；向量库启动时连不上也不阻止应用启动。</p>
+ * Spring {@code DataSource} Bean，避免影响主库 MySQL 的自动配置；向量库启动时连不上也不阻止应用启动。
+ * 图片记忆与聊天经历共用连接池和向量模型，各用一张表。</p>
  */
 @Configuration
 public class CompanionMemoryVectorConfiguration {
@@ -29,8 +31,8 @@ public class CompanionMemoryVectorConfiguration {
     private static final Logger log = LoggerFactory.getLogger(CompanionMemoryVectorConfiguration.class);
 
     @Bean(destroyMethod = "close")
-    public CompanionMemoryIndex companionMemoryIndex(
-            ObjectMapper objectMapper, Clock clock,
+    public CompanionVectorStore companionVectorStore(
+            ObjectMapper objectMapper,
             @Value("${app.companion.memory-vector.enabled:true}") boolean enabled,
             @Value("${pgvector.datasource.url:}") String url,
             @Value("${pgvector.datasource.username:postgres}") String username,
@@ -43,7 +45,7 @@ public class CompanionMemoryVectorConfiguration {
         if (!enabled || url.isBlank() || apiKey.isBlank()) {
             log.info("companion_memory_vector_disabled reason={}",
                     !enabled ? "switched-off" : url.isBlank() ? "no-pgvector-url" : "no-embedding-key");
-            return new UnavailableCompanionMemoryIndex();
+            return CompanionVectorStore.disabled();
         }
         HikariDataSource dataSource = new HikariDataSource();
         dataSource.setPoolName("companion-memory-vector");
@@ -56,6 +58,24 @@ public class CompanionMemoryVectorConfiguration {
         dataSource.setInitializationFailTimeout(-1);
         DashScopeTextEmbedder embedder = DashScopeTextEmbedder.production(objectMapper, URI.create(endpoint),
                 model, apiKey, dimensions, timeout);
-        return new PgVectorCompanionMemoryIndex(new JdbcTemplate(dataSource), embedder, clock, dataSource);
+        return CompanionVectorStore.of(new JdbcTemplate(dataSource), embedder, dataSource);
+    }
+
+    /** 图片记忆的向量索引。 */
+    @Bean
+    public CompanionMemoryIndex companionMemoryIndex(CompanionVectorStore store, Clock clock) {
+        return index(store, clock, PgVectorCompanionMemoryIndex.MEMORY_TABLE);
+    }
+
+    /** 聊天经历的向量索引。 */
+    @Bean
+    public CompanionMemoryIndex companionEpisodeIndex(CompanionVectorStore store, Clock clock) {
+        return index(store, clock, PgVectorCompanionMemoryIndex.EPISODE_TABLE);
+    }
+
+    private static CompanionMemoryIndex index(CompanionVectorStore store, Clock clock, String table) {
+        return store.enabled()
+                ? new PgVectorCompanionMemoryIndex(store.jdbc(), store.embedder(), clock, table)
+                : new UnavailableCompanionMemoryIndex();
     }
 }
