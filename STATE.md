@@ -7,7 +7,7 @@
 - 前端必须收到服务端 done 才完成；提前断开保留实际部分文字和错误，要求显式刷新历史后再发送，无自动重试。取消/账号隔离/迟到回调边界保留。普通聊天、人设、原版立绘、站内主动 DEMO 和手动试演准入不变。
 - 验证：后端定向 49/49；完整 offline clean verify 929 项（925 通过、4 既有可选跳过），0 失败/错误，原 JaCoCo/package 通过。Node22 470/470、严格 lint、两组 production build/budget 通过；独立 review 无阻断并独立复跑前端流/会话 31/31。
 - 未重新尝试已知 Chromium IPC 阻塞；未进行真实模型/收费请求、完整 HTTP 故事线、MySQL/pgvector 实库或人工人格验收。平台 Spring AI DashScope 的上游 EOF 不属于本 BYOK 解析器验证，真实平台千问仍待独立试玩。不能把此前用户的 DeepSeek/千问识图验收当本补丁回归。
-- 详见 `docs/work/LINGYE-STREAM-TERMINATION.md`、决策 L-19；发布检查点在精确远端 HEAD/tree 回读后补录。恢复继续以该目标分支最新 HEAD 为准。
+- 功能发布检查点 `4e59e36b92ddd6cae94a4d1a111990691fac3815`，tree `98a90a0f4b3c5ae9d4c3de8b998b8154baffb4a4`；本地已测源 `f3f1c0d575ad4d14cbee29a623455c0b46e2bfa4` 同树。expected HEAD + 非强制发布后已回读 HEAD/父链/tree，并对齐本地干净工作区。详见 `docs/work/LINGYE-STREAM-TERMINATION.md`、L-19；本记录后续仅文档提交，恢复以该目标分支最新 HEAD 为准。
 
 ---
 

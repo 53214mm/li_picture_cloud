@@ -33,4 +33,15 @@
 - 失败探索：首次新增服务测试缺少 Mockito 静态引用，编译失败后已修复；最终定向与完整测试均使用此前已验证的官方 Mockito 启动 agent。首次定向前端是默认 Node24，最终全套已重跑正确 Node22，不以首跑代替项目要求。
 - 本轮未运行浏览器、独立完整 HTTP 故事线、真实供应商/平台模型、MySQL/pgvector 实库或人工人格验收。
 
-复跑完整后端命令与上次 BYOK 相同，见 `LINGYE-REHEARSAL-BYOK.md`；使用 `JAVA_TOOL_OPTIONS` 官方 Mockito agent、隔离 `application-test.yaml` 与已有 MyBatis 测试覆盖。日志保留在工作区外 `nexus-tool-cache/logs/stream-termination/`，不提交缓存或产物。精确发布映射在远端回读后补录。
+复跑完整后端命令与上次 BYOK 相同，见 `LINGYE-REHEARSAL-BYOK.md`；使用 `JAVA_TOOL_OPTIONS` 官方 Mockito agent、隔离 `application-test.yaml` 与已有 MyBatis 测试覆盖。日志保留在工作区外 `nexus-tool-cache/logs/stream-termination/`，不提交缓存或产物。
+
+## 发布检查点
+
+- 原远端父提交：`7a559450786b1bc8231e5cd1ebbe1d1666dc955c`。
+- 本地已测源提交：`f3f1c0d575ad4d14cbee29a623455c0b46e2bfa4`。
+- 远端有效功能提交：`4e59e36b92ddd6cae94a4d1a111990691fac3815`。
+- 完全相同的完整 tree：`98a90a0f4b3c5ae9d4c3de8b998b8154baffb4a4`。
+
+10 文件，+238/−28。现有 GitHub connector 逐 blob SHA 校验、完整 tree 精确对照；提交以核实的基线为唯一父节点，更新分支前重读 HEAD，再以 `expected_sha` + `force=false` 更新唯一目标分支。随后 git fetch 回读 HEAD、tree、父节点均匹配，干净本地分支对齐发布身份。提交身份/时间造成源与发布 commit SHA 不同，源码相同。
+
+本节和 STATE 后续只补发布记录，不改变已经验证的功能。工作流仅匹配 main push/PR，本分支推送不自动触发 CI；本轮本地验证与无远端 CI 要区分。不创建 PR、合并 main 或部署来触发它。恢复包包含最终目标分支完整祖先历史及同 HEAD 源码快照，精确最终身份另见包内 manifest。
