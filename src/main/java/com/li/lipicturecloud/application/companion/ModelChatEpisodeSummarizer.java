@@ -45,9 +45,9 @@ public class ModelChatEpisodeSummarizer implements ChatEpisodeSummarizer {
     private static final int MAX_LINE_CODE_POINTS = 200;
     private static final int MAX_TRANSCRIPT_CODE_POINTS = 3000;
     private static final int MAX_SUMMARY_CODE_POINTS = 120;
-    private static final int MAX_OUTPUT_TOKENS = 200;
     private static final int MAX_OUTPUT_CHARS = 2000;
-    private static final Duration TIMEOUT = Duration.ofSeconds(20);
+    /** 会先思考再回答的模型（比如 DeepSeek V4）要多等一会。 */
+    private static final Duration TIMEOUT = Duration.ofSeconds(45);
     private static final Pattern NOTHING = Pattern.compile("^[\"“「]?无[。.！!]?[\"”」]?$");
     private static final Pattern PREFIX = Pattern.compile("^(经历|总结|摘要)[:：]\\s*");
 
@@ -72,8 +72,9 @@ public class ModelChatEpisodeSummarizer implements ChatEpisodeSummarizer {
         Long connectionId = route.isByok() ? route.connection().id() : null;
         try {
             Flux<String> output = route.isByok()
-                    ? invoker.streamBounded(route, List.of(ChatTurn.system(PROMPT), ChatTurn.user(transcript)),
-                            MAX_OUTPUT_TOKENS)
+                    // 不设 max_tokens：会思考的模型把思考也算进上限，200 个 token 往往还没开口就被截断，
+                    // 只剩空回答。正文长度由下面的字数上限兜底。
+                    ? invoker.stream(route, List.of(ChatTurn.system(PROMPT), ChatTurn.user(transcript)))
                     : platform().stream(new Prompt(List.of(new SystemMessage(PROMPT), new UserMessage(transcript))))
                             .map(chunk -> chunk.getResult() == null || chunk.getResult().getOutput() == null
                                     || chunk.getResult().getOutput().getText() == null
@@ -85,6 +86,10 @@ public class ModelChatEpisodeSummarizer implements ChatEpisodeSummarizer {
                         return buffer.append(part);
                     }).map(StringBuilder::toString).block(TIMEOUT);
             recordSuccess(subjectId, connectionId, provider, modelCode, route);
+            if (raw == null || raw.isBlank()) {
+                // 空回答不等于"没什么可记"：当作失败，不推进整理进度，下一轮再试。
+                throw new IllegalStateException("empty summary output");
+            }
             return new Summary(clean(raw), provider.name().toLowerCase(java.util.Locale.ROOT), modelCode);
         } catch (RuntimeException failure) {
             recordFailure(subjectId, connectionId, provider, modelCode, route);

@@ -84,7 +84,7 @@ class ModelChatEpisodeSummarizerTest {
     }
 
     @Test
-    void byokRouteUsesTheUsersOwnModelWithABoundedOutput() {
+    void byokRouteUsesTheUsersOwnModelWithoutATokenCapThatThinkingModelsWouldExhaust() {
         LanguageModelInvoker invoker = mock(LanguageModelInvoker.class);
         ModelRouteDecision route = mock(ModelRouteDecision.class);
         com.li.lipicturecloud.domain.airuntime.ModelConnection connection =
@@ -95,7 +95,7 @@ class ModelChatEpisodeSummarizerTest {
         when(connection.provider()).thenReturn(ModelProvider.DEEPSEEK);
         when(connection.modelCode()).thenReturn("deepseek-chat");
         when(connection.id()).thenReturn(5L);
-        when(invoker.streamBounded(eq(route), any(), anyInt())).thenReturn(Flux.just("对方二面", "在下周。"));
+        when(invoker.stream(eq(route), any())).thenReturn(Flux.just("对方二面", "在下周。"));
         ModelChatEpisodeSummarizer summarizer = new ModelChatEpisodeSummarizer(mock(ObjectProvider.class),
                 invoker, mock(ModelUsageService.class));
 
@@ -105,8 +105,30 @@ class ModelChatEpisodeSummarizerTest {
         assertThat(summary.modelCode()).isEqualTo("deepseek-chat");
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<ChatTurn>> turns = ArgumentCaptor.forClass(List.class);
-        verify(invoker).streamBounded(eq(route), turns.capture(), eq(200));
+        verify(invoker).stream(eq(route), turns.capture());
         assertThat(turns.getValue().get(1).content()).startsWith("对方：秋招投了三家");
+    }
+
+    @Test
+    void anEmptyAnswerIsAFailureNotAnEmptyMemory() {
+        LanguageModelInvoker invoker = mock(LanguageModelInvoker.class);
+        ModelRouteDecision route = mock(ModelRouteDecision.class);
+        com.li.lipicturecloud.domain.airuntime.ModelConnection connection =
+                mock(com.li.lipicturecloud.domain.airuntime.ModelConnection.class);
+        when(route.isByok()).thenReturn(true);
+        when(route.connection()).thenReturn(connection);
+        when(route.costSource()).thenReturn(CostSource.BYOK);
+        when(connection.provider()).thenReturn(ModelProvider.DEEPSEEK);
+        when(connection.modelCode()).thenReturn("deepseek-flash");
+        // 思考型模型只返回了思考、没有正文：不能记成"这段没什么可记"。
+        when(invoker.stream(eq(route), any())).thenReturn(Flux.empty());
+        ModelUsageService usage = mock(ModelUsageService.class);
+        ModelChatEpisodeSummarizer summarizer = new ModelChatEpisodeSummarizer(mock(ObjectProvider.class),
+                invoker, usage);
+
+        assertThatThrownBy(() -> summarizer.summarize(route, conversation)).isInstanceOf(IllegalStateException.class);
+        verify(usage).recordFailure(eq(7L), eq(ModelTask.LANGUAGE_AGENT), any(), eq(ModelProvider.DEEPSEEK),
+                eq("deepseek-flash"), eq(CostSource.BYOK), eq("EPISODE_SUMMARY_FAILED"));
     }
 
     @Test
