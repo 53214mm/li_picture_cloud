@@ -1,6 +1,6 @@
 # STATE · 绫页四项 review 修复
 
-## 当前有效状态（2026-10-10 09:51 UTC）
+## 当前有效状态（2026-10-10 09:55 UTC）
 
 - 唯一目标分支 `nexus/mainline-r11`，本轮从已核实远端 `d8a6e1a57afd0f8b995bdc700807099f22512b19` 在 Windows 建立同分支隔离 clone。原工作区 5 类未跟踪内容完整保留，未切分支、重启日常服务、开 PR、合并 main 或部署；已知同项目任务均未加载。
 - 本轮真实功能：20 条聊天窗口独立于真实段起点；重新登录/超过两小时间隔仍分段。总结在当前流终态及事务提交后，由每实例 2 workers + 32 queue 执行，同伙伴单飞；失败或拒绝留给后续用户聊天恢复，没有无限后台循环。
@@ -9,7 +9,7 @@
 - 本轮验证：受影响 8 套件 64/64；完整 offline verify 915 项（911 通过、4 既有可选跳过），0 失败/错误，原 JaCoCo/package 通过；Node22 前端 431/431、严格 lint、两组 build/budget 通过；Chromium 聊天/小屋网络 fixture 26/26。独立双轴 review 的 1 项首批召回缺口已修复并复核，无剩余阻断。不是 clean verify 或真实模型/生产验收。
 - 未验收/阻塞：真实模型人格与总结质量、MySQL/pgvector 实库、独立真实 HTTP、3 项 Redis opt-in。Windows 现有 API runner 为 POSIX-only，本轮不修改日常服务配合它。连续段起点扫描随段长度增长；总结并发限制为每实例，跨实例写回通过持久锁/唯一键保护。
 - 恢复入口：`C:\Users\MECHREVO\Documents\Codex\2026-10-10\task\li-picture-cloud-nexus`；详情、失败探索和精确复跑命令见 `docs/work/LINGYE-REVIEW-FIXES-2026-10-10.md`。日志在不入库的 `evidence-nexus/`，测试产物在 target；原工作区继续留在本轮基线。
-- 发布检查点：功能/验证已完成，将以 `fix(companion): preserve session boundaries and fence asynchronous chat writes` 形成稳定提交；远端写入前必须重新检查目标 HEAD，只用现有 GitHub connector 的非强制快进及预期 HEAD 保护，最终 SHA/tree 回读后另记。不要从下方历史的旧云目录/暂停状态续开发。
+- 发布检查点：有效代码已非强制快进发布至 `6f72e456f9ff0fc1d34ba36e0b77308f63cb9016`，父提交为上述基线，tree `e1ad5a4bae9074bd4da99196f5285936f03d6efa`，HEAD/tree 均已回读。本地源提交 `da300236845873b5117176f91e5b4d3dc7a15ed0` 同树，GitHub connector 提交身份导致 SHA 不同。仅此分支写入，使用 expected HEAD 保护；映射见 `docs/work/PUBLICATION-2026-10-10-REVIEW-FIXES.md`。后续发布记录只补文档；恢复以远端目标分支最新 HEAD 为准，不从下方历史旧目录/暂停状态续开发。本地 origin 是原工作区路径，禁止向它 push。
 
 ---
 
