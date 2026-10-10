@@ -127,7 +127,8 @@ public class CompanionChatContextAssembler {
             prompt.append("\n## 你记得的以前的聊天（对方提起、或者这句话明显接着那件事时才用；"
                     + "说的时候讲清楚是什么时候的事，比如\"上午你说……\"）\n");
             for (CompanionChatEpisode episode : episodes) {
-                prompt.append("- ").append(when(episode.startedTime(), conversation.now())).append("：")
+                prompt.append("- ").append(when(episode.startedTime(), episode.endedTime(), conversation.now()))
+                        .append("：")
                         .append(truncate(episode.summary(), EPISODE_CODE_POINT_LIMIT)).append("\n");
             }
         }
@@ -145,6 +146,7 @@ public class CompanionChatContextAssembler {
                 ## 补充
                 - 一般不超过 60 字；对方让你解释或讲点东西时可以长一些，但不超过 200 字。
                 - 历史对话里你以前的一些回复是旧版本的你写的，可能又长又端着。那不是现在的你，不要模仿那种口吻。
+                - 对方问起以前的事，而上面没有对应的记录时，就说记不太清了，不要拿别的事硬凑，也不要编。
                 """);
         return prompt.toString();
     }
@@ -184,8 +186,11 @@ public class CompanionChatContextAssembler {
         return " " + gap.toDays() + " 天前";
     }
 
-    /** 经历发生在什么时候：今天上午、昨天晚上、3 天前、9月27日。 */
-    static String when(Instant at, Instant now) {
+    /** 经历发生在什么时候：刚才（一小时内结束）、今天上午、昨天晚上、3 天前、9月27日。 */
+    static String when(Instant at, Instant ended, Instant now) {
+        if (java.time.Duration.between(ended, now).toMinutes() < 60) {
+            return "刚才";
+        }
         java.time.ZonedDateTime moment = at.atZone(SHANGHAI);
         long days = java.time.temporal.ChronoUnit.DAYS.between(moment.toLocalDate(), now.atZone(SHANGHAI).toLocalDate());
         int hour = moment.getHour();

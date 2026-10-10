@@ -29,7 +29,7 @@ public class CompanionEpisodeRecall {
     private static final int RECENT_WHEN_ASKED = 2;
     /** 对方在问以前聊过的事（只出现"下午"这类时间词不算，比如"今天下午要面试"）。 */
     private static final Pattern ASKS_ABOUT_PAST = Pattern.compile(
-            "上次|(之前|以前|上午|中午|下午|昨天|昨晚|前天|那天|前几天).{0,8}(说|聊|提|讲)|聊过|说过|提过|还记得");
+            "上次|(刚刚|刚才|之前|以前|上午|中午|下午|昨天|昨晚|前天|那天|前几天).{0,8}(说|聊|提|讲|发)|聊过|说过|提过|讲过|还记得");
 
     private final CompanionMemoryIndex index;
     private final double minSimilarity;

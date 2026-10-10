@@ -76,7 +76,9 @@ class ModelChatEpisodeSummarizerTest {
         assertThat(summary.modelProvider()).isEqualTo("dashscope");
         ArgumentCaptor<Prompt> prompt = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).stream(prompt.capture());
-        assertThat(prompt.getValue().getInstructions().get(0).getText()).contains("只输出一个字：无");
+        // 对方讲的笑话也算值得记的事，只有纯打招呼才是"无"。
+        assertThat(prompt.getValue().getInstructions().get(0).getText())
+                .contains("只输出一个字：无", "对方讲的笑话、梗或段子也要记");
         verify(usage).recordSuccess(eq(7L), eq(ModelTask.LANGUAGE_AGENT), isNull(), eq(ModelProvider.DASHSCOPE),
                 anyString(), eq(CostSource.PLATFORM));
     }

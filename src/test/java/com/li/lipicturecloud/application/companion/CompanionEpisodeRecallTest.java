@@ -51,6 +51,7 @@ class CompanionEpisodeRecallTest {
         assertThat(ids(recall.recall("城堡搭好了", recent, 11L, 7L, 3))).containsExactly(1L);
         // 问"上次聊了什么"：给最近两段有内容的经历（空的占位段不算）。
         assertThat(ids(recall.recall("我们上次聊了啥", recent, 11L, 7L, 3))).containsExactly(3L, 1L);
+        assertThat(ids(recall.recall("几分钟不见，记得我刚刚讲的笑话吗", recent, 11L, 7L, 3))).containsExactly(3L, 1L);
     }
 
     @Test

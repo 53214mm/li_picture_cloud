@@ -198,7 +198,7 @@ class CompanionChatContextAssemblerTest {
 
         assertThat(prompt).contains("- 现在是 10月10日（周六） 15:20。",
                 "这是新的一段对话，你们上次说话是约 5 小时前", "不要主动扯回去",
-                "## 你记得的以前的聊天", "- 今天上午：对方秋招投了三家，二面在下周。");
+                "## 你记得的以前的聊天", "- 今天上午：对方秋招投了三家，二面在下周。", "不要拿别的事硬凑");
         assertThat(prompt).doesNotContain("别人的经历");
     }
 
@@ -222,10 +222,15 @@ class CompanionChatContextAssemblerTest {
     @Test
     void episodeTimesAreDescribedRelativeToNow() {
         Instant now = Instant.parse("2026-10-10T07:20:00Z"); // 北京时间 15:20
-        assertThat(CompanionChatContextAssembler.when(Instant.parse("2026-10-10T11:30:00Z").minusSeconds(3600 * 4), now))
-                .isEqualTo("今天下午");
-        assertThat(CompanionChatContextAssembler.when(Instant.parse("2026-10-09T12:00:00Z"), now)).isEqualTo("昨天晚上");
-        assertThat(CompanionChatContextAssembler.when(Instant.parse("2026-10-06T02:00:00Z"), now)).isEqualTo("4 天前");
-        assertThat(CompanionChatContextAssembler.when(Instant.parse("2026-09-27T02:00:00Z"), now)).isEqualTo("9月27日");
+        Instant afternoon = Instant.parse("2026-10-10T05:30:00Z"); // 13:30
+        assertThat(CompanionChatContextAssembler.when(afternoon, afternoon, now)).isEqualTo("今天下午");
+        // 一小时内刚结束的那段（比如退出又马上登录）就是"刚才"，不和下午更早的事混在一起。
+        assertThat(CompanionChatContextAssembler.when(now.minusSeconds(900), now.minusSeconds(300), now)).isEqualTo("刚才");
+        Instant lastNight = Instant.parse("2026-10-09T12:00:00Z");
+        assertThat(CompanionChatContextAssembler.when(lastNight, lastNight, now)).isEqualTo("昨天晚上");
+        Instant fourDays = Instant.parse("2026-10-06T02:00:00Z");
+        assertThat(CompanionChatContextAssembler.when(fourDays, fourDays, now)).isEqualTo("4 天前");
+        Instant longAgo = Instant.parse("2026-09-27T02:00:00Z");
+        assertThat(CompanionChatContextAssembler.when(longAgo, longAgo, now)).isEqualTo("9月27日");
     }
 }
