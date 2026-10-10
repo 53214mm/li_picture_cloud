@@ -383,23 +383,28 @@ test('blank and over-limit drafts never send; 500 Unicode code points are accept
   const pending = f.session.send()
   assert.equal(f.streams.length, 1)
   assert.equal(f.state.sendError, '')
+  f.streams[0].onDone()
   f.streams[0].resolve()
   assert.equal(await pending, true)
 })
 
-test('normal EOF with no chunks ends the request without inventing a companion quote', async () => {
-  const f = setup({ stream: async () => {} })
-  const release = await ready(f)
-  f.session.setDraft('空回应')
-  assert.equal(await f.session.send(), true)
-  assert.deepEqual(f.state.messages.map(message => message.content), ['空回应'])
-  assert.equal(f.state.phase, 'idle')
-  assert.equal(f.state.sendError, '')
-  assert.equal(f.state.notice, '')
-  assert.equal(f.state.needsRefresh, false)
-  release()
-  assert.equal(f.state.needsRefresh, false)
-})
+for (const partial of ['', '真实的部分回复']) {
+  test(`missing terminal callback leaves request uncertain: ${partial || 'empty'}`, async () => {
+    const f = setup({ stream: async (_, { onChunk }) => { if (partial) onChunk(partial) } })
+    const release = await ready(f)
+    f.session.setDraft('空回应')
+    assert.equal(await f.session.send(), false)
+    assert.deepEqual(f.state.messages.map(message => message.content), partial ? ['空回应', partial] : ['空回应'])
+    assert.equal(f.state.phase, 'idle')
+    assert.match(f.state.sendError, /连接提前结束/)
+    assert.match(f.state.notice, /未确认.*刷新/)
+    assert.equal(f.state.needsRefresh, true)
+    f.session.setDraft('不能自动重复发送')
+    assert.equal(await f.session.send(), false)
+    release()
+    assert.equal(f.state.needsRefresh, true)
+  })
+}
 
 test('a completed terminal callback is not reclassified as uncertain during client cleanup', async () => {
   const f = setup()

@@ -136,9 +136,12 @@ export function createCompanionChatSession({ readHistory, stream, onChange }) {
       })
       if (!currentSend(request)) return false
       if (request.failed) return false
-      // The existing transport treats normal EOF as terminal too. Ending the
-      // request is not an invented reply, mood, or persisted-success assertion.
-      request.done = true
+      // Only the server terminal event confirms completion. A transport that
+      // resolves early must leave this non-idempotent request uncertain.
+      if (!request.done) {
+        fail(new Error('伙伴的回应连接提前结束，请刷新对话记录后再试'))
+        return false
+      }
       sendRequest = null
       publish({ messages: withoutEmptyReply(), phase: 'idle' })
       return true

@@ -40,10 +40,10 @@ test('transport keeps request contract, shares AbortSignal, and releases reader 
   assert.equal(source.stream.locked, false)
 })
 
-test('transport preserves normal EOF termination and handles split UTF-8 SSE chunks', async t => {
+test('transport handles split UTF-8 SSE chunks before an explicit done event', async t => {
   let controller
   const stream = new ReadableStream({ start(value) { controller = value } })
-  const encoded = encode('data: 绫页\n\n')
+  const encoded = encode('data: 绫页\n\nevent: done\ndata:\n\n')
   controller.enqueue(encoded.slice(0, 7))
   controller.enqueue(encoded.slice(7, 9))
   controller.enqueue(encoded.slice(9))
@@ -170,3 +170,20 @@ test('HTTP failures retain their status and do not call stream completion', asyn
   await assert.rejects(streamCompanionChat('问题', { onDone: () => { done += 1 } }), { status: 403, message: '没有权限' })
   assert.equal(done, 0)
 })
+
+for (const partial of ['', 'data: 部分回复\n\n', 'data: 尾帧未结束']) {
+  test(`EOF without server done rejects and releases the reader: ${partial || 'empty'}`, async t => {
+    const source = body()
+    if (partial) source.push(partial)
+    source.close()
+    t.mock.method(globalThis, 'fetch', async () => ({ ok: true, body: source.stream }))
+    const chunks = []
+    let done = 0
+    await assert.rejects(streamCompanionChat('问题', {
+      onChunk: chunk => chunks.push(chunk), onDone: () => { done += 1 }
+    }), /连接提前结束.*刷新/)
+    assert.equal(done, 0)
+    assert.deepEqual(chunks, partial.endsWith('\n\n') ? ['部分回复'] : [])
+    assert.equal(source.stream.locked, false)
+  })
+}

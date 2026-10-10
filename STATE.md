@@ -1,3 +1,18 @@
+# STATE · 绫页流式终态修复
+
+## 当前有效状态（2026-10-10 14:20 UTC）
+
+- 从干净且远端已核实的 `7a559450786b1bc8231e5cd1ebbe1d1666dc955c` 开始，仅 `nexus/mainline-r11`。用户夜间授权完善现有细节；没有触碰离线电脑、其他分支、PR、main 或部署。
+- 本地 HTTP 实证确认 BYOK 提前 EOF 被当成功、`[DONE]` 后仍追加文字。现明确 `[DONE]`/非空 `finish_reason` 终态，无标记 EOF 安全失败，部分回复不完整落库/记成功；`length` 等厂商终态与 bounded 限额保留。
+- 前端必须收到服务端 done 才完成；提前断开保留实际部分文字和错误，要求显式刷新历史后再发送，无自动重试。取消/账号隔离/迟到回调边界保留。普通聊天、人设、原版立绘、站内主动 DEMO 和手动试演准入不变。
+- 验证：后端定向 49/49；完整 offline clean verify 929 项（925 通过、4 既有可选跳过），0 失败/错误，原 JaCoCo/package 通过。Node22 470/470、严格 lint、两组 production build/budget 通过；独立 review 无阻断并独立复跑前端流/会话 31/31。
+- 未重新尝试已知 Chromium IPC 阻塞；未进行真实模型/收费请求、完整 HTTP 故事线、MySQL/pgvector 实库或人工人格验收。平台 Spring AI DashScope 的上游 EOF 不属于本 BYOK 解析器验证，真实平台千问仍待独立试玩。不能把此前用户的 DeepSeek/千问识图验收当本补丁回归。
+- 详见 `docs/work/LINGYE-STREAM-TERMINATION.md`、决策 L-19；发布检查点在精确远端 HEAD/tree 回读后补录。恢复继续以该目标分支最新 HEAD 为准。
+
+---
+
+## 此前状态（历史保留）
+
 # STATE · 试演台复用当前 BYOK 连接
 
 ## 当前有效状态（2026-10-10 UTC）

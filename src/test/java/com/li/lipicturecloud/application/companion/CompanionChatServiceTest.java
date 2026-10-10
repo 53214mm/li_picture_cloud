@@ -449,6 +449,29 @@ class CompanionChatServiceTest {
     }
 
     @Test
+    void truncatedByokStreamKeepsUserMessageButNeverPersistsPartialReplyOrSuccess() {
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        when(languageRouter.decide(7L)).thenReturn(ModelRouteDecision.byok(byokConnection(), "sk-secret"));
+        when(languageInvoker.stream(any(ModelRouteDecision.class), anyList()))
+                .thenReturn(Flux.concat(Flux.just("partial"), Flux.error(new ModelInvocationException(
+                        ConnectivityResult.UPSTREAM_ERROR, "model stream ended before completion"))));
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(persistedCompanion()));
+        when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(),
+                any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class)))
+                .thenReturn("系统提示");
+        var deltas = new java.util.ArrayList<String>();
+        assertThatThrownBy(() -> service.chat(subject, "test").doOnNext(deltas::add).blockLast())
+                .isInstanceOf(ModelInvocationException.class);
+        assertThat(deltas).containsExactly("partial");
+        verify(messageRepository, times(1)).append(any());
+        verify(modelUsageService, never()).recordSuccess(anyLong(), any(), any(), any(), anyString(), any());
+        verify(modelUsageService).recordFailure(7L, ModelTask.LANGUAGE_AGENT, 9L,
+                ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK, ConnectivityResult.UPSTREAM_ERROR);
+        verify(chatModelProvider, never()).getIfAvailable();
+        org.mockito.Mockito.verifyNoInteractions(trialLedger);
+    }
+
+    @Test
     void brokenRouteFailsBeforeQuotaOrMessageAreWritten() {
         Companion companion = persistedCompanion();
         properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);

@@ -170,7 +170,7 @@ export async function streamCompanionChat(message, { signal, onChunk, onError, o
         if (event.data) onChunk?.(event.data)
       }
     }
-    onDone?.()
+    throw new Error('伙伴的回应连接提前结束，请刷新对话记录后再试')
   } finally {
     signal?.removeEventListener('abort', abortReader)
     await cancelReader()
