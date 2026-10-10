@@ -51,7 +51,7 @@ import java.util.Objects;
  * 伙伴站内对话：历史查询与一轮流式回复。
  *
  * <p>DEMO_ONLY 档不发起模型调用；MODEL 档只把"本轮消息 + 服务端组装的可解释上下文 +
- * 最近历史"交给语言模型，并先预占每日轮次额度。消息只追加；显式清空统一删除消息和经历。</p>
+ * 最近历史"交给语言模型；只有平台模型预占每日轮次额度。消息只追加；显式清空统一删除消息和经历。</p>
  */
 @Service
 @ConditionalOnProperty(prefix = "app.companion", name = "enabled",
@@ -181,10 +181,13 @@ public class CompanionChatService {
         // 随事务提交，流失败时在事务外释放。
         boolean platformReserved = route != null && !route.isByok();
         if (platformReserved) {
+            chatModeService.requirePlatformConfigured();
             trialLedger.reserve(subject.userId(), PLATFORM_CHAT_COST);
+            quotaGuard.reserve(subject.userId(), LocalDate.now(clock.withZone(SHANGHAI)),
+                    properties.getChatDailyLimit());
         }
-        quotaGuard.reserve(subject.userId(), LocalDate.now(clock.withZone(SHANGHAI)),
-                properties.getChatDailyLimit());
+        // BYOK is user-funded; DEMO has no upstream cost. Neither spends the platform daily bucket.
+        // The endpoint rate limit and bounded message/context/stream lifecycle still apply to all modes.
         Instant now = clock.instant();
         // 保留本轮落库消息的精确 id：历史去重与上下文排除都按它进行，而不是按角色猜测。
         CompanionChatMessage currentMessage = messageRepository.append(

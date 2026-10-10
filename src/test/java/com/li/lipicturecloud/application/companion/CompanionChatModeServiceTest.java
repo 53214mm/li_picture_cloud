@@ -32,6 +32,7 @@ class CompanionChatModeServiceTest {
     private ModelQuickSetupService quickSetup;
     private CompanionFeatureProperties properties;
     private CompanionChatModeService service;
+    private org.springframework.beans.factory.ObjectProvider<org.springframework.ai.chat.model.ChatModel> platformModel;
 
     @BeforeEach
     void setUp() {
@@ -40,7 +41,9 @@ class CompanionChatModeServiceTest {
         properties = new CompanionFeatureProperties();
         when(preferences.findMode(anyLong())).thenReturn(Optional.empty());
         when(quickSetup.current(anyLong())).thenReturn(QuickConnectionView.platform());
-        service = new CompanionChatModeService(preferences, quickSetup, properties);
+        platformModel = mock(org.springframework.beans.factory.ObjectProvider.class);
+        when(platformModel.getIfAvailable()).thenReturn(mock(org.springframework.ai.chat.model.ChatModel.class));
+        service = new CompanionChatModeService(preferences, quickSetup, properties, platformModel);
     }
 
     @Test
@@ -53,6 +56,23 @@ class CompanionChatModeServiceTest {
         assertThatThrownBy(() -> service.choose(USER, CompanionChatMode.MODEL))
                 .isInstanceOf(BusinessException.class).hasMessageContaining("先在模型连接");
         verify(preferences, never()).saveMode(anyLong(), any());
+    }
+
+    @Test
+    void missingOrAmbiguousPlatformBeanDoesNotOfferRealMode() {
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        when(platformModel.getIfAvailable()).thenReturn(null);
+        assertThat(service.view(USER).modelAvailable()).isFalse();
+        assertThatThrownBy(service::requirePlatformConfigured).hasMessageContaining("平台模型");
+        when(platformModel.getIfAvailable()).thenThrow(new org.springframework.beans.factory.NoUniqueBeanDefinitionException(
+                org.springframework.ai.chat.model.ChatModel.class, 2, "multiple models"));
+        assertThat(service.view(USER).modelAvailable()).isFalse();
+    }
+
+    @Test
+    void finalPlatformAdmissionStillRejectsExplicitDemoPolicy() {
+        assertThatThrownBy(service::requirePlatformConfigured).hasMessageContaining("平台模型");
+        verify(platformModel, never()).getIfAvailable();
     }
 
     @Test

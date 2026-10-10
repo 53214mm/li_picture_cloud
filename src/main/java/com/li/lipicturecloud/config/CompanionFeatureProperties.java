@@ -37,7 +37,8 @@ public class CompanionFeatureProperties {
     private DataSize visionMaxBytes = DataSize.ofMegabytes(8);
     private int visionDailyLimit = 10;
     /**
-     * 伙伴站内对话策略：DEMO_ONLY 为零外发确定性回复（默认），MODEL 使用平台语言模型。
+     * 伙伴站内对话策略：DEMO_ONLY 为零外发确定性回复（对象安全默认），MODEL 使用平台语言模型。
+     * 发布配置默认 MODEL；显式 DEMO_ONLY 仍禁止平台外发。
      */
     private CompanionChatPolicy chatPolicy = CompanionChatPolicy.DEMO_ONLY;
     private int chatDailyLimit = 50;

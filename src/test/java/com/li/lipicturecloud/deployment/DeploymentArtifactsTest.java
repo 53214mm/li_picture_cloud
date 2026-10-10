@@ -52,6 +52,18 @@ class DeploymentArtifactsTest {
     }
 
     @Test
+    void ordinaryChatPolicyCanBeDisabledAndKeepsBoundedPlatformBudget() throws IOException {
+        assertThat(read("src/main/resources/application.yaml")).contains(
+                "chat-policy: ${COMPANION_CHAT_POLICY:MODEL}",
+                "chat-daily-limit: ${COMPANION_CHAT_DAILY_LIMIT:50}");
+        assertThat(read("compose.yaml")).contains(
+                "COMPANION_CHAT_POLICY: ${COMPANION_CHAT_POLICY:-MODEL}",
+                "COMPANION_CHAT_DAILY_LIMIT: ${COMPANION_CHAT_DAILY_LIMIT:-50}");
+        assertThat(read("src/test/resources/application-test.yaml")).contains("chat-policy: DEMO_ONLY");
+        assertThat(read("src/test/resources/application-e2e.yaml")).contains("chat-policy: DEMO_ONLY");
+    }
+
+    @Test
     void productionCorsRequiresAnExplicitAllowlistWithoutStarFallback() throws IOException {
         String prod = read("src/main/resources/application-prod.yaml");
         String local = read("src/main/resources/application.yaml");

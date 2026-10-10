@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.util.Objects;
 
 /**
- * 伙伴对话的每日轮次闸门。
+ * 平台付费伙伴对话的每日轮次闸门；BYOK 和 DEMO 不使用此额度。
  *
  * <p>额度在用户消息外发模型之前预占；失败与中断不退还次数，防止可重试错误无限消耗平台成本。</p>
  */

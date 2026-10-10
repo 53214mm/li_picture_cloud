@@ -46,6 +46,7 @@ mxai:
 
 app:
   companion:
+    chat-policy: DEMO_ONLY
     enabled: true
     feeding-enabled: true
     processing-timeout: 5m

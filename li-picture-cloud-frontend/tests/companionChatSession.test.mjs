@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { streamCompanionChat } from '../src/utils/companion.js'
 import { createCompanionChatSession, emptyCompanionChatState } from '../src/presentation/companionChatSession.js'
 
 function deferred() {
@@ -418,3 +419,71 @@ test('a completed terminal callback is not reclassified as uncertain during clie
   f.streams[0].resolve()
   assert.equal(await pending, false)
 })
+
+test('explicit HTTP rejection restores the unsent draft and removes only the optimistic turn', async () => {
+  const f = setup()
+  await ready(f, [{ role: 'COMPANION', content: '已有对话' }])
+  f.session.setDraft('  未被接受  ')
+  const pending = f.session.send()
+  f.streams[0].reject(Object.assign(new Error('今日伙伴对话次数已用完'), { chatRejected: true, status: 403 }))
+  assert.equal(await pending, false)
+  assert.equal(f.state.sendError, '今日伙伴对话次数已用完')
+  assert.equal(f.state.needsRefresh, false)
+  assert.equal(f.state.notice, '')
+  assert.equal(f.state.draft, '  未被接受  ')
+  assert.deepEqual(f.state.messages.map(message => message.content), ['已有对话'])
+  assert.equal(f.streams.length, 1)
+  const retry = f.session.send()
+  assert.equal(f.streams.length, 2)
+  f.streams[1].onChunk('成功')
+  f.streams[1].onDone()
+  f.streams[1].resolve()
+  assert.equal(await retry, true)
+})
+
+test('explicit rejection never replaces a newer draft or becomes uncertain on reentrant release', async () => {
+  const f = setup()
+  const release = await ready(f)
+  f.session.setDraft('未被接受')
+  const pending = f.session.send()
+  f.session.setDraft('新草稿')
+  f.streams[0].onError(Object.assign(new Error('没有权限'), { chatRejected: true }))
+  assert.equal(f.state.draft, '新草稿')
+  release()
+  assert.equal(f.state.needsRefresh, false)
+  f.streams[0].onChunk('迟到回复')
+  f.streams[0].onDone()
+  f.streams[0].resolve()
+  assert.equal(await pending, false)
+  assert.deepEqual(f.state.messages, [])
+})
+
+test('a rejection marker after partial text cannot discard a possibly submitted turn', async () => {
+  const f = setup()
+  await ready(f)
+  f.session.setDraft('已提交')
+  const pending = f.session.send()
+  f.streams[0].onChunk('真实部分')
+  f.streams[0].reject(Object.assign(new Error('不可信拒绝'), { chatRejected: true }))
+  assert.equal(await pending, false)
+  assert.equal(f.state.needsRefresh, true)
+  assert.equal(f.state.draft, '')
+  assert.deepEqual(f.state.messages.map(message => message.content), ['已提交', '真实部分'])
+})
+
+for (const status of [403, 503]) {
+  test(`real transport HTTP ${status} reaches the session with the right certainty`, async t => {
+    const fetch = t.mock.method(globalThis, 'fetch', async () => new globalThis.Response(
+      JSON.stringify({ code: status === 403 ? 40300 : 50000, message: '服务端拒绝' }),
+      { status, headers: { 'Content-Type': 'application/json' } }))
+    const f = setup({ stream: streamCompanionChat })
+    await ready(f)
+    f.session.setDraft('一条消息')
+    assert.equal(await f.session.send(), false)
+    assert.equal(f.state.sendError, '服务端拒绝')
+    assert.equal(f.state.needsRefresh, status !== 403)
+    assert.equal(f.state.draft, status === 403 ? '一条消息' : '')
+    assert.equal(f.state.messages.length, status === 403 ? 0 : 1)
+    assert.equal(fetch.mock.callCount(), 1)
+  })
+}

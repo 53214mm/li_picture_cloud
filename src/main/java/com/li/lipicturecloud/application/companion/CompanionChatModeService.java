@@ -9,6 +9,9 @@ import com.li.lipicturecloud.domain.companion.CompanionChatPreferenceRepository;
 import com.li.lipicturecloud.exception.BusinessException;
 import com.li.lipicturecloud.exception.ErrorCode;
 import org.springframework.stereotype.Service;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.BeansException;
 
 import java.util.Objects;
 
@@ -25,13 +28,16 @@ public class CompanionChatModeService {
     private final CompanionChatPreferenceRepository preferenceRepository;
     private final ModelQuickSetupService quickSetupService;
     private final CompanionFeatureProperties properties;
+    private final ObjectProvider<ChatModel> platformModel;
 
     public CompanionChatModeService(CompanionChatPreferenceRepository preferenceRepository,
                                     ModelQuickSetupService quickSetupService,
-                                    CompanionFeatureProperties properties) {
+                                    CompanionFeatureProperties properties,
+                                    ObjectProvider<ChatModel> platformModel) {
         this.preferenceRepository = preferenceRepository;
         this.quickSetupService = quickSetupService;
         this.properties = properties;
+        this.platformModel = platformModel;
     }
 
     /** 本轮对话实际使用的模式。 */
@@ -43,8 +49,7 @@ public class CompanionChatModeService {
         checkIdentity(subjectId);
         QuickConnectionView own = quickSetupService.current(subjectId);
         boolean hasOwnModel = own.status() != QuickConnectionView.Status.PLATFORM;
-        boolean platformAllowed = properties.getChatPolicy()
-                == CompanionFeatureProperties.CompanionChatPolicy.MODEL;
+        boolean platformAllowed = !hasOwnModel && platformConfigured();
         boolean modelAvailable = hasOwnModel || platformAllowed;
         CompanionChatMode preferred = preferenceRepository.findMode(subjectId)
                 .orElse(modelAvailable ? CompanionChatMode.MODEL : CompanionChatMode.DEMO);
@@ -61,10 +66,30 @@ public class CompanionChatModeService {
         checkIdentity(subjectId);
         Objects.requireNonNull(mode, "mode");
         if (mode == CompanionChatMode.MODEL && !view(subjectId).modelAvailable()) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "还没有可用的模型，请先在模型连接里连接一个模型");
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "平台模型未启用或暂不可用，请稍后重试，或先在模型连接里连接自己的模型");
         }
         preferenceRepository.saveMode(subjectId, mode);
         return view(subjectId);
+    }
+
+    /** Configuration readiness only: no probe, credential inspection, or external call. */
+    public boolean platformConfigured() {
+        if (properties.getChatPolicy() != CompanionFeatureProperties.CompanionChatPolicy.MODEL) {
+            return false;
+        }
+        try {
+            return platformModel.getIfAvailable() != null;
+        } catch (BeansException unavailable) {
+            // Missing, ambiguous or failed model initialization must never authorize a platform call.
+            return false;
+        }
+    }
+
+    /** Re-check after routing so a concurrent BYOK removal cannot bypass the platform policy. */
+    public void requirePlatformConfigured() {
+        if (!platformConfigured()) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "平台模型未启用或暂不可用");
+        }
     }
 
     private static void checkIdentity(long subjectId) {

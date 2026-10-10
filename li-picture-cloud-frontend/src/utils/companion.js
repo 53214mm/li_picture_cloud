@@ -132,7 +132,10 @@ export async function streamCompanionChat(message, { signal, onChunk, onError, o
     const body = await response.json().catch(() => null)
     checkAbort()
     throw Object.assign(new Error(body?.message || '伙伴暂时没法回应，请稍后再试'),
-      { status: response.status })
+      { status: response.status,
+        // These responses reject admission before a chat stream starts. Timeout,
+        // gateway and server failures still leave persistence uncertain.
+        chatRejected: [400, 401, 403, 404, 429].includes(response.status) })
   }
   if (!response.body) {
     checkAbort()

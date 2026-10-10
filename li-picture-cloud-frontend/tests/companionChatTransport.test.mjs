@@ -187,3 +187,15 @@ for (const partial of ['', 'data: 部分回复\n\n', 'data: 尾帧未结束']) {
     assert.equal(source.stream.locked, false)
   })
 }
+
+for (const status of [400, 401, 403, 404, 429, 408, 500, 502, 503, 504]) {
+  test(`HTTP ${status} identifies only explicit admission rejection`, async t => {
+    t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status,
+      json: async () => ({ message: '今日伙伴对话次数已用完' }) }))
+    await assert.rejects(streamCompanionChat('问题'), error => {
+      assert.equal(error.status, status)
+      assert.equal(error.chatRejected, [400, 401, 403, 404, 429].includes(status))
+      return true
+    })
+  })
+}

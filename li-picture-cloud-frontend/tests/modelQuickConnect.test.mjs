@@ -34,6 +34,7 @@ test('chat mode copy follows the server view and never guesses a mode', () => {
   assert.deepEqual(describeChatMode(null), { note: '', link: null })
   assert.equal(describeChatMode({ mode: 'DEMO', modelAvailable: true }).link, null)
   assert.match(describeChatMode({ mode: 'DEMO', modelAvailable: false }).link, /去连接模型/)
+  assert.match(describeChatMode({ mode: 'DEMO', modelAvailable: false, modelSource: 'NONE' }).note, /平台模型未启用或暂不可用/)
   const own = describeChatMode({ mode: 'MODEL', modelSource: 'OWN', providerLabel: 'DeepSeek', modelCode: 'deepseek-chat' })
   assert.match(own.note, /你的 DeepSeek · deepseek-chat/)
   assert.equal(own.link, null)

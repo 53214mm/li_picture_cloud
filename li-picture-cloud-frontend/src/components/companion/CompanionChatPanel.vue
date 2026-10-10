@@ -18,7 +18,7 @@
         <button type="button" :aria-pressed="modeView.mode === 'DEMO'" :disabled="modeLocked"
                 @click="chat.chooseMode('DEMO')">演示回复</button>
         <button type="button" :aria-pressed="modeView.mode === 'MODEL'" :disabled="modeLocked || !modeView.modelAvailable"
-                :title="modeView.modelAvailable ? '' : '先连接一个模型'" @click="chat.chooseMode('MODEL')">真实模型</button>
+                :title="modeView.modelAvailable ? '' : '平台模型未启用或暂不可用，也可以连接自己的模型'" @click="chat.chooseMode('MODEL')">真实模型</button>
       </div>
       <p class="chat-mode-note" data-testid="chat-mode-note">
         {{ modeCopy.note }}

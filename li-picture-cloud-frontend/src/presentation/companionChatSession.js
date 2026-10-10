@@ -86,7 +86,7 @@ export function createCompanionChatSession({ readHistory, stream, onChange }) {
     if (!state.loaded && !state.loading && !state.loadError) void loadHistory()
     return () => {
       if (!owners.delete(owner) || owners.size) return
-      const uncertain = state.needsRefresh || Boolean(sendRequest && !sendRequest.done)
+      const uncertain = state.needsRefresh || Boolean(sendRequest && !sendRequest.done && !sendRequest.rejected)
       const draft = state.draft
       invalidate()
       publish({ ...emptyCompanionChatState(), draft, needsRefresh: uncertain,
@@ -103,22 +103,34 @@ export function createCompanionChatSession({ readHistory, stream, onChange }) {
   async function send() {
     if (!owners.size || !state.loaded || state.loading || state.loadError ||
         state.phase !== 'idle' || sendRequest || state.needsRefresh) return false
-    const content = state.draft.trim()
+    const submittedDraft = state.draft
+    const content = submittedDraft.trim()
     if (!content) return false
     if ([...content].length > 500) {
       publish({ sendError: '消息需为 1–500 字。' })
       return false
     }
+    const user = withKey('USER', content)
     const companion = withKey('COMPANION', '')
-    const request = { generation, controller: new AbortController(), done: false, failed: false }
+    const request = { generation, controller: new AbortController(), done: false, failed: false, rejected: false, receivedChunk: false }
     sendRequest = request
-    publish({ messages: [...state.messages, withKey('USER', content), companion], draft: '',
+    publish({ messages: [...state.messages, user, companion], draft: '',
       phase: 'waiting', sendError: '', notice: '' })
 
     const withoutEmptyReply = () => state.messages.filter(message => message.localKey !== companion.localKey || message.content)
     function fail(error) {
       if (!currentSend(request) || request.done || request.failed) return
       request.failed = true
+      // Only a transport-confirmed admission rejection can undo the optimistic
+      // turn. SSE errors may follow persistence, even without any reply text.
+      request.rejected = error?.chatRejected === true && !request.receivedChunk
+      if (request.rejected) {
+        publish({ messages: state.messages.filter(message =>
+          message.localKey !== user.localKey && message.localKey !== companion.localKey),
+        phase: 'idle', sendError: error?.message || SEND_ERROR,
+        draft: state.draft || submittedDraft, needsRefresh: false, notice: '' })
+        return
+      }
       publish({ messages: withoutEmptyReply(), phase: 'idle', sendError: error?.message || SEND_ERROR,
         needsRefresh: true, notice: UNCERTAIN_NOTICE })
     }
@@ -128,6 +140,7 @@ export function createCompanionChatSession({ readHistory, stream, onChange }) {
         signal: request.controller.signal,
         onChunk(chunk) {
           if (!currentSend(request) || request.done || request.failed || typeof chunk !== 'string' || !chunk) return
+          request.receivedChunk = true
           publish({ phase: 'streaming', messages: state.messages.map(message => message.localKey === companion.localKey
             ? { ...message, content: message.content + chunk } : message) })
         },

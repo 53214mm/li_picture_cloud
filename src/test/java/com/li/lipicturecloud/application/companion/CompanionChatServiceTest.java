@@ -78,6 +78,7 @@ class CompanionChatServiceTest {
     private com.li.lipicturecloud.application.airuntime.ModelUsageService modelUsageService;
     private com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService trialLedger;
     private CompanionChatService service;
+    private CompanionChatModeService modeService;
     private com.li.lipicturecloud.domain.companion.ChatSessionBoundaryRepository boundaries;
     private CompanionEpisodeService episodes;
 
@@ -164,10 +165,11 @@ class CompanionChatServiceTest {
         when(memoryService.confirmedMemoriesUsableBy(any(), any(), anyInt())).thenReturn(List.of());
         when(languageRouter.decide(anyLong())).thenReturn(
                 com.li.lipicturecloud.application.airuntime.ModelRouteDecision.platform());
+        modeService = org.mockito.Mockito.spy(chatModeService(properties));
         service = new CompanionChatService(companionRepository, messageRepository, moodRepository,
                 CompanionMoodRules.v1(), relationshipRepository, memoryService, contextAssembler,
                 quotaGuard, properties, chatModelProvider, languageRouter, languageInvoker,
-                modelUsageService, trialLedger, chatModeService(properties),
+                modelUsageService, trialLedger, modeService,
                 new CompanionMemoryRecall(new com.li.lipicturecloud.infrastructure.companion.UnavailableCompanionMemoryIndex(),
                         ids -> java.util.Map.of(), 0.45),
                 new CompanionChatSessions(boundaries, properties), episodes,
@@ -185,7 +187,9 @@ class CompanionChatServiceTest {
                 mock(com.li.lipicturecloud.application.airuntime.ModelQuickSetupService.class);
         when(quickSetup.current(anyLong())).thenReturn(
                 com.li.lipicturecloud.application.airuntime.view.QuickConnectionView.platform());
-        return new CompanionChatModeService(preferences, quickSetup, properties);
+        ObjectProvider<ChatModel> availablePlatform = mock(ObjectProvider.class);
+        when(availablePlatform.getIfAvailable()).thenReturn(mock(ChatModel.class));
+        return new CompanionChatModeService(preferences, quickSetup, properties, availablePlatform);
     }
 
     @Test
@@ -201,7 +205,7 @@ class CompanionChatServiceTest {
         String reply = service.chat(subject, "你还记得什么吗").blockLast();
 
         assertThat(reply).contains("1 条确认的记忆");
-        verify(quotaGuard).reserve(7L, java.time.LocalDate.parse("2026-08-14"), 50);
+        verify(quotaGuard, never()).reserve(anyLong(), any(), anyInt());
         verify(chatModelProvider, never()).getIfAvailable();
         verify(messageRepository, times(2)).append(any());
     }
@@ -406,6 +410,46 @@ class CompanionChatServiceTest {
     }
 
     @Test
+    void exhaustedPlatformDailyQuotaDoesNotBlockByokOrTouchTrialBalance() {
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(persistedCompanion()));
+        when(languageRouter.decide(7L)).thenReturn(ModelRouteDecision.byok(byokConnection(), "test-only"));
+        when(quotaGuard.reserve(anyLong(), any(), anyInt())).thenThrow(
+                new BusinessException(ErrorCode.FORBIDDEN_ERROR, "今日伙伴对话次数已用完"));
+        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(), any())).thenReturn("系统提示");
+        when(languageInvoker.stream(any(), anyList())).thenReturn(Flux.just("自费回复"));
+
+        assertThat(service.chat(subject, "继续聊").blockLast()).isEqualTo("自费回复");
+        verify(quotaGuard, never()).reserve(anyLong(), any(), anyInt());
+        org.mockito.Mockito.verifyNoInteractions(trialLedger);
+        verify(modelUsageService).recordSuccess(7L, ModelTask.LANGUAGE_AGENT, 9L,
+                ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK);
+    }
+
+    @Test
+    void exhaustedPlatformDailyQuotaDoesNotBlockDemo() {
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(persistedCompanion()));
+        when(quotaGuard.reserve(anyLong(), any(), anyInt())).thenThrow(
+                new BusinessException(ErrorCode.FORBIDDEN_ERROR, "今日伙伴对话次数已用完"));
+        assertThat(service.chat(subject, "你好").blockLast()).contains("演示回复");
+        verify(quotaGuard, never()).reserve(anyLong(), any(), anyInt());
+        org.mockito.Mockito.verifyNoInteractions(trialLedger, languageInvoker);
+    }
+
+    @Test
+    void exhaustedPlatformDailyQuotaStillRejectsPlatformBeforeMessageOrProvider() {
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(persistedCompanion()));
+        when(quotaGuard.reserve(anyLong(), any(), anyInt())).thenThrow(
+                new BusinessException(ErrorCode.FORBIDDEN_ERROR, "今日伙伴对话次数已用完"));
+        assertThatThrownBy(() -> service.chat(subject, "你好"))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("次数已用完");
+        verify(messageRepository, never()).append(any());
+        verify(chatModelProvider, never()).getIfAvailable();
+        verify(trialLedger, never()).settle(anyLong(), anyLong());
+    }
+
+    @Test
     void byokMultilineReplyCompletesAndPersistsInsteadOfFailingAfterStreaming() {
         properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(persistedCompanion()));
@@ -489,6 +533,19 @@ class CompanionChatServiceTest {
     }
 
     @Test
+    void byokRemovedBetweenModeAndRoutingCannotBypassExplicitDemoPolicy() {
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(persistedCompanion()));
+        org.mockito.Mockito.doReturn(com.li.lipicturecloud.domain.companion.CompanionChatMode.MODEL)
+                .when(modeService).effectiveMode(7L);
+        when(languageRouter.decide(7L)).thenReturn(ModelRouteDecision.platform());
+        assertThatThrownBy(() -> service.chat(subject, "路由刚变化"))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("平台模型未启用");
+        org.mockito.Mockito.verifyNoInteractions(trialLedger, quotaGuard, languageInvoker);
+        verify(messageRepository, never()).append(any());
+        verify(chatModelProvider, never()).getIfAvailable();
+    }
+
+    @Test
     void platformPathReservesSettlesAndReleasesTrialBalance() {
         Companion companion = persistedCompanion();
         properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
@@ -505,6 +562,7 @@ class CompanionChatServiceTest {
         String reply = service.chat(subject, "你好").blockLast();
 
         assertThat(reply).isEqualTo("伙伴的回复");
+        verify(quotaGuard).reserve(7L, java.time.LocalDate.parse("2026-08-14"), 50);
         verify(trialLedger).reserve(7L, 1L);
         verify(trialLedger).settle(7L, 1L);
         verify(trialLedger, never()).release(anyLong(), anyLong());
