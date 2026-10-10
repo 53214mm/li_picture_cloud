@@ -126,6 +126,22 @@ class CompanionMemoryRecallTest {
     }
 
     @Test
+    void aHealthyPartialIndexStillRecallsNamesAndTagsOutsideItsFirstBatch() {
+        FakeIndex index = new FakeIndex();
+        List<CompanionMemory> usable = new ArrayList<>();
+        for (int i = 10; i < 35; i++) {
+            usable.add(memory(i, 400L + i, "普通风景"));
+        }
+        usable.add(knight);
+        usable.addFirst(maid);
+        CompanionMemoryRecall recall = new CompanionMemoryRecall(index, ids -> labels, 0.45);
+        assertThat(recalledIds(recall.recall("机械女仆和骑士少女", usable, COMPANION, SUBJECT, 5)))
+                .containsExactlyInAnyOrder(1L, 3L);
+        assertThat(index.upserted).hasSize(20);
+        assertThat(recalledIds(recall.recall("图片 #301", usable, COMPANION, SUBJECT, 5))).first().isEqualTo(1L);
+    }
+
+    @Test
     void noUsableMemoriesMeansNothingToRecall() {
         CompanionMemoryRecall.MemoryRecall recall = lexicalRecall().recall("骑士", List.of(), COMPANION, SUBJECT, 5);
         assertThat(recall.recalled()).isEmpty();

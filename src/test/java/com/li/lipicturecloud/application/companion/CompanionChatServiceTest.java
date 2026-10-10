@@ -81,6 +81,55 @@ class CompanionChatServiceTest {
     private com.li.lipicturecloud.domain.companion.ChatSessionBoundaryRepository boundaries;
     private CompanionEpisodeService episodes;
 
+    @Test
+    void aReplyStartedBeforeClearCannotRestoreDeletedHistory() {
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(persistedCompanion()));
+        Flux<String> oldReply = service.chat(subject, "清空前启动的回复");
+        service.clearHistory(subject);
+        oldReply.blockLast();
+        verify(messageRepository, times(1)).append(any());
+    }
+
+    @Test
+    void oldConversationSummariesCannotDelayTheCurrentFirstDelta() {
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(persistedCompanion()));
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        ChatModel model = mock(ChatModel.class);
+        when(chatModelProvider.getIfAvailable()).thenReturn(model);
+        when(model.stream(any(Prompt.class))).thenReturn(Flux.just(new ChatResponse(List.of(new Generation(new AssistantMessage("当前回复"))))));
+        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(), any())).thenReturn("绫页");
+        java.util.concurrent.atomic.AtomicBoolean firstDelta = new java.util.concurrent.atomic.AtomicBoolean();
+        org.mockito.Mockito.doAnswer(call -> {
+            assertThat(firstDelta.get()).as("summary must follow the current first delta").isTrue();
+            return null;
+        }).when(episodes).schedule(anyLong(), anyLong(), any(), any(), anyLong());
+        assertThat(service.chat(subject, "这是当前这一轮").doOnNext(delta -> firstDelta.set(true)).collectList().block())
+                .containsExactly("当前回复");
+    }
+
+    @Test
+    void aContinuousConversationOutgrowingThePromptWindowIsNotSummarised() {
+        Companion companion = persistedCompanion();
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        ChatModel model = mock(ChatModel.class);
+        when(chatModelProvider.getIfAvailable()).thenReturn(model);
+        when(model.stream(any(Prompt.class))).thenReturn(Flux.just(new ChatResponse(List.of(new Generation(new AssistantMessage("收到"))))));
+        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(), any())).thenReturn("绫页");
+        java.util.ArrayList<CompanionChatMessage> history = new java.util.ArrayList<>();
+        for (int i = 30; i >= 1; i--) {
+            history.add(CompanionChatMessage.user(11L, 7L, "连续聊天第" + i + "句话",
+                    NOW.minusSeconds((31 - i) * 300L)).withId((long) i));
+        }
+        when(messageRepository.findRecent(11L, properties.getChatHistoryLimit() + 1))
+                .thenReturn(history.subList(0, properties.getChatHistoryLimit() + 1));
+        CompanionChatMessage edge = history.get(properties.getChatHistoryLimit() - 1);
+        when(messageRepository.findBefore(11L, edge.createdTime(), edge.id(), 100))
+                .thenReturn(history.subList(properties.getChatHistoryLimit(), history.size()));
+        service.chat(subject, "继续刚才的话题").collectList().block();
+        verify(episodes).schedule(eq(11L), eq(7L), any(), eq(NOW.minusSeconds(30 * 300L)), eq(51L));
+    }
+
     @BeforeEach
     void setUp() {
         companionRepository = mock(CompanionRepository.class);
@@ -97,8 +146,20 @@ class CompanionChatServiceTest {
         trialLedger = mock(com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService.class);
         boundaries = mock(com.li.lipicturecloud.domain.companion.ChatSessionBoundaryRepository.class);
         episodes = mock(CompanionEpisodeService.class);
-        when(messageRepository.append(any())).thenAnswer(invocation ->
-                invocation.<CompanionChatMessage>getArgument(0).withId(51L));
+        java.util.Map<Long, CompanionChatMessage> stored = new java.util.HashMap<>();
+        when(messageRepository.append(any())).thenAnswer(invocation -> {
+            CompanionChatMessage saved = invocation.<CompanionChatMessage>getArgument(0).withId(51L);
+            stored.put(saved.id(), saved);
+            return saved;
+        });
+        when(messageRepository.findById(anyLong())).thenAnswer(call -> Optional.ofNullable(stored.get(call.<Long>getArgument(0))));
+        when(messageRepository.deleteByCompanion(anyLong())).thenAnswer(call -> {
+            int size = stored.size(); stored.clear(); return size;
+        });
+        when(companionRepository.findByOwnerIdForUpdate(anyLong())).thenAnswer(call ->
+                companionRepository.findByOwnerId(call.<Long>getArgument(0)));
+        org.springframework.transaction.PlatformTransactionManager manager = mock(org.springframework.transaction.PlatformTransactionManager.class);
+        when(manager.getTransaction(any())).thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
         when(messageRepository.findRecent(anyLong(), anyInt())).thenReturn(List.of());
         when(memoryService.confirmedMemoriesUsableBy(any(), any(), anyInt())).thenReturn(List.of());
         when(languageRouter.decide(anyLong())).thenReturn(
@@ -110,6 +171,8 @@ class CompanionChatServiceTest {
                 new CompanionMemoryRecall(new com.li.lipicturecloud.infrastructure.companion.UnavailableCompanionMemoryIndex(),
                         ids -> java.util.Map.of(), 0.45),
                 new CompanionChatSessions(boundaries, properties), episodes,
+                new CompanionChatWrites(companionRepository, messageRepository,
+                        mock(com.li.lipicturecloud.domain.companion.CompanionChatEpisodeRepository.class), manager),
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -247,10 +310,10 @@ class CompanionChatServiceTest {
         // 三条历史（倒序），每条 120 码点；预算 400 只装得下最近的约两条。
         String longText = "历史消息".repeat(30);
         CompanionChatMessage latest = CompanionChatMessage.companion(companion.id(), 7L, longText,
-                "internal", "demo-v1", NOW.plusSeconds(3));
-        CompanionChatMessage middle = CompanionChatMessage.user(companion.id(), 7L, longText, NOW.plusSeconds(2));
+                "internal", "demo-v1", NOW.plusSeconds(3)).withId(43L);
+        CompanionChatMessage middle = CompanionChatMessage.user(companion.id(), 7L, longText, NOW.plusSeconds(2)).withId(42L);
         CompanionChatMessage oldest = CompanionChatMessage.companion(companion.id(), 7L, longText,
-                "internal", "demo-v1", NOW.plusSeconds(1));
+                "internal", "demo-v1", NOW.plusSeconds(1)).withId(41L);
         when(messageRepository.findRecent(companion.id(), 21))
                 .thenReturn(List.of(latest, middle, oldest));
 
@@ -281,7 +344,7 @@ class CompanionChatServiceTest {
         when(contextAssembler.systemPrompt(eq(11L), eq(7L), eq(5), any(), any(CompanionMemoryRecall.MemoryRecall.class), any(CompanionChatContextAssembler.Conversation.class))).thenReturn("系统提示");
         when(messageRepository.findRecent(companion.id(), 21))
                 .thenReturn(List.of(CompanionChatMessage.companion(companion.id(), 7L,
-                        "历史消息".repeat(30), "internal", "demo-v1", NOW.plusSeconds(3))));
+                        "历史消息".repeat(30), "internal", "demo-v1", NOW.plusSeconds(3)).withId(43L)));
 
         service.chat(subject, "你好").blockLast();
 
@@ -302,7 +365,6 @@ class CompanionChatServiceTest {
         org.assertj.core.api.Assertions.assertThat(service.clearHistory(subject)).isEqualTo(4);
         verify(messageRepository).deleteByCompanion(11L);
         // 从聊天整理出的经历一起清掉，否则"干净的上下文"里还会想起旧聊天。
-        verify(episodes).clear(11L);
 
         when(companionRepository.findByOwnerId(7L)).thenReturn(java.util.Optional.empty());
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.clearHistory(subject))
@@ -624,7 +686,7 @@ class CompanionChatServiceTest {
         verify(chatModel).stream(captor.capture());
         assertThat(captor.getValue().getInstructions()).extracting(Message::getText)
                 .containsExactly("系统提示", "晚上吃什么");
-        verify(episodes).consolidate(eq(11L), eq(7L), any(), eq(NOW), eq(51L));
+        verify(episodes).schedule(eq(11L), eq(7L), any(), eq(NOW), eq(51L));
         ArgumentCaptor<CompanionChatContextAssembler.Conversation> conversation =
                 ArgumentCaptor.forClass(CompanionChatContextAssembler.Conversation.class);
         verify(contextAssembler).systemPrompt(eq(11L), eq(7L), eq(5), any(),

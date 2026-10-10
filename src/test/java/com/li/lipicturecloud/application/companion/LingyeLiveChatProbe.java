@@ -200,6 +200,11 @@ public final class LingyeLiveChatProbe {
                 List<CompanionChatMessage> recent = new ArrayList<>(stored); Collections.reverse(recent);
                 return recent.stream().limit(call.<Integer>getArgument(1)).toList();
             });
+            when(messages.findById(anyLong())).thenAnswer(call -> stored.stream()
+                    .filter(message -> message.id().equals(call.<Long>getArgument(0))).findFirst());
+            when(companions.findByOwnerIdForUpdate(7L)).thenAnswer(call -> companions.findByOwnerId(7L));
+            org.springframework.transaction.PlatformTransactionManager manager = mock(org.springframework.transaction.PlatformTransactionManager.class);
+            when(manager.getTransaction(any())).thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
             CompanionRelationshipRepository relationships = mock(CompanionRelationshipRepository.class);
             CompanionMemoryRepository memories = mock(CompanionMemoryRepository.class);
             CompanionMemory memory = CompanionMemory.candidate(11L, 7L, 101L, 21L, MemorySourceType.VISUAL,
@@ -239,7 +244,8 @@ public final class LingyeLiveChatProbe {
                             ids -> Map.of(), 0.45),
                     new CompanionChatSessions(mock(com.li.lipicturecloud.domain.companion.ChatSessionBoundaryRepository.class),
                             properties),
-                    mock(CompanionEpisodeService.class), clock);
+                    mock(CompanionEpisodeService.class), new CompanionChatWrites(companions, messages,
+                            mock(com.li.lipicturecloud.domain.companion.CompanionChatEpisodeRepository.class), manager), clock);
         }
     }
 }

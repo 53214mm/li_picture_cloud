@@ -60,6 +60,19 @@ public class MybatisCompanionChatMessageRepository implements CompanionChatMessa
     }
 
     @Override
+    public List<CompanionChatMessage> findBefore(long companionId, java.time.Instant time, long id, int limit) {
+        return messageMapper.selectList(new LambdaQueryWrapper<CompanionChatMessageEntity>()
+                        .eq(CompanionChatMessageEntity::getCompanionId, companionId)
+                        .and(cursor -> cursor.lt(CompanionChatMessageEntity::getCreateTime, Date.from(time))
+                                .or(tie -> tie.eq(CompanionChatMessageEntity::getCreateTime, Date.from(time))
+                                        .lt(CompanionChatMessageEntity::getId, id)))
+                        .orderByDesc(CompanionChatMessageEntity::getCreateTime)
+                        .orderByDesc(CompanionChatMessageEntity::getId)
+                        .last("LIMIT " + boundedLimit(limit)))
+                .stream().map(this::fromRow).toList();
+    }
+
+    @Override
     public List<CompanionChatMessage> findOlder(long companionId, long afterId, java.time.Instant before, int limit) {
         return messageMapper.selectList(new LambdaQueryWrapper<CompanionChatMessageEntity>()
                         .eq(CompanionChatMessageEntity::getCompanionId, companionId)

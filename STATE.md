@@ -1,3 +1,21 @@
+# STATE · 绫页四项 review 修复
+
+## 当前有效状态（2026-10-10 09:51 UTC）
+
+- 唯一目标分支 `nexus/mainline-r11`，本轮从已核实远端 `d8a6e1a57afd0f8b995bdc700807099f22512b19` 在 Windows 建立同分支隔离 clone。原工作区 5 类未跟踪内容完整保留，未切分支、重启日常服务、开 PR、合并 main 或部署；已知同项目任务均未加载。
+- 本轮真实功能：20 条聊天窗口独立于真实段起点；重新登录/超过两小时间隔仍分段。总结在当前流终态及事务提交后，由每实例 2 workers + 32 queue 执行，同伙伴单飞；失败或拒绝留给后续用户聊天恢复，没有无限后台循环。
+- 清空消息/经历原子事务；源消息 id 为服务端持久版本令牌，写回与清空共享伙伴行锁并复核来源；清空前启动的回复和总结不得复活记录。索引未完整时全部授权确认候选补字面名字/标签召回，图片编号优先；完整索引语义阈值不变。
+- 普通聊天保持单次，主动冒泡仍 DEMO，立绘原版。没有真实 key/收费模型调用、实际用户数据删除或生产服务操作。
+- 本轮验证：受影响 8 套件 64/64；完整 offline verify 915 项（911 通过、4 既有可选跳过），0 失败/错误，原 JaCoCo/package 通过；Node22 前端 431/431、严格 lint、两组 build/budget 通过；Chromium 聊天/小屋网络 fixture 26/26。独立双轴 review 的 1 项首批召回缺口已修复并复核，无剩余阻断。不是 clean verify 或真实模型/生产验收。
+- 未验收/阻塞：真实模型人格与总结质量、MySQL/pgvector 实库、独立真实 HTTP、3 项 Redis opt-in。Windows 现有 API runner 为 POSIX-only，本轮不修改日常服务配合它。连续段起点扫描随段长度增长；总结并发限制为每实例，跨实例写回通过持久锁/唯一键保护。
+- 恢复入口：`C:\Users\MECHREVO\Documents\Codex\2026-10-10\task\li-picture-cloud-nexus`；详情、失败探索和精确复跑命令见 `docs/work/LINGYE-REVIEW-FIXES-2026-10-10.md`。日志在不入库的 `evidence-nexus/`，测试产物在 target；原工作区继续留在本轮基线。
+- 发布检查点：功能/验证已完成，将以 `fix(companion): preserve session boundaries and fence asynchronous chat writes` 形成稳定提交；远端写入前必须重新检查目标 HEAD，只用现有 GitHub connector 的非强制快进及预期 HEAD 保护，最终 SHA/tree 回读后另记。不要从下方历史的旧云目录/暂停状态续开发。
+
+---
+
+## 此前状态与验证记录（保留历史，不代表本轮）
+
+
 # STATE · 绫页真实模型测试准备
 
 ## 当前有效状态（2026-10-10 01:02 UTC）

@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
  * 本轮聊天该想起哪些图片记忆。
  *
  * <p>输入必须是已通过来源授权检查的已确认记忆。召回顺序：对方点名的图片编号 → 向量库语义检索
- * （pgvector）→ 向量库不可用时退回字面两字匹配。所有命中都与输入求交集，所以已删除、忽略或
+ * （pgvector）→ 向量库不可用或索引不完整时补字面两字匹配。所有命中都与输入求交集，所以已删除、忽略或
  * 撤权的记忆即使还留在向量库里也不会被用到。</p>
  */
 @Component
@@ -73,7 +73,12 @@ public class CompanionMemoryRecall {
         String source = "LEXICAL";
         if (index.available()) {
             try {
-                RecallIndexSync.reconcile(index, companionId, subjectId, documents, MAX_INDEX_PER_TURN);
+                Map<Long, String> pending = RecallIndexSync.reconcile(index, companionId, subjectId,
+                        documents, MAX_INDEX_PER_TURN);
+                // Until the index is complete, exact labels anywhere in the live set remain recallable.
+                if (!pending.isEmpty()) {
+                    selected.addAll(RecallIndexSync.lexical(query, documents));
+                }
                 index.search(companionId, subjectId, query, bounded * 2 + 2).stream()
                         .filter(hit -> hit.similarity() >= minSimilarity && byId.containsKey(hit.memoryId()))
                         .sorted(Comparator.comparingDouble(CompanionMemoryIndex.Hit::similarity).reversed())

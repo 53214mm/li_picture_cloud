@@ -44,6 +44,36 @@ public class CompanionChatSessions {
         return cut(newestFirst, boundaries.lastLogin(subjectId).orElse(null), now, gap);
     }
 
+    /** Keep a bounded prompt window, but seek backwards to its real conversation boundary. */
+    public Session current(long subjectId, long companionId, List<CompanionChatMessage> newestFirst,
+                           Instant now, com.li.lipicturecloud.domain.companion.CompanionChatMessageRepository messages) {
+        Instant login = boundaries.lastLogin(subjectId).orElse(null);
+        Session window = cut(newestFirst, login, now, gap);
+        if (!window.continuing() || window.messagesNewestFirst().size() < newestFirst.size()) {
+            return window;
+        }
+        CompanionChatMessage cursor = window.messagesNewestFirst().getLast();
+        while (true) {
+            List<CompanionChatMessage> page = messages.findBefore(companionId, cursor.createdTime(), cursor.id(), 100);
+            if (page.isEmpty()) {
+                break;
+            }
+            boolean ended = false;
+            for (CompanionChatMessage older : page) {
+                if (login != null && older.createdTime().isBefore(login)
+                        || Duration.between(older.createdTime(), cursor.createdTime()).compareTo(gap) > 0) {
+                    ended = true;
+                    break;
+                }
+                cursor = older;
+            }
+            if (ended || page.size() < 100) {
+                break;
+            }
+        }
+        return new Session(window.messagesNewestFirst(), cursor.createdTime(), window.previousMessageAt());
+    }
+
     static Session cut(List<CompanionChatMessage> newestFirst, Instant lastLogin, Instant now, Duration gap) {
         List<CompanionChatMessage> session = new ArrayList<>();
         Instant cursor = now;

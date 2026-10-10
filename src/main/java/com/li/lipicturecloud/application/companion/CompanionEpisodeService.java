@@ -39,16 +39,69 @@ public class CompanionEpisodeService {
     private final CompanionEpisodeRecall recall;
     private final CompanionChatSessions sessions;
     private final Clock clock;
+    private final CompanionChatWrites writes;
+    private final java.util.Set<Long> inFlight = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.concurrent.ThreadPoolExecutor workers = new java.util.concurrent.ThreadPoolExecutor(
+            2, 2, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+            new java.util.concurrent.ArrayBlockingQueue<>(32), runnable -> {
+                Thread thread = new Thread(runnable, "companion-episode-summary");
+                thread.setDaemon(true);
+                return thread;
+            }, new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
 
     public CompanionEpisodeService(CompanionChatMessageRepository messages, CompanionChatEpisodeRepository episodes,
                                    ChatEpisodeSummarizer summarizer, CompanionEpisodeRecall recall,
-                                   CompanionChatSessions sessions, Clock clock) {
+                                   CompanionChatSessions sessions, CompanionChatWrites writes, Clock clock) {
         this.messages = messages;
         this.episodes = episodes;
         this.summarizer = summarizer;
         this.recall = recall;
         this.sessions = sessions;
         this.clock = clock;
+        this.writes = writes;
+    }
+
+    /** Called only after the current stream terminates. No timer or automatic retry loop. */
+    public void schedule(long companionId, long subjectId, ModelRouteDecision route,
+                         Instant sessionStart, long currentMessageId) {
+        Runnable submit = () -> submit(companionId, subjectId, route, sessionStart, currentMessageId);
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()
+                && org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCommit() { submit.run(); }
+                    });
+        } else {
+            submit.run();
+        }
+    }
+
+    private void submit(long companionId, long subjectId, ModelRouteDecision route,
+                        Instant sessionStart, long currentMessageId) {
+        if (!inFlight.add(companionId)) {
+            return;
+        }
+        try {
+            workers.execute(() -> {
+                try {
+                    consolidate(companionId, subjectId, route, sessionStart, currentMessageId);
+                } catch (RuntimeException failure) {
+                    log.warn("companion_episode_task_failed subjectId={} exceptionType={}",
+                            subjectId, failure.getClass().getName());
+                } finally {
+                    inFlight.remove(companionId);
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException full) {
+            inFlight.remove(companionId);
+            log.debug("companion_episode_queue_full subjectId={}", subjectId);
+        }
+    }
+
+    @jakarta.annotation.PreDestroy
+    public void close() {
+        workers.shutdownNow();
+        inFlight.clear();
     }
 
     /**
@@ -59,6 +112,9 @@ public class CompanionEpisodeService {
      */
     public void consolidate(long companionId, long subjectId, ModelRouteDecision route,
                             Instant sessionStart, long currentMessageId) {
+        if (!writes.isCurrentSource(companionId, subjectId, currentMessageId)) {
+            return;
+        }
         List<CompanionChatMessage> pending;
         try {
             long covered = episodes.lastCoveredMessageId(companionId);
@@ -76,6 +132,9 @@ public class CompanionEpisodeService {
         List<List<CompanionChatMessage>> groups = CompanionChatSessions.split(pending, sessions.gap());
         for (List<CompanionChatMessage> group : groups.subList(Math.max(0, groups.size() - MAX_EPISODES_PER_TURN),
                 groups.size())) {
+            if (!writes.isCurrentSource(companionId, subjectId, currentMessageId)) {
+                return;
+            }
             ChatEpisodeSummarizer.Summary summary;
             if (userCodePoints(group) < MIN_USER_CODE_POINTS) {
                 summary = ChatEpisodeSummarizer.Summary.nothing();
@@ -92,9 +151,9 @@ public class CompanionEpisodeService {
             CompanionChatMessage first = group.getFirst();
             CompanionChatMessage last = group.getLast();
             Instant ended = last.createdTime().isBefore(first.createdTime()) ? first.createdTime() : last.createdTime();
-            boolean stored = episodes.append(new CompanionChatEpisode(null, companionId, subjectId,
+            boolean stored = writes.appendEpisode(new CompanionChatEpisode(null, companionId, subjectId,
                     first.id(), last.id(), first.createdTime(), ended, summary.text(),
-                    summary.modelProvider(), summary.modelCode(), clock.instant()));
+                    summary.modelProvider(), summary.modelCode(), clock.instant()), currentMessageId);
             log.info("companion_episode_consolidated subjectId={} messages={} memorable={} stored={}",
                     subjectId, group.size(), !summary.text().isEmpty(), stored);
         }

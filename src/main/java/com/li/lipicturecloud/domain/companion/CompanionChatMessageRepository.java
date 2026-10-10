@@ -15,6 +15,9 @@ public interface CompanionChatMessageRepository {
     /** 最近消息（按时间倒序），limit 由实现钳制在 [1, 100]。 */
     List<CompanionChatMessage> findRecent(long companionId, int limit);
 
+    /** Seek page preceding a (time, id) cursor; same-time messages must not be skipped. */
+    List<CompanionChatMessage> findBefore(long companionId, java.time.Instant time, long id, int limit);
+
     /**
      * id 大于 {@code afterId}、且早于 {@code before} 的消息（按时间倒序），limit 由实现钳制在 [1, 200]。
      * 用来找出还没整理成经历的旧对话。

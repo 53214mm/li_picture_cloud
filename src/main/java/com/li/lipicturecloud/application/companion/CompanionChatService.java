@@ -51,7 +51,7 @@ import java.util.Objects;
  * 伙伴站内对话：历史查询与一轮流式回复。
  *
  * <p>DEMO_ONLY 档不发起模型调用；MODEL 档只把"本轮消息 + 服务端组装的可解释上下文 +
- * 最近历史"交给语言模型，并先预占每日轮次额度。消息只追加，不修改不删除。</p>
+ * 最近历史"交给语言模型，并先预占每日轮次额度。消息只追加；显式清空统一删除消息和经历。</p>
  */
 @Service
 @ConditionalOnProperty(prefix = "app.companion", name = "enabled",
@@ -86,6 +86,7 @@ public class CompanionChatService {
     private final CompanionMemoryRecall memoryRecall;
     private final CompanionChatSessions sessions;
     private final CompanionEpisodeService episodes;
+    private final CompanionChatWrites writes;
     private final Clock clock;
 
     public CompanionChatService(CompanionRepository companionRepository,
@@ -106,6 +107,7 @@ public class CompanionChatService {
                                 CompanionMemoryRecall memoryRecall,
                                 CompanionChatSessions sessions,
                                 CompanionEpisodeService episodes,
+                                CompanionChatWrites writes,
                                 Clock clock) {
         this.companionRepository = companionRepository;
         this.messageRepository = messageRepository;
@@ -125,6 +127,7 @@ public class CompanionChatService {
         this.memoryRecall = memoryRecall;
         this.sessions = sessions;
         this.episodes = episodes;
+        this.writes = writes;
         this.clock = clock;
     }
 
@@ -150,10 +153,8 @@ public class CompanionChatService {
     public int clearHistory(AuthorizationSubject subject) {
         Objects.requireNonNull(subject, "subject");
         Companion companion = requireCompanion(subject);
-        int deleted = messageRepository.deleteByCompanion(companion.id());
-        int forgotten = episodes.clear(companion.id());
-        log.info("companion_chat_history_cleared subjectId={} deleted={} episodes={}",
-                subject.userId(), deleted, forgotten);
+        int deleted = writes.clear(companion.id(), subject.userId());
+        log.info("companion_chat_history_cleared subjectId={} deleted={}", subject.userId(), deleted);
         return deleted;
     }
 
@@ -168,7 +169,8 @@ public class CompanionChatService {
     public Flux<String> chat(AuthorizationSubject subject, String message) {
         Objects.requireNonNull(subject, "subject");
         String normalized = validateMessage(message);
-        Companion companion = requireCompanion(subject);
+        Companion companion = companionRepository.findByOwnerIdForUpdate(subject.userId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "请先唤醒伙伴"));
         // 用户选择的模式：真实模型时由语言路由决定用自己的模型还是平台模型。
         com.li.lipicturecloud.domain.companion.CompanionChatMode mode =
                 chatModeService.effectiveMode(subject.userId());
@@ -195,28 +197,33 @@ public class CompanionChatService {
         }
         String reply = demoReply(companion, subject, normalized);
         return Flux.just(reply).doOnComplete(() ->
-                persistReply(companion, subject, reply, "internal", "demo-v1", now));
+                persistReply(companion, subject, reply, "internal", "demo-v1", now, currentMessage.id()));
     }
 
     private Flux<String> modelReply(Companion companion, AuthorizationSubject subject,
                                     CompanionChatMessage currentMessage, String message,
                                     Instant now, ModelRouteDecision route, boolean platformReserved) {
-        List<ChatTurn> turns = assembleTurns(companion, subject, currentMessage, message, route, now);
+        CompanionChatSessions.Session session = currentSession(companion, subject, currentMessage, now);
+        List<ChatTurn> turns = assembleTurns(companion, subject, message, session, now);
+        Flux<String> reply;
         if (route.isByok()) {
-            return byokReply(companion, subject, route, turns, now);
+            reply = byokReply(companion, subject, route, turns, now, currentMessage.id());
+        } else {
+            reply = platformReply(companion, subject, turns, now, platformReserved, currentMessage.id());
         }
-        return platformReply(companion, subject, turns, now, platformReserved);
+        return reply.doFinally(signal -> episodes.schedule(companion.id(), subject.userId(), route,
+                session.start(), currentMessage.id()));
     }
 
     /**
      * 组装上下文与历史（预算守卫同模型路径）：先完成记忆撤权守卫与情绪惰性衰减，
      * 再拼接系统提示 + 当前这一段对话的预算内历史（旧→新）+ 当前消息。
      *
-     * <p>更早的对话不原样发给模型：新的一段开始时先把上一段整理成经历，再按相关程度想起来。</p>
+     * <p>更早的对话不原样发给模型：当前轮只召回已完成的经历，旧段总结在流结束后异步整理。</p>
      */
     private List<ChatTurn> assembleTurns(Companion companion, AuthorizationSubject subject,
-                                         CompanionChatMessage currentMessage, String message,
-                                         ModelRouteDecision route, Instant now) {
+                                         String message,
+                                         CompanionChatSessions.Session session, Instant now) {
         // 记忆进入模型上下文前必须通过来源撤权检查：真实撤权记忆被排除并落库失效，
         // 授权基础设施异常让本轮请求失败并回滚（fail-closed，绝不把无法确认权限的
         // 记忆发送给外部模型）。
@@ -226,14 +233,6 @@ public class CompanionChatService {
         CompanionMood currentMood = decayedCurrentMood(companion.id());
         // 历史为倒序；只按本轮落库消息的精确 id 排除自己，不再用"最新一条 USER"猜测——
         // 并发窗口的 USER 消息即使时间/位置更新也不会被误跳过，自己的消息也不会被重复加入。
-        List<CompanionChatMessage> others = messageRepository.findRecent(
-                        companion.id(), properties.getChatHistoryLimit() + 1).stream()
-                .filter(past -> !Objects.equals(past.id(), currentMessage.id()))
-                .limit(properties.getChatHistoryLimit())
-                .toList();
-        CompanionChatSessions.Session session = sessions.current(subject.userId(), others, now);
-        // 每轮都检查：没有待整理的旧对话时只是两次很小的查询；上次整理失败也会在这里补上。
-        episodes.consolidate(companion.id(), subject.userId(), route, session.start(), currentMessage.id());
         CompanionChatContextAssembler.Conversation conversation = new CompanionChatContextAssembler.Conversation(
                 now, session.previousMessageAt(), session.continuing(),
                 episodes.recall(message, companion.id(), subject.userId()));
@@ -253,18 +252,28 @@ public class CompanionChatService {
         }
         List<ChatTurn> turns = new ArrayList<>();
         turns.add(ChatTurn.system(systemPrompt));
-        // included 是新→旧，倒序后旧→新加入。
         for (int i = included.size() - 1; i >= 0; i--) {
             CompanionChatMessage past = included.get(i);
             turns.add(past.role().name().equals("USER")
                     ? ChatTurn.user(past.content()) : ChatTurn.assistant(past.content()));
         }
         turns.add(ChatTurn.user(message));
-        return turns;
+        return List.copyOf(turns);
+    }
+
+    private CompanionChatSessions.Session currentSession(Companion companion, AuthorizationSubject subject,
+                                                          CompanionChatMessage currentMessage, Instant now) {
+        List<CompanionChatMessage> others = messageRepository.findRecent(
+                        companion.id(), properties.getChatHistoryLimit() + 1).stream()
+                .filter(past -> !Objects.equals(past.id(), currentMessage.id()))
+                .limit(properties.getChatHistoryLimit())
+                .toList();
+        return sessions.current(subject.userId(), companion.id(), others, now,
+                messageRepository);
     }
 
     private Flux<String> platformReply(Companion companion, AuthorizationSubject subject,
-                                       List<ChatTurn> turns, Instant now, boolean platformReserved) {
+                                       List<ChatTurn> turns, Instant now, boolean platformReserved, long sourceId) {
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         if (chatModel == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "伙伴对话模型暂不可用");
@@ -281,7 +290,7 @@ public class CompanionChatService {
                     return text == null ? "" : text;
                 })
                 .doOnComplete(() -> {
-                    persistReply(companion, subject, collected.toString(), "dashscope", com.li.lipicturecloud.application.airuntime.PlatformModels.CHAT, now);
+                    persistReply(companion, subject, collected.toString(), "dashscope", com.li.lipicturecloud.application.airuntime.PlatformModels.CHAT, now, sourceId);
                     recordUsageSuccess(subject, null, ModelProvider.DASHSCOPE, com.li.lipicturecloud.application.airuntime.PlatformModels.CHAT,
                             CostSource.PLATFORM);
                     if (platformReserved) {
@@ -327,7 +336,7 @@ public class CompanionChatService {
 
     /** BYOK 路径：失败只记录安全错误码，绝不静默切换到平台钱包。 */
     private Flux<String> byokReply(Companion companion, AuthorizationSubject subject,
-                                   ModelRouteDecision route, List<ChatTurn> turns, Instant now) {
+                                   ModelRouteDecision route, List<ChatTurn> turns, Instant now, long sourceId) {
         StringBuilder collected = new StringBuilder();
         return languageInvoker.stream(route, turns)
                 .map(delta -> {
@@ -336,7 +345,7 @@ public class CompanionChatService {
                 })
                 .doOnComplete(() -> {
                     persistReply(companion, subject, collected.toString(),
-                            route.connection().provider().name(), route.connection().modelCode(), now);
+                            route.connection().provider().name(), route.connection().modelCode(), now, sourceId);
                     recordUsageSuccess(subject, route.connection().id(), route.connection().provider(),
                             route.connection().modelCode(), CostSource.BYOK);
                 })
@@ -427,14 +436,15 @@ public class CompanionChatService {
     }
 
     private void persistReply(Companion companion, AuthorizationSubject subject, String reply,
-                              String provider, String model, Instant now) {
+                              String provider, String model, Instant now, long sourceId) {
         String content = reply == null || reply.isBlank() ? "（这次没有想好怎么回）" : reply.strip();
         if (content.codePointCount(0, content.length()) > CompanionChatMessage.MAX_CONTENT_CODE_POINTS) {
             int end = content.offsetByCodePoints(0, CompanionChatMessage.MAX_CONTENT_CODE_POINTS);
             content = content.substring(0, end);
         }
-        messageRepository.append(CompanionChatMessage.companion(
-                companion.id(), subject.userId(), content, provider, model, now));
+        boolean stored = writes.appendReply(CompanionChatMessage.companion(
+                companion.id(), subject.userId(), content, provider, model, now), sourceId);
+        if (!stored) { return; }
         log.info("companion_chat_reply_completed subjectId={} provider={} model={} characters={}",
                 subject.userId(), provider, model, content.codePointCount(0, content.length()));
     }

@@ -34,18 +34,24 @@ final class RecallIndexSync {
      *
      * @param live 当前可用条目 id → 用于向量化的文本
      */
-    static void reconcile(CompanionMemoryIndex index, long companionId, long subjectId,
+    static Map<Long, String> reconcile(CompanionMemoryIndex index, long companionId, long subjectId,
                           Map<Long, String> live, int maxPerTurn) {
         Map<Long, String> indexed = index.fingerprints(companionId, subjectId);
         List<CompanionMemoryIndex.Entry> missing = new ArrayList<>();
+        Map<Long, String> pending = new LinkedHashMap<>();
         for (Map.Entry<Long, String> entry : live.entrySet()) {
             String fingerprint = fingerprint(entry.getValue());
-            if (!fingerprint.equals(indexed.get(entry.getKey())) && missing.size() < maxPerTurn) {
-                missing.add(new CompanionMemoryIndex.Entry(entry.getKey(), entry.getValue(), fingerprint));
+            if (!fingerprint.equals(indexed.get(entry.getKey()))) {
+                if (missing.size() < maxPerTurn) {
+                    missing.add(new CompanionMemoryIndex.Entry(entry.getKey(), entry.getValue(), fingerprint));
+                } else {
+                    pending.put(entry.getKey(), entry.getValue());
+                }
             }
         }
         index.upsert(companionId, subjectId, missing);
         index.remove(indexed.keySet().stream().filter(id -> !live.containsKey(id)).toList());
+        return pending;
     }
 
     /** 字面兜底：这句话与条目文本共享的两字组合越多越靠前。 */

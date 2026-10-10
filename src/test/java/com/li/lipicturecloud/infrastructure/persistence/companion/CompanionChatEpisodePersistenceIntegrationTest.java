@@ -61,6 +61,27 @@ class CompanionChatEpisodePersistenceIntegrationTest {
     }
 
     @Test
+    void sessionStartSeeksBeyondOneHundredMessagesAndKeepsEqualTimestampTies() {
+        long companion = 8891L;
+        java.util.ArrayList<CompanionChatMessage> saved = new java.util.ArrayList<>();
+        for (int i = 0; i < 251; i++) {
+            saved.add(messages.append(CompanionChatMessage.user(companion, 8891L, "连续聊天",
+                    MORNING.plusSeconds((i / 2) * 60L))));
+        }
+        var sessions = new com.li.lipicturecloud.application.companion.CompanionChatSessions(boundaries,
+                new com.li.lipicturecloud.config.CompanionFeatureProperties());
+        Instant now = MORNING.plusSeconds(7600);
+        var session = sessions.current(8891L, companion, messages.findRecent(companion, 20), now, messages);
+        assertThat(session.start()).isEqualTo(MORNING);
+        assertThat(session.messagesNewestFirst()).hasSize(20);
+        assertThat(messages.findBefore(companion, saved.get(1).createdTime(), saved.get(1).id(), 100))
+                .extracting(CompanionChatMessage::id).containsExactly(saved.getFirst().id());
+        boundaries.recordLogin(8891L, MORNING.plusSeconds(6000));
+        assertThat(sessions.current(8891L, companion, messages.findRecent(companion, 20), now, messages).start())
+                .isEqualTo(MORNING.plusSeconds(6000));
+    }
+
+    @Test
     void theLatestLoginIsKeptPerUser() {
         assertThat(boundaries.lastLogin(8803L)).isEmpty();
         boundaries.recordLogin(8803L, MORNING);
