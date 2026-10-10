@@ -233,7 +233,13 @@ public final class LingyeLiveChatProbe {
             service = new CompanionChatService(companions, messages, mock(CompanionMoodRepository.class), CompanionMoodRules.v1(),
                     relationships, memoryService, new CompanionChatContextAssembler(companions, relationships),
                     mock(ChatQuotaGuard.class), properties, platform, router, invoker, mock(ModelUsageService.class),
-                    mock(PlatformTrialLedgerService.class), new CompanionChatModeService(preferences, quick, properties), clock);
+                    mock(PlatformTrialLedgerService.class), new CompanionChatModeService(preferences, quick, properties),
+                    // 探针不连向量库；聊天经历整理会额外调模型，这里用空实现，不占 4 次请求上限。
+                    new CompanionMemoryRecall(new com.li.lipicturecloud.infrastructure.companion.UnavailableCompanionMemoryIndex(),
+                            ids -> Map.of(), 0.45),
+                    new CompanionChatSessions(mock(com.li.lipicturecloud.domain.companion.ChatSessionBoundaryRepository.class),
+                            properties),
+                    mock(CompanionEpisodeService.class), clock);
         }
     }
 }

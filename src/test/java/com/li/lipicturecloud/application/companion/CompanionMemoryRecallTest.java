@@ -67,6 +67,10 @@ class CompanionMemoryRecallTest {
         CompanionMemoryRecall.MemoryRecall asked = recall.recall("我喂你的图片你能记住吗", usable, COMPANION, SUBJECT, 5);
         assertThat(asked.recentPictures()).extracting(recalled -> recalled.memory().id()).containsExactly(3L, 2L, 1L);
         assertThat(asked.recentPictures().get(2).label().name()).isEqualTo("骑士");
+
+        CompanionMemoryRecall.MemoryRecall named = recall.recall("还记得图片 303 里的机械女仆吗", usable, COMPANION, SUBJECT, 5);
+        assertThat(named.recalled()).extracting(recalled -> recalled.memory().id()).first().isEqualTo(3L);
+        assertThat(named.recentPictures()).isEmpty();
     }
 
     @Test

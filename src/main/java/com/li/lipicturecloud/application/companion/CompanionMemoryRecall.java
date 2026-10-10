@@ -68,7 +68,8 @@ public class CompanionMemoryRecall {
             documents.put(memory.id(), documentText(memory, labelOf(memory, pictureLabels)));
         });
 
-        LinkedHashSet<Long> selected = new LinkedHashSet<>(mentionedPictures(query, owned));
+        List<Long> mentioned = mentionedPictures(query, owned);
+        LinkedHashSet<Long> selected = new LinkedHashSet<>(mentioned);
         String source = "LEXICAL";
         if (index.available()) {
             try {
@@ -88,7 +89,8 @@ public class CompanionMemoryRecall {
                 .map(byId::get).filter(Objects::nonNull).limit(bounded)
                 .map(memory -> new RecalledMemory(memory, labelOf(memory, pictureLabels)))
                 .toList();
-        List<RecalledMemory> recent = ASKS_ABOUT_PICTURES.matcher(query).find()
+        // 点名了具体哪张图（"还记得图片 101 吗"）就只说那张，不再把最近的图都列出来。
+        List<RecalledMemory> recent = mentioned.isEmpty() && ASKS_ABOUT_PICTURES.matcher(query).find()
                 ? owned.stream().limit(RECENT_PICTURE_LIMIT)
                         .map(memory -> new RecalledMemory(memory, labelOf(memory, pictureLabels))).toList()
                 : List.of();

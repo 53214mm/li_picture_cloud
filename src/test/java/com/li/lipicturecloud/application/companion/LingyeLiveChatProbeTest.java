@@ -77,7 +77,7 @@ class LingyeLiveChatProbeTest {
         }
         assertThat(invoker.captured.get(2)).hasSize(2);
         assertThat(invoker.captured.get(2).get(0).content()).startsWith(LingyePersona.systemPrompt()).doesNotContain(LingyeLiveChatProbe.MEMORY);
-        assertThat(invoker.captured.get(3).get(0).content()).contains(LingyeLiveChatProbe.MEMORY,"图片=101","已确认").doesNotContain(LingyeLiveChatProbe.UNRELATED_MEMORY);
+        assertThat(invoker.captured.get(3).get(0).content()).contains(LingyeLiveChatProbe.MEMORY,"对方上传的图片 #101","视觉模型的客观描述").doesNotContain(LingyeLiveChatProbe.UNRELATED_MEMORY);
         assertThatThrownBy(() -> invoker.stream(ModelRouteDecision.byok(LingyeLiveChatProbe.connection(),"synthetic-key"),
                 List.of(new ChatTurn("user","hello"))).blockLast()).isInstanceOf(IllegalStateException.class);
         assertThat(invoker.requests.get()).isEqualTo(5); // fifth attempted subscription is denied before transport
