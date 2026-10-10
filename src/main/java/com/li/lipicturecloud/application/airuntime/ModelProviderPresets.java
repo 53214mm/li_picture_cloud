@@ -50,7 +50,7 @@ public final class ModelProviderPresets {
                 "moonshot-v1-8k", "moonshot-v1-32k");
         register(ModelProvider.DASHSCOPE, "通义千问",
                 "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "qwen-plus", "qwen-max", "qwen-turbo");
+                "qwen3.8-max", "qwen3.8-flash", "qwen-plus");
         register(ModelProvider.SILICONFLOW, "硅基流动", "https://api.siliconflow.cn/v1",
                 "deepseek-ai/DeepSeek-V3", "Qwen/Qwen2.5-7B-Instruct");
         register(ModelProvider.ZHIPU, "智谱", "https://open.bigmodel.cn/api/paas/v4",

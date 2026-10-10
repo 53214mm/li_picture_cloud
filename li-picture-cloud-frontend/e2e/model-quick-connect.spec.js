@@ -7,7 +7,8 @@ const DEEPSEEK_MODELS = ['deepseek-chat', 'deepseek-reasoner']
 const PROVIDERS = ['DEEPSEEK', 'OPENAI', 'ANTHROPIC', 'GOOGLE', 'MOONSHOT', 'DASHSCOPE', 'SILICONFLOW', 'ZHIPU']
 
 async function fixture(page, { current = { status: 'PLATFORM' }, models = DEEPSEEK_MODELS, listed = true, saved = [] } = {}) {
-  const state = { calls: [], errors: [], current, savedError: null, savedListError: false }
+  const state = { calls: [], errors: [], current, savedError: null, savedListError: false,
+    vision: { forcedSearch: false, supported: true, modelCode: 'qwen3.8-max' } }
   page.on('pageerror', error => state.errors.push(error.message))
   await page.route(url => url.pathname.startsWith('/api/'), async route => {
     const request = route.request()
@@ -26,6 +27,11 @@ async function fixture(page, { current = { status: 'PLATFORM' }, models = DEEPSE
     if (url.pathname === '/api/model/quick/providers') {
       return ok(route, PROVIDERS.map(provider => ({ provider, label: provider, recommendedModel: 'x' })))
     }
+    if (url.pathname === '/api/model/quick/vision-search' && request.method() === 'PUT') {
+      state.vision = { ...state.vision, forcedSearch: request.postDataJSON().forcedSearch }
+      return ok(route, state.vision)
+    }
+    if (url.pathname === '/api/model/quick/vision-search') return ok(route, state.vision)
     if (url.pathname === '/api/model/quick/current' && request.method() === 'GET') return ok(route, state.current)
     if (url.pathname === '/api/model/quick/current' && request.method() === 'DELETE') {
       state.current = { status: 'PLATFORM' }
@@ -195,4 +201,20 @@ test.describe('narrow screens', () => {
     expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth)).toBe(true)
     await page.screenshot({ path: testInfo.outputPath('quick-connect-mobile.png'), fullPage: true })
   })
+})
+
+test('vision search can be switched on and explains models that cannot search', async ({ page }) => {
+  const state = await fixture(page)
+  await page.goto('/model-gateway')
+  const toggle = page.getByTestId('vision-search')
+  await expect(toggle.getByText('未开启')).toBeVisible()
+  await toggle.getByRole('switch').check()
+  await expect(toggle.getByText('已开启')).toBeVisible()
+  expect(state.calls.filter(call => call.path === '/api/model/quick/vision-search' && call.method === 'PUT')
+    .map(call => call.body)).toEqual([{ forcedSearch: true }])
+
+  state.vision = { forcedSearch: true, supported: false, modelCode: 'gpt-4o' }
+  await page.reload()
+  await expect(page.getByTestId('vision-search')).toContainText('当前识图模型（gpt-4o）不支持带图联网')
+  expect(state.errors).toEqual([])
 })

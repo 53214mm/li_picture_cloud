@@ -75,7 +75,8 @@ public class CompanionConfiguration {
             ObjectMapper objectMapper,
             CompanionFeatureProperties properties,
             com.li.lipicturecloud.application.airuntime.VisionRouter visionRouter,
-            com.li.lipicturecloud.application.airuntime.ModelUsageService modelUsageService) {
+            com.li.lipicturecloud.application.airuntime.ModelUsageService modelUsageService,
+            com.li.lipicturecloud.application.airuntime.VisionSearchPreferenceService visionSearchPreference) {
         DashScopeVisionClient platform = DashScopeVisionClient.fromProperties(objectMapper,
                 properties);
         // 与平台客户端一致：连接超时 + 读取超时双保险，防止停滞的 BYOK 上游悬挂喂养线程。
@@ -86,7 +87,7 @@ public class CompanionConfiguration {
         requestFactory.setReadTimeout(properties.getVisionTimeout());
         RestClient byokRestClient = RestClient.builder().requestFactory(requestFactory).build();
         return new RoutedVisualObservationProvider(visionRouter, modelUsageService, platform,
-                byokRestClient, objectMapper);
+                byokRestClient, objectMapper, visionSearchPreference::forcedSearch);
     }
 
     @Bean

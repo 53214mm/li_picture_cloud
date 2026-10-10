@@ -27,7 +27,7 @@ public record VisualObservationCandidate(
     }
 
     public static final int MIN_MESSAGE_CODE_POINTS = 20;
-    public static final int MAX_MESSAGE_CODE_POINTS = 240;
+    public static final int MAX_MESSAGE_CODE_POINTS = 300;
 
     public VisualObservationCandidate {
         Objects.requireNonNull(mood, "mood");
@@ -46,7 +46,7 @@ public record VisualObservationCandidate(
         companionMessage = companionMessage.strip();
         int messageLength = companionMessage.codePointCount(0, companionMessage.length());
         if (messageLength < MIN_MESSAGE_CODE_POINTS || messageLength > MAX_MESSAGE_CODE_POINTS) {
-            throw new IllegalArgumentException("companionMessage must be between 20 and 240 characters");
+            throw new IllegalArgumentException("companionMessage must be between 20 and 300 characters");
         }
         if (companionMessage.codePoints().anyMatch(Character::isISOControl)
                 || containsExternalLink(companionMessage)) {

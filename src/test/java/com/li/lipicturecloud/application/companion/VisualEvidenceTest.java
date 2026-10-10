@@ -16,19 +16,33 @@ class VisualEvidenceTest {
         VisualObservationCandidate candidate = new VisualObservationCandidate(VisualObservationCandidate.Mood.CALM,
                 2, 1, false, 0, 1, BigDecimal.ONE, "ignored legacy text", evidence);
         assertThat(candidate.companionMessage()).isEqualTo("可见观察：" + OBSERVATION);
+        assertThat(candidate.evidence().possibleIdentity()).isEmpty();
         assertThat(candidate.evidence()).isEqualTo(evidence);
     }
 
     @Test
     void rejectsFirstPersonUnsafeAndOverBudgetFields() {
         for (String invalid : new String[]{"我看见" + OBSERVATION, "绫页觉得" + OBSERVATION,
-                "I can see " + OBSERVATION, OBSERVATION + "https://example.test", OBSERVATION + "\n", "猫".repeat(161)}) {
+                "I can see " + OBSERVATION, OBSERVATION + "https://example.test", OBSERVATION + "\n", "猫".repeat(151)}) {
             // Trailing whitespace is normalized; embedded controls are rejected.
             String value = invalid.endsWith("\n") ? OBSERVATION + "\n天空" : invalid;
             assertThatThrownBy(() -> new VisualEvidence(value, "")).isInstanceOf(IllegalArgumentException.class);
         }
-        assertThatThrownBy(() -> new VisualEvidence(OBSERVATION, "可能".repeat(31)))
+        assertThatThrownBy(() -> new VisualEvidence(OBSERVATION, "可能".repeat(36)))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new VisualEvidence(OBSERVATION, "", "可能".repeat(26)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new VisualEvidence(OBSERVATION, "", "我觉得是芙宁娜"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void quotedTitlesMayContainFirstPersonWordsAndSummaryStaysWithinMemoryBudget() {
+        VisualEvidence evidence = new VisualEvidence("画面中央是《我的世界》的方块风格图标，被红色叉号覆盖，下方叠加一个巨大的红色对勾。",
+                "可能是在调侃这款游戏的梗图", "可能是《我的世界》相关的网络梗图");
+        assertThat(evidence.summary()).contains("可能的角色或出处（推测）：可能是《我的世界》相关的网络梗图");
+        VisualEvidence longest = new VisualEvidence("猫".repeat(150), "可".repeat(70), "能".repeat(50));
+        assertThat(longest.summary().codePointCount(0, longest.summary().length())).isLessThanOrEqualTo(300);
     }
 
     @Test

@@ -31,7 +31,7 @@ public class CompanionFeatureProperties {
     /** DashScope OpenAI-compatible vision endpoint. Production config must explicitly override it. */
     private URI visionEndpoint = URI.create("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
     private String visionProvider = "dashscope";
-    private String visionModel = "qwen3.6-flash";
+    private String visionModel = "qwen3.8-max";
     private String visionApiKey = "";
     private Duration visionTimeout = Duration.ofSeconds(20);
     private DataSize visionMaxBytes = DataSize.ofMegabytes(8);

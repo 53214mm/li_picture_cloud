@@ -5,6 +5,9 @@ import com.li.lipicturecloud.annotation.RateLimit;
 import com.li.lipicturecloud.application.airuntime.EndpointAllowlist;
 import com.li.lipicturecloud.application.airuntime.ModelProviderPresets;
 import com.li.lipicturecloud.application.airuntime.ModelQuickSetupService;
+import com.li.lipicturecloud.application.airuntime.VisionSearchPreferenceService;
+import com.li.lipicturecloud.application.airuntime.view.VisionSearchView;
+import com.li.lipicturecloud.model.dto.airuntime.VisionSearchRequest;
 import com.li.lipicturecloud.application.airuntime.view.ModelDiscoveryView;
 import com.li.lipicturecloud.application.airuntime.view.QuickConnectionView;
 import com.li.lipicturecloud.application.companion.CompanionChatModeService;
@@ -24,6 +27,7 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -47,15 +51,34 @@ public class ModelQuickSetupController {
     private final CompanionChatModeService chatModeService;
     private final EndpointAllowlist allowlist;
     private final UserService userService;
+    private final VisionSearchPreferenceService visionSearchService;
 
     public ModelQuickSetupController(ModelQuickSetupService quickSetupService,
                                      CompanionChatModeService chatModeService,
                                      EndpointAllowlist allowlist,
-                                     UserService userService) {
+                                     UserService userService,
+                                     VisionSearchPreferenceService visionSearchService) {
         this.quickSetupService = quickSetupService;
         this.chatModeService = chatModeService;
         this.allowlist = allowlist;
         this.userService = userService;
+        this.visionSearchService = visionSearchService;
+    }
+
+    @GetMapping("/vision-search")
+    @AuthCheck
+    public BaseResponse<VisionSearchView> visionSearch(HttpServletRequest request) {
+        return ResultUtils.success(visionSearchService.view(userId(request)));
+    }
+
+    @PutMapping("/vision-search")
+    @AuthCheck
+    public BaseResponse<VisionSearchView> chooseVisionSearch(@RequestBody VisionSearchRequest body,
+                                                             HttpServletRequest request) {
+        if (body == null || body.getForcedSearch() == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请选择是否开启识图联网");
+        }
+        return ResultUtils.success(visionSearchService.choose(userId(request), body.getForcedSearch()));
     }
 
     /** 平台开放的厂商（端点命中白名单）及推荐模型。 */

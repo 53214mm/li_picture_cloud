@@ -83,6 +83,7 @@ public class CompanionChatService {
     private final ModelUsageService modelUsageService;
     private final com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService trialLedger;
     private final CompanionChatModeService chatModeService;
+    private final CompanionMemoryRecall memoryRecall;
     private final Clock clock;
 
     public CompanionChatService(CompanionRepository companionRepository,
@@ -100,6 +101,7 @@ public class CompanionChatService {
                                 ModelUsageService modelUsageService,
                                 com.li.lipicturecloud.application.airuntime.PlatformTrialLedgerService trialLedger,
                                 CompanionChatModeService chatModeService,
+                                CompanionMemoryRecall memoryRecall,
                                 Clock clock) {
         this.companionRepository = companionRepository;
         this.messageRepository = messageRepository;
@@ -116,6 +118,7 @@ public class CompanionChatService {
         this.modelUsageService = modelUsageService;
         this.trialLedger = trialLedger;
         this.chatModeService = chatModeService;
+        this.memoryRecall = memoryRecall;
         this.clock = clock;
     }
 
@@ -208,7 +211,7 @@ public class CompanionChatService {
         // 情绪必须是"当前情绪"：先按完整小时惰性衰减（与主页同口径）再引用。
         CompanionMood currentMood = decayedCurrentMood(companion.id());
         String systemPrompt = contextAssembler.systemPrompt(companion.id(), subject.userId(),
-                properties.getChatMemoryLimit(), currentMood, RelevantCompanionMemories.select(
+                properties.getChatMemoryLimit(), currentMood, memoryRecall.recall(
                         message, usableMemories, companion.id(), subject.userId(), properties.getChatMemoryLimit()));
         List<CompanionChatMessage> history = messageRepository.findRecent(
                 companion.id(), properties.getChatHistoryLimit());
@@ -257,8 +260,8 @@ public class CompanionChatService {
                     return text == null ? "" : text;
                 })
                 .doOnComplete(() -> {
-                    persistReply(companion, subject, collected.toString(), "dashscope", "qwen-max", now);
-                    recordUsageSuccess(subject, null, ModelProvider.DASHSCOPE, "qwen-max",
+                    persistReply(companion, subject, collected.toString(), "dashscope", com.li.lipicturecloud.application.airuntime.PlatformModels.CHAT, now);
+                    recordUsageSuccess(subject, null, ModelProvider.DASHSCOPE, com.li.lipicturecloud.application.airuntime.PlatformModels.CHAT,
                             CostSource.PLATFORM);
                     if (platformReserved) {
                         settleTrial(subject);
@@ -267,7 +270,7 @@ public class CompanionChatService {
                 .doOnError(error -> {
                     log.warn("companion_chat_model_failed subjectId={} exceptionType={}",
                             subject.userId(), error.getClass().getName());
-                    recordUsageFailure(subject, null, ModelProvider.DASHSCOPE, "qwen-max",
+                    recordUsageFailure(subject, null, ModelProvider.DASHSCOPE, com.li.lipicturecloud.application.airuntime.PlatformModels.CHAT,
                             CostSource.PLATFORM, ConnectivityResult.UPSTREAM_ERROR);
                     if (platformReserved) {
                         releaseTrial(subject);

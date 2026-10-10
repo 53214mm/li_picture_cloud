@@ -39,6 +39,10 @@ class CompanionSchemaMigrationTest {
             assertCreationTables(dataSource, 1);
             assertRecipeTables(dataSource, 1);
 
+            assertVisionPreferenceTable(dataSource, 1);
+            rollback(dataSource, visionPreferenceChangeSetCount(dataSource));
+            // 识图联网偏好表回滚后，主动判断额度表与聊天偏好表不受影响。
+            assertVisionPreferenceTable(dataSource, 0);
             assertThat(new JdbcTemplate(dataSource).queryForObject(
                     "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'COMPANION_PRESENCE_USAGE'", Integer.class)).isEqualTo(1);
             rollback(dataSource, 1);
@@ -441,6 +445,20 @@ class CompanionSchemaMigrationTest {
                 SELECT COUNT(*) FROM DATABASECHANGELOG
                 WHERE FILENAME LIKE '%2026-08-13-companion-visual-provider.xml'
                 """, Integer.class);
+    }
+
+    private static int visionPreferenceChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-10-10-model-vision-preference.xml'
+                """, Integer.class);
+    }
+
+    private static void assertVisionPreferenceTable(DataSource dataSource, int expected) {
+        assertThat(new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = 'model_vision_preference'
+                """, Integer.class)).isEqualTo(expected);
     }
 
     private static int chatPreferenceChangeSetCount(DataSource dataSource) {

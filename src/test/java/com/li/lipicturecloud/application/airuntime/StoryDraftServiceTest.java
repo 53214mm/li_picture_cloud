@@ -378,7 +378,7 @@ class StoryDraftServiceTest {
         verify(trialLedger, never()).release(anyLong(), anyLong());
         verify(trialLedger).settle(7L, StoryDraftService.DRAFT_TRIAL_COST);
         verify(usageService).recordSuccess(eq(7L), eq(ModelTask.LANGUAGE_AGENT), isNull(),
-                eq(ModelProvider.DASHSCOPE), eq("qwen-max"), eq(CostSource.PLATFORM), any());
+                eq(ModelProvider.DASHSCOPE), eq(PlatformModels.CHAT), eq(CostSource.PLATFORM), any());
         verify(taskRepository).save(org.mockito.ArgumentMatchers.argThat(t ->
                 t.status() == CreationStatus.FAILED), anyLong());
     }

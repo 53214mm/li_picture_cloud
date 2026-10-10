@@ -154,7 +154,7 @@ class DeploymentArtifactsTest {
                 "COMPANION_NUTRITION_POLICY=METADATA_ONLY",
                 "COMPANION_VISION_ENDPOINT=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
                 "COMPANION_VISION_PROVIDER=dashscope",
-                "COMPANION_VISION_MODEL=qwen3.6-flash",
+                "COMPANION_VISION_MODEL=qwen3.8-max",
                 "COMPANION_VISION_DAILY_LIMIT=10",
                 "COMPANION_VISION_TIMEOUT=20s",
                 "COMPANION_VISION_MAX_BYTES=8MB",

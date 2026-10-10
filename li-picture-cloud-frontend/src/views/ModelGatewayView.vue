@@ -8,6 +8,8 @@
 
       <ModelQuickConnect ref="quick" @changed="quickChanged" />
 
+      <VisionSearchToggle />
+
       <details class="advanced-panel" data-testid="gateway-advanced" @toggle="advancedOpen = $event.target.open">
         <summary>
           <span>高级设置</span>
@@ -22,6 +24,7 @@
 <script setup>
 import { ref } from 'vue'
 import ModelQuickConnect from '@/components/model/ModelQuickConnect.vue'
+import VisionSearchToggle from '@/components/model/VisionSearchToggle.vue'
 import ModelGatewayAdvanced from '@/components/model/ModelGatewayAdvanced.vue'
 
 // The advanced panel loads only when opened; quick and advanced views refresh each other.

@@ -33,7 +33,8 @@ class ModelQuickSetupControllerTest {
         when(quick.useExisting(7L, connectionId)).thenReturn(new QuickConnectionView(
                 QuickConnectionView.Status.CONNECTED, ModelProvider.DEEPSEEK, "DeepSeek", "deepseek-flash", connectionId));
         var mvc = MockMvcBuilders.standaloneSetup(new ModelQuickSetupController(quick, modes,
-                        mock(EndpointAllowlist.class), users))
+                        mock(EndpointAllowlist.class), users,
+                        mock(com.li.lipicturecloud.application.airuntime.VisionSearchPreferenceService.class)))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
         mvc.perform(post("/model/quick/connections/" + connectionId + "/use"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0))

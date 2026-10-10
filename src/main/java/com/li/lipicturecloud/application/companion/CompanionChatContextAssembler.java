@@ -26,7 +26,9 @@ import java.util.Objects;
 @Component
 public class CompanionChatContextAssembler {
 
-    private static final int MEMORY_CODE_POINT_LIMIT = 120;
+    /** 视觉记忆现在包含观察、可能的意义和角色，最长约 300 字；超过这个预算才截断。 */
+    private static final int MEMORY_CODE_POINT_LIMIT = 240;
+    private static final int RECENT_PICTURE_CODE_POINT_LIMIT = 60;
     private static final BigDecimal STRONG_MOOD = new BigDecimal("60");
     private static final BigDecimal STRONG_TRAIT = new BigDecimal("30");
     private static final java.time.ZoneId SHANGHAI = java.time.ZoneId.of("Asia/Shanghai");
@@ -51,6 +53,24 @@ public class CompanionChatContextAssembler {
     public String systemPrompt(long companionId, long subjectId, int memoryLimit,
                                CompanionMood currentMood, List<CompanionMemory> usableMemories) {
         Objects.requireNonNull(usableMemories, "usableMemories");
+        List<CompanionMemory> owned = usableMemories.stream()
+                .filter(memory -> memory.status() == MemoryStatus.CONFIRMED
+                        && memory.companionId() == companionId && memory.subjectId() == subjectId)
+                .toList();
+        return systemPrompt(companionId, subjectId, memoryLimit, currentMood,
+                new CompanionMemoryRecall.MemoryRecall(owned.stream()
+                        .map(memory -> new CompanionMemoryRecall.RecalledMemory(memory, null)).toList(),
+                        List.of(), CompanionMemoryRecall.pictureCount(owned)));
+    }
+
+    /**
+     * 组装系统提示词。
+     *
+     * @param recall 本轮召回结果：相关记忆（已授权、已确认）、对方问起时的最近图片、记得的图片总数
+     */
+    public String systemPrompt(long companionId, long subjectId, int memoryLimit,
+                               CompanionMood currentMood, CompanionMemoryRecall.MemoryRecall recall) {
+        Objects.requireNonNull(recall, "recall");
         Companion companion = companionRepository.findByOwnerId(subjectId)
                 .filter(value -> value.id() != null && value.id() == companionId)
                 .orElseThrow(() -> new IllegalStateException("伙伴不存在: " + companionId));
@@ -67,18 +87,30 @@ public class CompanionChatContextAssembler {
                     .append("（只影响细节，不改变上面的性格）\n");
         }
 
+        // 让她知道自己记得图片，但不主动提。
+        prompt.append("- 记忆：").append(recall.pictureCount() > 0
+                ? "你记得对方喂过的 " + recall.pictureCount() + " 张图；对方问起或聊到相关的才用，不主动提"
+                : "对方还没有喂过让你记住的图").append("\n");
+
         // 防御性状态过滤：输入已由调用方做过撤权扫描与 CONFIRMED 过滤，这里不再查询数据库。
-        List<CompanionMemory> memories = usableMemories.stream()
-                .filter(memory -> memory.status() == MemoryStatus.CONFIRMED
-                        && memory.companionId() == companionId && memory.subjectId() == subjectId)
+        List<CompanionMemoryRecall.RecalledMemory> memories = owned(recall.recalled(), companionId, subjectId)
                 .limit(Math.max(0, Math.min(memoryLimit, 10)))
                 .toList();
         // 没有相关记录时整段不出现：空段落本身也会把她的注意力拉回图片。
         if (!memories.isEmpty()) {
             prompt.append("\n## 这轮可能用得上的记录（用得上再用，用不上就当没看到）\n");
-            for (CompanionMemory memory : memories) {
-                prompt.append("- [").append(memorySource(memory)).append("] ")
-                        .append(truncate(memory.content(), MEMORY_CODE_POINT_LIMIT)).append("\n");
+            for (CompanionMemoryRecall.RecalledMemory recalled : memories) {
+                prompt.append("- [").append(memorySource(recalled)).append("] ")
+                        .append(truncate(recalled.memory().content(), MEMORY_CODE_POINT_LIMIT)).append("\n");
+            }
+        }
+        List<CompanionMemoryRecall.RecalledMemory> recent = owned(recall.recentPictures(), companionId, subjectId)
+                .toList();
+        if (!recent.isEmpty()) {
+            prompt.append("\n## 对方最近喂过的图（对方正在问这个，可以照着说，不要编多出来的）\n");
+            for (CompanionMemoryRecall.RecalledMemory recalled : recent) {
+                prompt.append("- ").append(pictureName(recalled)).append("：")
+                        .append(truncate(recalled.memory().content(), RECENT_PICTURE_CODE_POINT_LIMIT)).append("\n");
             }
         }
         prompt.append("""
@@ -152,8 +184,25 @@ public class CompanionChatContextAssembler {
         }
     }
 
-    private static String memorySource(CompanionMemory memory) {
-        String picture = memory.pictureId() == null ? "对方的记录" : "对方上传的图片 #" + memory.pictureId();
+    /** 防御：只放行本伙伴、本用户的已确认记忆。 */
+    private static java.util.stream.Stream<CompanionMemoryRecall.RecalledMemory> owned(
+            List<CompanionMemoryRecall.RecalledMemory> memories, long companionId, long subjectId) {
+        return memories.stream().filter(recalled -> recalled.memory().status() == MemoryStatus.CONFIRMED
+                && recalled.memory().companionId() == companionId && recalled.memory().subjectId() == subjectId);
+    }
+
+    private static String pictureName(CompanionMemoryRecall.RecalledMemory recalled) {
+        CompanionMemory memory = recalled.memory();
+        String named = recalled.label() == null || recalled.label().name().isEmpty()
+                ? "一张没起名的图" : "《" + recalled.label().name() + "》";
+        return named + "（" + MEMORY_DATE.format(memory.createdTime().atZone(SHANGHAI)) + "）";
+    }
+
+    private static String memorySource(CompanionMemoryRecall.RecalledMemory recalled) {
+        CompanionMemory memory = recalled.memory();
+        String described = recalled.label() == null ? "" : recalled.label().describe();
+        String picture = memory.pictureId() == null ? "对方的记录"
+                : "对方上传的图片 #" + memory.pictureId() + (described.isEmpty() ? "" : " " + described);
         String date = MEMORY_DATE.format(memory.createdTime().atZone(SHANGHAI));
         String origin = memory.content().equals(memory.originalContent())
                 ? "视觉模型的客观描述" : "对方亲自改过的描述";

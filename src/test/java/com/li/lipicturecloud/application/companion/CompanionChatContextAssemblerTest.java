@@ -103,8 +103,8 @@ class CompanionChatContextAssemblerTest {
     @Test
     void longMemoryContentIsTruncatedForThePrompt() {
         Companion companion = Companion.awaken(7L, CompanionBalance.v1()).persistedAs(11L);
-        // 204 码点：在记忆 300 上限内，但超过上下文的 120 截断线。
-        String longContent = "伙伴记得".concat("内容".repeat(100));
+        // 284 码点：在记忆 300 上限内，但超过上下文的 240 截断线。
+        String longContent = "伙伴记得".concat("内容".repeat(140));
         CompanionMemory confirmed = CompanionMemory.candidate(11L, 7L, 101L, 21L,
                 MemorySourceType.VISUAL, longContent, new BigDecimal("0.8"), NOW).confirm(NOW);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
@@ -147,6 +147,32 @@ class CompanionChatContextAssemblerTest {
                 .contains("本人的可用图片。").doesNotContain("不应展示");
         assertThat(assembler.systemPrompt(11L, 7L, 0, null, List.of(owned)))
                 .doesNotContain("本人的可用图片。");
+    }
+
+    @Test
+    void recallShowsMemoryAwarenessLabelsAndTheRecentListOnlyWhenGiven() {
+        Companion companion = Companion.awaken(7L, CompanionBalance.v1()).persistedAs(11L);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        CompanionMemory knight = CompanionMemory.candidate(11L, 7L, 301L, 21L, MemorySourceType.VISUAL,
+                "可见观察：一位少女身穿银色盔甲，双手举剑。", new BigDecimal("0.8"), NOW).confirm(NOW);
+        PictureLabel label = new PictureLabel(301L, "骑士", "", List.of("剑"));
+        CompanionMemoryRecall.RecalledMemory recalled = new CompanionMemoryRecall.RecalledMemory(knight, label);
+
+        String quiet = assembler.systemPrompt(11L, 7L, 5, null,
+                new CompanionMemoryRecall.MemoryRecall(List.of(), List.of(), 3));
+        assertThat(quiet).contains("- 记忆：你记得对方喂过的 3 张图；对方问起或聊到相关的才用，不主动提");
+        assertThat(quiet).doesNotContain("这轮可能用得上的记录", "对方最近喂过的图");
+
+        String relevant = assembler.systemPrompt(11L, 7L, 5, null,
+                new CompanionMemoryRecall.MemoryRecall(List.of(recalled), List.of(), 3));
+        assertThat(relevant).contains("[对方上传的图片 #301 《骑士》 标签：剑 · 8月14日 · 视觉模型的客观描述] 可见观察：一位少女");
+
+        String asked = assembler.systemPrompt(11L, 7L, 5, null,
+                new CompanionMemoryRecall.MemoryRecall(List.of(), List.of(recalled), 3));
+        assertThat(asked).contains("## 对方最近喂过的图", "- 《骑士》（8月14日）：可见观察：一位少女");
+
+        String none = assembler.systemPrompt(11L, 7L, 5, null, CompanionMemoryRecall.MemoryRecall.empty());
+        assertThat(none).contains("- 记忆：对方还没有喂过让你记住的图");
     }
 
     private static BigDecimal bd(String value) {

@@ -161,7 +161,7 @@ class VisualFeedingStubIntegrationTest {
     private static String response(String mood, int complexity, int energy, boolean social, int motion,
                                    int creativity, String confidence, String companionMessage) {
         return """
-                {"choices":[{"message":{"content":"{\\"mood\\":\\"%s\\",\\"sceneComplexity\\":%d,\\"energy\\":%d,\\"socialPresence\\":%s,\\"motionPotential\\":%d,\\"creativity\\":%d,\\"confidence\\":%s,\\"visibleObservations\\":\\"%s\\",\\"uncertainInterpretation\\":\\"\\"}"}}]}
+                {"choices":[{"message":{"content":"{\\"mood\\":\\"%s\\",\\"sceneComplexity\\":%d,\\"energy\\":%d,\\"socialPresence\\":%s,\\"motionPotential\\":%d,\\"creativity\\":%d,\\"confidence\\":%s,\\"visibleObservations\\":\\"%s\\",\\"uncertainInterpretation\\":\\"\\",\\"possibleIdentity\\":\\"\\"}"}}]}
                 """.formatted(mood, complexity, energy, social, motion, creativity, confidence, companionMessage);
     }
 }

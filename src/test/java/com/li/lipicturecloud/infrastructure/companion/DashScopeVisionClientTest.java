@@ -69,8 +69,12 @@ class DashScopeVisionClientTest {
                 .andExpect(jsonPath("$.response_format.json_schema.schema.properties.visibleObservations.minLength")
                         .value(20))
                 .andExpect(jsonPath("$.response_format.json_schema.schema.properties.visibleObservations.maxLength")
-                        .value(160))
-                .andExpect(jsonPath("$.response_format.json_schema.schema.properties.uncertainInterpretation.maxLength").value(60))
+                        .value(150))
+                .andExpect(jsonPath("$.response_format.json_schema.schema.properties.uncertainInterpretation.maxLength").value(70))
+                .andExpect(jsonPath("$.response_format.json_schema.schema.properties.possibleIdentity.maxLength").value(50))
+                .andExpect(jsonPath("$.messages[0].content").value(org.hamcrest.Matchers.containsString("possibleIdentity")))
+                .andExpect(jsonPath("$.messages[0].content").value(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("MUST search"))))
                 .andExpect(jsonPath("$.response_format.json_schema.schema.properties.companionMessage").doesNotExist())
                 .andRespond(withSuccess(validResponse(), MediaType.APPLICATION_JSON));
 
@@ -78,11 +82,13 @@ class DashScopeVisionClientTest {
 
         assertThat(result.candidate().evidence().visibleObservations()).isEqualTo("画面使用明亮暖色，几个人物相邻站立，背景包含建筑与树木，主体轮廓清晰。");
         assertThat(result.candidate().evidence().uncertainInterpretation()).isEqualTo("可能是户外聚会，具体关系无法确定。");
-        assertThat(result.candidate().companionMessage()).contains("可见观察：", "不确定解读：").doesNotContain("我");
+        assertThat(result.candidate().evidence().possibleIdentity()).isEqualTo("可能是《我的世界》的宣传图");
+        assertThat(result.candidate().companionMessage())
+                .contains("可见观察：", "可能的意义（推测）：", "可能的角色或出处（推测）：可能是《我的世界》的宣传图");
         assertThat(result.providerCode()).isEqualTo("dashscope");
         assertThat(result.modelCode()).isEqualTo("qwen3.6-flash");
-        assertThat(result.promptVersion()).isEqualTo("companion-vision-v3");
-        assertThat(result.resultSchemaVersion()).isEqualTo("visual-observation-v3");
+        assertThat(result.promptVersion()).isEqualTo("companion-vision-v4");
+        assertThat(result.resultSchemaVersion()).isEqualTo("visual-observation-v4");
         server.verify();
     }
 
@@ -176,6 +182,54 @@ class DashScopeVisionClientTest {
                 "image/jpeg", new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF});
     }
 
+    @Test
+    void forcedWebSearchUsesTheNativeStreamingEndpointAndParsesStreamedJson() {
+        String first = validCandidate().strip();
+        String split = first.substring(0, 40);
+        String rest = first.substring(40);
+        String sse = "id:1\nevent:result\ndata:" + frame(split) + "\n\nid:2\nevent:result\ndata:" + frame(rest) + "\n\n";
+        server.expect(requestTo("https://dashscope.test/api/v1/services/aigc/multimodal-generation/generation"))
+                .andExpect(header("Authorization", "Bearer test-api-key"))
+                .andExpect(header("X-DashScope-SSE", "enable"))
+                .andExpect(jsonPath("$.model").value("qwen3.6-flash"))
+                .andExpect(jsonPath("$.parameters.enable_search").value(true))
+                .andExpect(jsonPath("$.parameters.search_options.forced_search").value(true))
+                .andExpect(jsonPath("$.parameters.incremental_output").value(true))
+                .andExpect(jsonPath("$.input.messages[1].content[0].image").value("data:image/jpeg;base64,/9j/"))
+                .andExpect(jsonPath("$.input.messages[0].content[0].text").value(org.hamcrest.Matchers.containsString("MUST search")))
+                .andRespond(withSuccess(sse, MediaType.TEXT_EVENT_STREAM));
+
+        VisualObservationResult result = client.observe(jpegContent(), 7L, true);
+
+        assertThat(result.candidate().evidence().possibleIdentity()).isEqualTo("可能是《我的世界》的宣传图");
+        assertThat(result.promptVersion()).isEqualTo("companion-vision-v4-search");
+        server.verify();
+    }
+
+    @Test
+    void forcedWebSearchIsIgnoredForProvidersWithoutImageSearch() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer other = MockRestServiceServer.bindTo(builder).build();
+        DashScopeVisionClient openai = new DashScopeVisionClient(builder.build(), objectMapper,
+                URI.create("https://api.openai.test/v1/chat/completions"), "openai", "gpt-4o", "sk");
+        other.expect(requestTo("https://api.openai.test/v1/chat/completions"))
+                .andExpect(jsonPath("$.response_format.type").value("json_schema"))
+                .andRespond(withSuccess(validResponse(), MediaType.APPLICATION_JSON));
+
+        assertThat(openai.observe(jpegContent(), 7L, true).promptVersion()).isEqualTo("companion-vision-v4");
+        other.verify();
+    }
+
+    private String frame(String text) {
+        try {
+            return objectMapper.writeValueAsString(java.util.Map.of("output", java.util.Map.of("choices",
+                    java.util.List.of(java.util.Map.of("message", java.util.Map.of("role", "assistant",
+                            "content", java.util.List.of(java.util.Map.of("text", text))))))));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
     private static String validResponse() {
         return responseContent(validCandidate());
     }
@@ -184,7 +238,7 @@ class DashScopeVisionClientTest {
         return """
                 {"mood":"JOYFUL","sceneComplexity":2,"energy":3,"socialPresence":true,
                 "motionPotential":2,"creativity":3,"confidence":0.84,
-                "visibleObservations":"画面使用明亮暖色，几个人物相邻站立，背景包含建筑与树木，主体轮廓清晰。", "uncertainInterpretation":"可能是户外聚会，具体关系无法确定。"}
+                "visibleObservations":"画面使用明亮暖色，几个人物相邻站立，背景包含建筑与树木，主体轮廓清晰。", "uncertainInterpretation":"可能是户外聚会，具体关系无法确定。", "possibleIdentity":"可能是《我的世界》的宣传图"}
                 """;
     }
 

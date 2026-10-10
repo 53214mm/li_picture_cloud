@@ -176,3 +176,14 @@ test('model gateway emptiness requires a successful read rather than a mutation 
     assert.doesNotMatch(body, /(?:list|usage|mcp)Status\.value\s*=/)
   }
 })
+
+test('vision search toggle reads and saves the per-user switch and explains unsupported models', async () => {
+  const toggle = await readFile(fileURLToPath(new globalThis.URL('../src/components/model/VisionSearchToggle.vue', import.meta.url)), 'utf8')
+  const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/modelGateway.js', import.meta.url)), 'utf8')
+  const page = await readFile(fileURLToPath(new globalThis.URL('../src/views/ModelGatewayView.vue', import.meta.url)), 'utf8')
+  assert.match(api, /request\.get\('\/model\/quick\/vision-search'\)/)
+  assert.match(api, /request\.put\('\/model\/quick\/vision-search', \{ forcedSearch \}\)/)
+  assert.match(toggle, /role="switch" :checked="view\?\.forcedSearch"/)
+  assert.match(toggle, /v-if="view && !view\.supported"/)
+  assert.match(page, /<VisionSearchToggle \/>/)
+})

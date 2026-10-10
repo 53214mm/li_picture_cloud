@@ -29,6 +29,9 @@ export const connectQuickModel = (provider, apiKey, modelCode) =>
 export const getQuickConnection = () => request.get('/model/quick/current')
 export const useSavedQuickConnection = id => request.post(`/model/quick/connections/${id}/use`)
 export const useQuickPlatform = () => request.delete('/model/quick/current')
+// 识图强制联网：只有百炼千问真正生效，supported 由后端按当前识图模型判断。
+export const getVisionSearch = () => request.get('/model/quick/vision-search')
+export const setVisionSearch = forcedSearch => request.put('/model/quick/vision-search', { forcedSearch })
 
 export const listModelUsage = (limit = 50) => request.get('/model/usage', { params: { limit } })
 

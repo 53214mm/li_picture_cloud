@@ -24,7 +24,9 @@ spring:
     dashscope:
       chat:
         options:
-          model: qwen-max
+          # qwen3.8 是多模态模型，只能走多模态接口（multimodal-generation），纯文本接口会返回 400。
+          model: qwen3.8-max
+          multi-model: true
     mcp:
       client:
         sse:
@@ -87,11 +89,19 @@ app:
     nutrition-policy: ${COMPANION_NUTRITION_POLICY:METADATA_ONLY}
     vision-endpoint: ${COMPANION_VISION_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
     vision-provider: ${COMPANION_VISION_PROVIDER:dashscope}
-    vision-model: ${COMPANION_VISION_MODEL:qwen3.6-flash}
+    vision-model: ${COMPANION_VISION_MODEL:qwen3.8-max}
     vision-api-key: ${DASHSCOPE_API_KEY:}
-    vision-timeout: ${COMPANION_VISION_TIMEOUT:20s}
+    # 开启识图联网后要先搜索再描述，耗时明显更长。
+    vision-timeout: ${COMPANION_VISION_TIMEOUT:45s}
     vision-max-bytes: ${COMPANION_VISION_MAX_BYTES:8MB}
     vision-daily-limit: ${COMPANION_VISION_DAILY_LIMIT:10}
+    memory-vector:
+      # 记忆语义检索：需要 pgvector.datasource.url 与百炼 Key，任一缺失时自动退回字面匹配。
+      enabled: ${COMPANION_MEMORY_VECTOR_ENABLED:true}
+      embedding-model: ${COMPANION_MEMORY_EMBEDDING_MODEL:qwen3.7-text-embedding}
+      dimensions: ${COMPANION_MEMORY_EMBEDDING_DIMENSIONS:1024}
+      # 余弦相似度低于这个值的记忆不算"相关"。
+      min-similarity: ${COMPANION_MEMORY_MIN_SIMILARITY:0.45}
   model:
     credential:
       # 32 字节主密钥（64 位十六进制或 Base64）；生产环境缺失时启动失败，本地/测试回退到固定开发密钥。
