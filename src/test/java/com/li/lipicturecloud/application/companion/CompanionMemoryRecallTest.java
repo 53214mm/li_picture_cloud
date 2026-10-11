@@ -142,10 +142,87 @@ class CompanionMemoryRecallTest {
     }
 
     @Test
+    void aCompleteHealthyIndexWithoutSemanticHitsStillRecallsExactWords() {
+        FakeIndex index = new FakeIndex();
+        CompanionMemoryRecall recall = new CompanionMemoryRecall(index, ids -> labels, 0.45);
+        recall.recall("你好", List.of(knight, maid), COMPANION, SUBJECT, 5);
+        assertThat(recalledIds(recall.recall("骑士", List.of(knight, maid), COMPANION, SUBJECT, 5)))
+                .containsExactly(1L);
+    }
+
+    @Test
     void noUsableMemoriesMeansNothingToRecall() {
         CompanionMemoryRecall.MemoryRecall recall = lexicalRecall().recall("骑士", List.of(), COMPANION, SUBJECT, 5);
         assertThat(recall.recalled()).isEmpty();
         assertThat(recall.pictureCount()).isZero();
+    }
+
+    @Test
+    void followupsResolveOnlyTheLatestUserPictureTopic() {
+        var recall = lexicalRecall();
+        var usable = List.of(maid, knight);
+        for (String query : List.of("现在呢", "刚喂了", "那张图有什么内容")) {
+            assertThat(recalledIds(recall.recall(query, usable, COMPANION, SUBJECT, 5,
+                    List.of("图片301的内容")))).containsExactly(1L);
+        }
+        assertThat(recalledIds(recall.recall("图片303", usable, COMPANION, SUBJECT, 5,
+                List.of("图片301的内容")))).containsExactly(3L);
+        assertThat(recall.recall("现在呢", usable, COMPANION, SUBJECT, 5,
+                List.of("晚饭吃什么", "图片301的内容")).recalled()).isEmpty();
+        assertThat(recall.recall("你好", usable, COMPANION, SUBJECT, 5,
+                List.of("图片301的内容")).recalled()).isEmpty();
+        assertThat(recall.recall("现在呢", usable, COMPANION, SUBJECT, 5).recalled()).isEmpty();
+        for (String smallTalk : List.of("今晚去图书馆吗", "我的记忆力最近很差")) {
+            assertThat(recall.recall("现在呢", List.of(knight), COMPANION, SUBJECT, 5,
+                    List.of(smallTalk)).recalled()).isEmpty();
+        }
+    }
+
+    @Test
+    void ambiguousReferencesDoNotPickAnArbitraryPictureAndLimitsApplyToCandidates() {
+        var result = lexicalRecall().recall("那张图", List.of(maid, knight), COMPANION, SUBJECT, 5,
+                List.of("我喂过图片301和图片303"));
+        assertThat(result.referenceAmbiguous()).isTrue();
+        assertThat(result.recalled()).isEmpty();
+        assertThat(result.recentPictures()).hasSize(2);
+        var lexicalAmbiguity = lexicalRecall().recall("那张图里的女仆和骑士是谁", List.of(maid, knight),
+                COMPANION, SUBJECT, 5);
+        assertThat(lexicalAmbiguity.referenceAmbiguous()).isTrue();
+        assertThat(lexicalAmbiguity.recalled()).isEmpty();
+        assertThat(lexicalRecall().recall("我喂过哪些图片", List.of(maid, knight),
+                COMPANION, SUBJECT, 0).recentPictures()).isEmpty();
+        assertThat(lexicalRecall().recall("那张图", List.of(knight), COMPANION, SUBJECT, 5,
+                List.of("图片999的内容")).recalled()).isEmpty();
+        assertThat(lexicalRecall().recall("现在呢", List.of(knight), COMPANION, SUBJECT, 5,
+                List.of("图片999里的骑士")).recalled()).isEmpty();
+    }
+
+    @Test
+    void oneConfirmedPictureCanAnswerAnExplicitPictureFollowupWithoutHistory() {
+        assertThat(recalledIds(lexicalRecall().recall("那张图有什么内容", List.of(knight),
+                COMPANION, SUBJECT, 5))).containsExactly(1L);
+        var pending = CompanionMemory.candidate(COMPANION, SUBJECT, 302L, 21L, MemorySourceType.VISUAL,
+                "待确认内容", new BigDecimal("0.8"), NOW).withId(8L);
+        assertThat(recalledIds(lexicalRecall().recall("刚喂了", List.of(pending, knight),
+                COMPANION, SUBJECT, 5, List.of("图片302")))).isEmpty();
+    }
+
+    @Test
+    void consecutiveShortFollowupsRemainBoundedAndDoNotCrossANewUserTopic() {
+        var recall = lexicalRecall();
+        var usable = List.of(maid, knight);
+        assertThat(recalledIds(recall.recall("现在呢", usable, COMPANION, SUBJECT, 5,
+                List.of("现在哩", "刚喂了", "图片301的内容")))).containsExactly(1L);
+        assertThat(recall.recall("现在呢", usable, COMPANION, SUBJECT, 5,
+                List.of("刚喂了", "晚饭吃什么", "图片301的内容")).recalled()).isEmpty();
+        assertThat(recall.recall("现在呢", usable, COMPANION, SUBJECT, 5,
+                List.of("那张图先不聊了，晚饭吃什么", "图片301的内容")).recalled()).isEmpty();
+        var mixedTopic = recall.recall("现在呢", List.of(knight), COMPANION, SUBJECT, 5,
+                List.of("那张图先不聊了，晚饭吃什么", "图片301的内容"));
+        assertThat(mixedTopic.recalled()).isEmpty();
+        assertThat(mixedTopic.recentPictures()).isEmpty();
+        assertThat(recall.recall("现在呢", usable, COMPANION, SUBJECT, 5,
+                List.of("现在哩", "刚喂了", "现在呢", "图片301的内容")).recalled()).isEmpty();
     }
 
     private static final class FakeIndex implements CompanionMemoryIndex {

@@ -40,6 +40,13 @@ class CompanionSchemaMigrationTest {
             assertRecipeTables(dataSource, 1);
 
             assertChatEpisodeTables(dataSource, 2);
+            // 新观察模块在最新两个 changeSet；先验证只回滚其新增结构，旧聊天表完整。
+            rollback(dataSource, 2);
+            assertThat(new JdbcTemplate(dataSource).queryForObject(
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE LOWER(TABLE_NAME) = 'companion_observation_usage'", Integer.class)).isZero();
+            assertThat(new JdbcTemplate(dataSource).queryForObject(
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE LOWER(TABLE_NAME) = 'companion_chat_boundary' AND LOWER(COLUMN_NAME) = 'chatepoch'", Integer.class)).isZero();
+            assertChatEpisodeTables(dataSource, 2);
             rollback(dataSource, chatEpisodeChangeSetCount(dataSource));
             // 聊天经历与登录时间表回滚后，识图联网偏好表不受影响。
             assertChatEpisodeTables(dataSource, 0);

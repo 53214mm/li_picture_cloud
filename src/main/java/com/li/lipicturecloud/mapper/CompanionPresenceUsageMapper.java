@@ -9,6 +9,8 @@ import org.apache.ibatis.annotations.Update;
 import java.time.LocalDate;
 
 public interface CompanionPresenceUsageMapper extends BaseMapper<CompanionPresenceUsageEntity> {
+    @Select("SELECT attempts FROM companion_presence_usage WHERE subjectId = #{subjectId} AND usageDate = #{usageDate}")
+    Integer selectAttempts(@Param("subjectId") long subjectId, @Param("usageDate") LocalDate usageDate);
 
     @Select("SELECT id, subjectId, usageDate, attempts, revision, createTime, updateTime "
             + "FROM companion_presence_usage WHERE subjectId = #{subjectId} AND usageDate = #{usageDate} FOR UPDATE")

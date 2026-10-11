@@ -54,4 +54,15 @@ public class VisionRouter {
         }
         return decision;
     }
+
+    /** Metadata only: no credential decryption, capability probe, or model call. */
+    public Optional<com.li.lipicturecloud.domain.airuntime.ModelConnection> inspectCurrentByok(long subjectId) {
+        if (subjectId <= 0) throw new IllegalArgumentException("subjectId must be positive");
+        var rule=routingRepository.findBySubjectAndTask(subjectId,ModelTask.VISION_UNDERSTANDING);
+        if(rule.isEmpty() || rule.get().connectionId()==null) return Optional.empty();
+        var connection=byokResolver.inspectByok(subjectId,rule.get().connectionId(),"视觉");
+        var profile=profileService.findLatest(connection.id()).orElseThrow(()->new BusinessException(ErrorCode.OPERATION_ERROR,"视觉能力画像不可用"));
+        if(!profile.vision()) throw new BusinessException(ErrorCode.OPERATION_ERROR,"连接不支持视觉理解");
+        return Optional.of(connection);
+    }
 }

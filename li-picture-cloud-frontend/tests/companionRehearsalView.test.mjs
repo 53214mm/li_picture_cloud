@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { createRehearsalHistory } from '../src/presentation/rehearsalHistory.js'
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
@@ -60,19 +61,20 @@ async function flush() { for (let i = 0; i < 40; i++) await nextTick() }
 const readyStatus = () => ({ enabled: true, realEnabled: true, available: true, reason: 'READY', connection: { provider: 'OPENAI', modelCode: 'test-model' } })
 const deferred = () => { let resolve; let reject; const promise = new Promise((done, fail) => { resolve = done; reject = fail }); return { promise, resolve, reject } }
 async function fixture(overrides = {}) {
-  const boundaryUrl = moduleUrl(`export const fixture = ${++fixtureSequence}; export const shared = {}; export const useUserStore = () => shared.user; export const useCompanionChatStore = () => shared.chat; export const getCompanionChatMode = () => shared.mode(); export const presenceApi = { status: (...a) => shared.status(...a), open: (...a) => shared.open(...a), decide: (...a) => shared.decide(...a), close: (...a) => shared.close(...a) };`)
+  const boundaryUrl = moduleUrl(`export const fixture = ${++fixtureSequence}; export const shared = {}; export const useUserStore = () => shared.user; export const useCompanionRehearsalStore = () => shared.rehearsal; export const useCompanionChatStore = () => shared.chat; export const getCompanionChatMode = () => shared.mode(); export const presenceApi = { status: (...a) => shared.status(...a), open: (...a) => shared.open(...a), decide: (...a) => shared.decide(...a), close: (...a) => shared.close(...a) };`)
   const { shared } = await import(boundaryUrl)
   const calls = []; const requests = []
+  shared.rehearsal = reactive({ records: [], journal: null }); shared.rehearsal.journal = createRehearsalHistory({ onChange: rows => { shared.rehearsal.records = rows } })
   shared.user = reactive({ currentUser: { id: '1' } }); shared.chat = reactive({ state: { phase: 'idle' } })
   shared.mode = async () => { calls.push('mode'); return { mode: 'DEMO' } }
   shared.status = async options => { calls.push('status'); requests.push(['status', options]); return readyStatus() }
   shared.open = async data => { calls.push('open'); requests.push(['open', data]); return { mode: data.mode, sessionId: 's' } }
-  shared.decide = async data => { calls.push('decide'); requests.push(['decide', data]); return { ...data, sequence: String(data.sequence), mode: requests.findLast(([type]) => type === 'open')[1].mode, action: 'EMOTE', emote: 'NOD', remainingDecisions: 11 } }
+  shared.decide = async data => { calls.push('decide'); requests.push(['decide', data]); const mode = requests.findLast(([type]) => type === 'open')[1].mode; return { ...data, sequence: String(data.sequence), mode, action: 'EMOTE', emote: 'NOD', reason: mode === 'BYOK' ? 'DECIDED' : 'DEMO', remainingDecisions: 11 } }
   shared.close = async id => { calls.push('close'); requests.push(['close', id]) }
   Object.assign(shared, overrides)
   const stub = moduleUrl(`export default { props: ['presentation', 'chatMode'], render() { return null } }`)
-  const aliases = { vue: import.meta.resolve('vue'), '@/stores/user': boundaryUrl, '@/stores/companionChat': boundaryUrl, '@/api/companion': boundaryUrl, '@/api/companionPresence': boundaryUrl,
-    '@/components/companion/body/CompanionPortrait.vue': stub, '@/components/companion/CompanionChatPanel.vue': stub }
+  const aliases = { vue: import.meta.resolve('vue'), '@/stores/user': boundaryUrl, '@/stores/companionRehearsal': boundaryUrl, '@/stores/companionChat': boundaryUrl, '@/api/companion': boundaryUrl, '@/api/companionPresence': boundaryUrl,
+    '@/components/companion/body/CompanionPortrait.vue': stub, '@/components/companion/CompanionChatPanel.vue': stub, '@/components/companion/CompanionObservationPanel.vue': stub }
   for (const name of ['companionPresence', 'companionPresenceTransport', 'companionPresentation']) aliases[`@/presentation/${name}`] = new URL(`../src/presentation/${name}.js`, import.meta.url).href
   const { descriptor } = parse(await readFile(new URL('../src/views/CompanionRehearsalView.vue', import.meta.url), 'utf8'))
   const compiled = compileScript(descriptor, { id: `rehearsal-${fixtureSequence}`, inlineTemplate: true }).content.replace(/from (['"])([^'"]+)\1/g, (_, _quote, specifier) => { assert.ok(aliases[specifier], specifier); return `from ${JSON.stringify(aliases[specifier])}` })
@@ -88,7 +90,7 @@ async function fixture(overrides = {}) {
 function radio(f, index) { return descendants(f.root).filter(n => n.tag === 'input' && n.props.type === 'radio')[index] }
 function checkbox(f, index = 0) { return descendants(f.root).filter(n => n.tag === 'input' && n.props.type === 'checkbox')[index] }
 async function change(node, value) { await node.props.onChange({ target: { checked: value, value } }); await flush() }
-async function click(node) { assert.notEqual(node.props.disabled, true); await node.props.onClick(); await flush() }
+async function click(node) { assert.notEqual(node.props.disabled, true); node.props.onClick(); await flush() }
 test('real compiled rehearsal is default-off, privacy labeled, and only reads model status', async () => {
   const f = await fixture(); try {
     assert.match(text(f.root), /确定性模拟，不是 AI 生成/); assert.match(text(f.root), /尚无输入/)
@@ -122,7 +124,9 @@ test('hidden page clears visible input and user reply stops rehearsal while pres
     globalThis.document.visibilityState = 'hidden'; f.listeners.get('visibilitychange')(); await flush(); assert.match(text(f.root), /尚无输入/)
     globalThis.document.visibilityState = 'visible'; f.listeners.get('visibilitychange')(); await flush()
     await click(button(f.root, '打开普通聊天')); assert.deepEqual(f.calls, ['status', 'mode']); assert.equal(button(f.root, '上传完成').props.disabled, true)
-    await click(button(f.root, '收起聊天并继续试演')); assert.equal(button(f.root, '上传完成').props.disabled, false)
+    await click(button(f.root, '收起聊天并继续试演')); assert.equal(button(f.root, '上传完成').props.disabled, true)
+    await click(button(f.root, '新开本轮（保留试演记录，不清日额度）')); await change(checkbox(f), true)
+    assert.equal(button(f.root, '上传完成').props.disabled, false)
   } finally { await f.destroy() }
 })
 
@@ -135,7 +139,7 @@ test('BYOK requires mode selection, fresh enable, and a manual scenario; status/
     await change(checkbox(f), true); assert.deepEqual(f.calls, ['status'])
     await click(button(f.root, '上传完成'))
     assert.deepEqual(f.calls, ['status', 'open', 'decide'])
-    assert.deepEqual(f.requests.find(([type]) => type === 'open')[1], { enabled: true, mode: 'BYOK', maxDecisions: 12, muted: false, intensity: 'LOW' })
+    assert.deepEqual(f.requests.find(([type]) => type === 'open')[1], { enabled: true, mode: 'BYOK', maxDecisions: 12, muted: false, intensity: 'LOW', scope: 'REHEARSAL', cooldownSeconds: 5 })
     assert.match(text(f.root), /EMOTE · 真实模型 · BYOK/)
     assert.match(text(f.root), /服务端剩余 11 次决策/)
     await change(radio(f, 0), true)
@@ -286,4 +290,53 @@ test('account reset while hidden cannot permit a programmatic paid scenario befo
     assert.deepEqual(f.calls, ['status', 'status'])
     await click(button(f.root, '上传完成')); assert.deepEqual(f.calls, ['status', 'status', 'open', 'decide'])
   } finally { await f.destroy() }
+})
+
+test('manual server gate blocks BYOK while local simulation remains available', async () => {
+  const f = await fixture({ status: async () => ({ ...readyStatus(), rehearsalEnabled: false }) })
+  try { assert.equal(radio(f, 2).props.disabled, true); assert.match(text(f.root), /手动试演未开放/); await change(checkbox(f), true); await click(button(f.root, '上传完成')); assert.equal(f.shared.rehearsal.records.length, 1) }
+  finally { await f.destroy() }
+})
+test('new round retains results and clear is isolated from chat and daily counters; range does not silently clamp', async () => {
+  const f = await fixture({ status: async () => ({ ...readyStatus(), rehearsalEnabled: true, rehearsalDailyLimit: 100, rehearsalDailyRemaining: 94 }) })
+  try {
+    assert.match(text(f.root), /94 \/ 100 次/)
+    const limit = descendants(f.root).filter(n => n.tag === 'input' && n.props.type === 'number')[0]
+    await change(limit, 100); assert.match(text(f.root), /本轮只能设置 1–12 次/)
+    await change(checkbox(f), true); await click(button(f.root, '上传完成')); assert.equal(f.shared.rehearsal.records.length, 1)
+    await click(button(f.root, '新开本轮（保留试演记录，不清日额度）')); assert.equal(f.shared.rehearsal.records.length, 1); assert.equal(checkbox(f).props.checked, false)
+    await click(button(f.root, '清空本轮试演记录')); assert.equal(f.shared.rehearsal.records.length, 0); assert.deepEqual(f.calls, [])
+    assert.match(text(f.root), /94 \/ 100 次/)
+  } finally { await f.destroy() }
+})
+
+test('scenario meanings and hiding text are explained before a request without pretending to know old trace', async () => {
+  const f = await fixture()
+  try {
+    assert.match(text(f.root), /隐藏文字气泡/)
+    assert.match(text(f.root), /没有图片像素/)
+    await change(radio(f, 2), true); await change(checkbox(f), true); await click(button(f.root, '上传完成'))
+    assert.match(text(f.root), /无法补回/)
+    assert.equal(f.shared.rehearsal.records[0].inputSnapshot.eventType, 'UPLOAD_SUCCEEDED')
+  } finally { await f.destroy() }
+})
+
+test('compiled view renders raw content as text and retains its request trace across remount without replay', async () => {
+  const f = await fixture({ decide: async data => ({ ...data, mode: 'BYOK', action: 'SILENT', reason: 'INVALID_DECISION', stage: 'PARSE', modelDispatched: true, debug: {
+    event: { ...data, scope: 'REHEARSAL' }, messages: [{ role: 'system', content: 'BUSINESS_PROMPT_SENTINEL' }, { role: 'user', content: 'eventType=UPLOAD_SUCCEEDED;page=UPLOAD' }],
+    parameters: { provider: 'OPENAI', model: 'trace-fixture', stream: true, maxTokens: 160, collectionTimeoutSeconds: 8, maxOutputChars: 1024, thinking: 'NOT_SENT', temperature: 'NOT_SENT', apiKey: 'PRIVATE_KEY' },
+    rawBody: '<img src=x onerror="privateScript()">RAW_CONTENT_SENTINEL', rawBodyComplete: true, rawBodyTruncated: false, parsedDecision: null, stream: { supported: true, contentFrames: 1, reasoningPresent: false, finishReason: 'stop', terminal: 'FINISH_REASON', reasoning_content: 'PRIVATE_REASONING' }, redactedFields: [], Authorization: 'PRIVATE_HEADER'
+  } }) })
+  let next
+  try {
+    await change(radio(f, 2), true); await change(checkbox(f), true); await click(button(f.root, '上传完成'))
+    assert.match(text(f.root), /RAW_CONTENT_SENTINEL/); assert.match(text(f.root), /BUSINESS_PROMPT_SENTINEL/)
+    assert.match(text(f.root), /没有可用解析决定/); assert.doesNotMatch(text(f.root), /PRIVATE_KEY|PRIVATE_REASONING|PRIVATE_HEADER/)
+    assert.equal(descendants(f.root).filter(node => node.tag === 'img').length, 0)
+    const record = f.shared.rehearsal.records[0]; assert.equal(record.protocolSnapshot.eventType, 'UPLOAD_SUCCEEDED')
+    await f.destroy(); next = await fixture({ rehearsal: f.shared.rehearsal })
+    assert.match(text(next.root), /RAW_CONTENT_SENTINEL/); assert.deepEqual(next.calls, ['status'])
+    await click(button(next.root, '清空本轮试演记录')); assert.doesNotMatch(text(next.root), /RAW_CONTENT_SENTINEL|BUSINESS_PROMPT_SENTINEL/)
+    assert.equal(next.shared.rehearsal.records.length, 0)
+  } finally { if (next) await next.destroy(); else await f.destroy() }
 })

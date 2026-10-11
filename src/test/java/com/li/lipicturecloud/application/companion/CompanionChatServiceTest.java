@@ -613,6 +613,31 @@ class CompanionChatServiceTest {
     }
 
     @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"现在呢", "刚喂了", "那张图有什么内容"})
+    void aPictureFollowupUsesCurrentSessionUserReference(String query) {
+        when(contextAssembler.systemPrompt(anyLong(), anyLong(), anyInt(), any(), any(), any())).thenReturn("绫页");
+        Companion companion = persistedCompanion();
+        properties.setChatPolicy(CompanionFeatureProperties.CompanionChatPolicy.MODEL);
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModelProvider.getIfAvailable()).thenReturn(chatModel);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.empty());
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        var prior = CompanionChatMessage.user(11L, 7L, "图片101的内容", NOW.minusSeconds(20)).withId(40L);
+        when(messageRepository.findRecent(11L, 21)).thenReturn(List.of(prior));
+        var memory = CompanionMemory.candidate(11L, 7L, 101L, 21L, MemorySourceType.VISUAL,
+                "石墙上的蓝色旗子", new BigDecimal("0.8"), NOW).withId(71L).confirm(NOW);
+        when(memoryService.confirmedMemoriesUsableBy(companion, subject, 100)).thenReturn(List.of(memory));
+
+        service.chat(subject, query).blockLast();
+
+        var found = ArgumentCaptor.forClass(CompanionMemoryRecall.MemoryRecall.class);
+        verify(contextAssembler).systemPrompt(eq(11L), eq(7L), eq(5), any(), found.capture(),
+                any(CompanionChatContextAssembler.Conversation.class));
+        assertThat(found.getValue().recalled()).extracting(CompanionMemoryRecall.RecalledMemory::memory)
+                .containsExactly(memory);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {"你好", "图片 101"})
     void modelContextReceivesDecayedMoodAndOnlyRelevantUsableConfirmedMemories(String query) {
         Companion companion = persistedCompanion();

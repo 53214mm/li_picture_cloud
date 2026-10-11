@@ -33,6 +33,15 @@ public class MybatisPresenceQuotaGuard implements PresenceQuotaGuard {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Integer used(long subjectId, LocalDate usageDate) {
+        if (subjectId <= 0) throw new IllegalArgumentException("subjectId must be positive");
+        Objects.requireNonNull(usageDate, "usageDate");
+        Integer attempts = usageMapper.selectAttempts(subjectId, usageDate);
+        return attempts == null ? 0 : attempts;
+    }
+
+    @Override
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public int reserve(long subjectId, LocalDate usageDate, int dailyLimit) {
         if (subjectId <= 0) {

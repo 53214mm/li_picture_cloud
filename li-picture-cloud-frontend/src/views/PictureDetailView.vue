@@ -8,7 +8,7 @@
       <template v-else-if="picture">
         <div class="detail-layout">
           <!-- 图片展示区 -->
-          <div class="image-area" @click="showFullscreen = true" title="点击全屏查看">
+          <div class="image-area" :data-observation-picture="picture.id" :data-observation-version="picture.updateTime || ''" @click="showFullscreen = true" title="点击全屏查看">
             <img :src="picture.url" :alt="picture.name" class="main-image"
                  @dragstart="interaction.startDrag($event, picture)" @dragend="interaction.cancelDrag" />
             <span class="zoom-hint">🔍 点击全屏</span>

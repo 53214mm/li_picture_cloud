@@ -89,8 +89,12 @@ app:
     enabled: ${COMPANION_ENABLED:true}
     presence:
       enabled: ${COMPANION_PRESENCE_ENABLED:true}
-      # Only permits explicit rehearsal BYOK opt-in; floating presence remains DEMO.
+      # Permits explicit BYOK rehearsal/observation opt-in; no automatic authorization.
       real-enabled: ${COMPANION_PRESENCE_REAL_ENABLED:false}
+    observation:
+      # Admission capability only. Browser automatic and visual grants remain default-off.
+      enabled: ${COMPANION_OBSERVATION_ENABLED:false}
+      real-visual-enabled: ${COMPANION_OBSERVATION_REAL_VISUAL_ENABLED:false}
     feeding-enabled: ${COMPANION_FEEDING_ENABLED:true}
     processing-timeout: ${COMPANION_PROCESSING_TIMEOUT:5m}
     nutrition-policy: ${COMPANION_NUTRITION_POLICY:METADATA_ONLY}
