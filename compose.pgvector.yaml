@@ -1,0 +1,28 @@
+# 本地开发用的 pgvector（绫页记忆的语义检索）。与生产 compose.yaml 独立：
+#   docker compose -f compose.pgvector.yaml up -d
+# application-local.yaml 中 pgvector.datasource 指向 jdbc:postgresql://localhost:5433/picture，
+# 用户名 postgres，密码见 PGVECTOR_PASSWORD（默认 lingye-dev，仅限本机）。
+name: lipicturecloud-pgvector
+
+services:
+  pgvector:
+    image: pgvector/pgvector:pg16
+    container_name: lipicturecloud-pgvector
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: picture
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PGVECTOR_PASSWORD:-lingye-dev}
+    ports:
+      # 只绑定本机回环地址，并避开常见的 5432。
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d picture"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  pgvector_data:

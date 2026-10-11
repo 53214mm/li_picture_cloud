@@ -8,6 +8,10 @@ public record ConnectivityResult(boolean reachable, String safeErrorCode) {
     public static final String CREDENTIAL_REJECTED = "CREDENTIAL_REJECTED";
     public static final String UPSTREAM_TIMEOUT = "UPSTREAM_TIMEOUT";
     public static final String UPSTREAM_ERROR = "UPSTREAM_ERROR";
+    /** 凭据有效，但所选模型不存在或不能用于对话。 */
+    public static final String MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE";
+    /** 账户余额不足或被限流（HTTP 402/429）。 */
+    public static final String QUOTA_EXHAUSTED = "QUOTA_EXHAUSTED";
 
     public ConnectivityResult {
         if (reachable) {

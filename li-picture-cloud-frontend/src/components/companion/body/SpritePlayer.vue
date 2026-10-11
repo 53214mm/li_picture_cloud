@@ -22,7 +22,7 @@ const props = defineProps({
   atlas: { type: Object, required: true },
   presentation: { type: Object, required: true },
   interactionRequest: { type: Number, default: 0 },
-  accessibleLabel: { type: String, default: '绫页，纸翼蛾族的成年全身像' },
+  accessibleLabel: { type: String, default: '绫页，当前静态全身像' },
   paused: Boolean,
   visible: { type: Boolean, default: true }
 })

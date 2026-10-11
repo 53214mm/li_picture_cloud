@@ -30,11 +30,11 @@ test('shows the explicit emoji not-open notice and never calls any creator', asy
     const awaken = page.getByRole('button', { name: '唤醒我的伙伴' })
     if (await awaken.isVisible()) {
       await awaken.click()
-      await expect(page.getByText('光点', { exact: true })).toBeVisible()
+      await expect(page.getByTestId('growth-stage')).toBeVisible()
     }
 
     // 面板明示"文字表情草稿暂未开放（需要视觉理解）"，且不提供任何生成/保存入口。
-    await expect(page.getByText('让伙伴从图片里挑一句俏皮话')).toBeVisible()
+    await expect(page.getByRole('heading', { name: '文字表情草稿', exact: true })).toBeVisible()
     await expect(page.getByTestId('emoji-unavailable')).toBeVisible()
     await expect(page.getByText(/文字表情草稿暂未开放/)).toBeVisible()
     await expect(page.getByText(/视觉理解/).first()).toBeVisible()

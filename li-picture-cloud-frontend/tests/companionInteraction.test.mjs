@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizePictureId, createPictureDragSession, inspectCompanionPicture, createPictureInspector, PICTURE_DRAG_TYPE } from '../src/presentation/companionInteraction.js'
+import { normalizePictureId, mayOfferCompanionPicture, createPictureDragSession, inspectCompanionPicture, createPictureInspector, PICTURE_DRAG_TYPE } from '../src/presentation/companionInteraction.js'
 
 const picture = { id: '11', spaceId: '51', name: '图片' }
 const space = { id: '51', userId: '42', spaceType: 0 }
@@ -66,4 +66,14 @@ test('closed/replaced picture inspections cannot publish late results or private
   await failed
   assert.equal(changes.at(-1).phase, 'error')
   assert.equal(JSON.stringify(changes).includes('secret'), false)
+})
+test('only the viewer\'s own space pictures advertise a companion hand-off', () => {
+  assert.equal(mayOfferCompanionPicture({ id: '11', spaceId: '51', userId: '42' }, '42'), true)
+  assert.equal(mayOfferCompanionPicture({ id: '11', spaceId: '51', userId: 42 }, 42), true)
+  // Public gallery pictures have no space; other users' pictures never qualify.
+  assert.equal(mayOfferCompanionPicture({ id: '11', spaceId: null, userId: '42' }, '42'), false)
+  assert.equal(mayOfferCompanionPicture({ id: '11', spaceId: '51', userId: '43' }, '42'), false)
+  assert.equal(mayOfferCompanionPicture({ id: 'bad', spaceId: '51', userId: '42' }, '42'), false)
+  assert.equal(mayOfferCompanionPicture(null, '42'), false)
+  assert.equal(mayOfferCompanionPicture({ id: '11', spaceId: '51', userId: '42' }, null), false)
 })

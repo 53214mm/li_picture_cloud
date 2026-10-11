@@ -140,7 +140,8 @@ public final class VisualPictureNutritionAdapter implements PictureNutritionAnal
                 candidate.companionMessage(),
                 NutritionProvenance.visual(result.providerCode(), result.modelCode(),
                         result.promptVersion(), result.resultSchemaVersion(), candidate.confidence()),
-                moodImpact(candidate), candidate.companionMessage());
+                moodImpact(candidate), candidate.evidence() == null ? candidate.companionMessage()
+                        : candidate.evidence().summary());
     }
 
     /**

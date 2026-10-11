@@ -8,7 +8,7 @@
       <form @submit.prevent="handleRegister" class="auth-form">
         <div v-if="error" class="form-error">{{ error }}</div>
         <div v-if="success" class="form-success">
-          注册成功！正在跳转登录…
+          注册成功，请前往登录页
         </div>
         <label class="field">
           <span>账号</span>
@@ -22,7 +22,7 @@
           <span>确认密码</span>
           <input v-model="form.checkPassword" class="input" type="password" placeholder="再次输入密码" required />
         </label>
-        <button type="submit" class="btn btn-primary btn-full" :disabled="loading">
+        <button type="submit" class="btn btn-primary btn-full" :disabled="loading || success">
           {{ loading ? '注册中…' : '注册' }}
         </button>
       </form>
@@ -35,8 +35,8 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, watch, onBeforeUnmount } from 'vue'
+import { useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { userRegister } from '@/api/user'
 
 const router = useRouter()
@@ -44,11 +44,28 @@ const form = reactive({ userAccount: '', userPassword: '', checkPassword: '' })
 const error = ref('')
 const success = ref(false)
 const loading = ref(false)
+let active = true
+let navigationIntent = 0
+let redirectTimer = null
+
+function clearRedirect() {
+  if (redirectTimer !== null) clearTimeout(redirectTimer)
+  redirectTimer = null
+}
+function leaveIntent() {
+  navigationIntent += 1
+  clearRedirect()
+}
+onBeforeRouteLeave(leaveIntent)
+onBeforeRouteUpdate(leaveIntent)
+onBeforeUnmount(() => { active = false; clearRedirect() })
+watch(router.currentRoute, () => { error.value = '' }, { flush: 'sync' })
 
 async function handleRegister() {
+  if (!active || loading.value || success.value) return
   error.value = ''
   if (!form.userAccount || !form.userPassword || !form.checkPassword) {
-    error.value = '请填写所有字段'
+    error.value = '请填写账号、密码和确认密码'
     return
   }
   if (form.userAccount.length < 4) {
@@ -60,9 +77,12 @@ async function handleRegister() {
     return
   }
   if (form.userPassword !== form.checkPassword) {
-    error.value = '两次密码不一致'
+    error.value = '两次输入的密码不一致，请重新输入'
     return
   }
+  const submittedRoute = router.currentRoute.value
+  const submittedIntent = navigationIntent
+  const isCurrent = () => active && router.currentRoute.value === submittedRoute
   loading.value = true
   try {
     await userRegister({
@@ -70,12 +90,23 @@ async function handleRegister() {
       userPassword: form.userPassword,
       checkPassword: form.checkPassword
     })
+    if (!isCurrent()) return
     success.value = true
-    setTimeout(() => router.push('/login'), 1500)
+    // Account creation has completed. Keep its acknowledgement/submit lock
+    // even if a later navigation is cancelled; the manual login link works.
+    if (navigationIntent !== submittedIntent) return
+    redirectTimer = setTimeout(async () => {
+      redirectTimer = null
+      if (!isCurrent() || navigationIntent !== submittedIntent) return
+      try { await router.push('/login') }
+      catch {
+        if (isCurrent()) error.value = '自动跳转未完成，请点击下方「去登录」'
+      }
+    }, 1500)
   } catch (e) {
-    error.value = e.message || '注册失败'
+    if (isCurrent()) error.value = e.message || '注册失败'
   } finally {
-    loading.value = false
+    if (active) loading.value = false
   }
 }
 </script>

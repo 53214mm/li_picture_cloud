@@ -31,13 +31,14 @@ public class CompanionFeatureProperties {
     /** DashScope OpenAI-compatible vision endpoint. Production config must explicitly override it. */
     private URI visionEndpoint = URI.create("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
     private String visionProvider = "dashscope";
-    private String visionModel = "qwen3.6-flash";
+    private String visionModel = "qwen3.8-max";
     private String visionApiKey = "";
     private Duration visionTimeout = Duration.ofSeconds(20);
     private DataSize visionMaxBytes = DataSize.ofMegabytes(8);
     private int visionDailyLimit = 10;
     /**
-     * 伙伴站内对话策略：DEMO_ONLY 为零外发确定性回复（默认），MODEL 使用平台语言模型。
+     * 伙伴站内对话策略：DEMO_ONLY 为零外发确定性回复（对象安全默认），MODEL 使用平台语言模型。
+     * 发布配置默认 MODEL；显式 DEMO_ONLY 仍禁止平台外发。
      */
     private CompanionChatPolicy chatPolicy = CompanionChatPolicy.DEMO_ONLY;
     private int chatDailyLimit = 50;
@@ -45,6 +46,8 @@ public class CompanionFeatureProperties {
     private int chatMemoryLimit = 5;
     /** MODEL 档每轮提示词（系统提示 + 历史 + 当前消息）的总码点预算，超出部分从最旧历史截断。 */
     private int chatContextBudget = 12000;
+    /** 距离上一句超过这么久，就算新的一段对话：之前的聊天整理成经历，不再原样发给模型。 */
+    private Duration chatSessionGap = Duration.ofHours(2);
 
     /** 伙伴对话策略。 */
     public enum CompanionChatPolicy {

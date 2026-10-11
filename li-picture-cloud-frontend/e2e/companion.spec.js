@@ -19,10 +19,13 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByText('实际来源会逐条写入成长档案')).toBeVisible()
   await expect(page.getByText('未读取图片内容，也未调用视觉模型')).toBeVisible()
   await page.getByRole('button', { name: '唤醒我的伙伴' }).click()
-  await expect(page.getByText('光点', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('growth-stage')).toBeVisible()
   // 已唤醒但尚未喂养：主页返回服务端中性情绪视图（五轴为 0），关系面板保持空状态。
+  await page.getByTestId('mood-details').locator('summary').click()
+  await expect(page.getByTestId('mood-value-energy')).toBeVisible()
   await expect(page.getByTestId('mood-value-energy')).toHaveText('0')
-  await expect(page.getByText('伙伴还没和你建立关系，先喂一张图片开始相处。')).toBeVisible()
+  await expect(page.getByTestId('relationship-label')).toHaveText('暂无记录')
+  await expect(page.getByTestId('relationship-details')).toHaveCount(0)
 
   await page.getByRole('button', { name: /旅行样片/ }).click()
   const keys = []
@@ -53,7 +56,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   expect(keys[1]).toBe(keys[0])
   await expect(page.getByText('42 / 100 生命经验')).toBeVisible()
   await expect(page.getByText('+42 生命经验')).toBeVisible()
-  // 喂养故事、情绪摘要与记忆都统一使用"伙伴说"气泡；按文案过滤各自的展示。
+  // 喂养故事与记忆保留"伙伴说"气泡；情绪由统一表现协议展示。
   await expect(page.getByRole('group', { name: '伙伴说' })
     .filter({ hasText: '演示营养让伙伴练习了观察与叙事。' })).toBeVisible()
   await expect(page.getByTestId('growth-trait-curiosity').first()).toContainText('+0.60')
@@ -69,6 +72,10 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByText('伙伴记得一张让它练习了观察与叙事的演示图片，它把这次练习记进了档案。')).toBeVisible()
   // 无需 reload：喂养成功后页面自动重取权威主页，情绪与关系面板立即出现最新值。
   // Demo 档每次喂养五轴 +2；首次完整喂养关系为 熟悉 +5 / 信任 +2 / 亲密 +1 / 默契 +1 / 近期反馈 +5。
+  await page.getByTestId('mood-details').locator('summary').click()
+  await page.getByTestId('relationship-details').locator('summary').click()
+  await expect(page.getByTestId('mood-value-energy')).toBeVisible()
+  await expect(page.getByTestId('relationship-value-familiarity')).toBeVisible()
   await expect(page.getByTestId('mood-value-energy')).toHaveText('2')
   await expect(page.getByTestId('mood-value-joy')).toHaveText('2')
   await expect(page.getByTestId('mood-value-loneliness')).toHaveText('2')
@@ -78,12 +85,12 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByTestId('relationship-value-tacit')).toHaveText('1')
   await expect(page.getByTestId('relationship-value-recentFeedback')).toHaveText('5')
   // 站内对话与主动提案面板：Demo 档聊天不调模型，契约默认关闭所以没有主动提案。
-  await expect(page.getByText('和伙伴说说话')).toBeVisible()
-  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '和绫页聊聊' })).toBeVisible()
+  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。')).toBeVisible()
   // Demo 档对话：发送一条消息收到确定性回复，用户气泡与伙伴气泡都在。
   await page.getByLabel('对伙伴说的话').fill('你好呀')
   await page.getByRole('button', { name: '发送' }).click()
-  await expect(page.getByText('我在听。你可以和我聊聊图片，或者从图库里挑一张喂给我，我会慢慢记住我们的经历。'))
+  await expect(page.getByText('绫页在这儿，AI 身份，脑洞营业中。这条是演示回复，真聊还得切到真实模型。'))
     .toBeVisible()
   await expect(page.getByText('你好呀')).toBeVisible()
 
@@ -157,7 +164,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
   await expect(page.getByText('来源 dashscope / qwen3.6-flash')).toBeVisible()
   await expect(page.getByText('置信度 0.84')).toBeVisible()
-  // 成长档案内恰好两条喂养故事气泡（页面另有情绪/记忆气泡，不在档案区内计数）。
+  // 成长档案内恰好两条喂养故事气泡（页面另有记忆气泡，不在档案区内计数）。
   const archiveBubbles = page.locator('.timeline-list').getByRole('group', { name: '伙伴说' })
   await expect(archiveBubbles).toHaveCount(2)
   // 档案内两条来源图片链接（记忆面板使用"来源图片 #102"文案，精确匹配区分）。
@@ -197,14 +204,66 @@ test('rendering Lingye preserves the existing identity, growth, history and cont
   })
   await page.goto('/companion')
   await expect(page.locator('.companion-body')).toHaveAttribute('data-visual-stage', 'adult')
-  await expect(page.locator('#companion-stats-title')).toHaveText('光点')
+  await expect(page.locator('#companion-stats-title')).toHaveText('绫页')
   await page.locator('.chat-card').scrollIntoViewIfNeeded()
-  await expect(page.locator('.companion-portrait img')).toHaveJSProperty('naturalWidth', 384)
+  await expect(page.locator('.chat-card .companion-portrait img')).toHaveJSProperty('naturalWidth', 384)
   await expect(page.getByLabel('对伙伴说的话')).toBeEditable()
   await page.reload()
   await expect(page.locator('.companion-body')).toBeVisible()
   expect(await snapshot()).toEqual(before)
   expect(writes).toEqual([])
+})
+
+test('real quick chat shares one send and persisted history with the full Home view', async ({ page }) => {
+  await login(page)
+  const errors = []
+  const calls = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', request => {
+    const path = new URL(request.url()).pathname
+    if (path.startsWith('/api/companion/')) calls.push(path)
+  })
+  await page.goto('/gallery')
+  const entry = page.locator('.sidebar').getByRole('button', { name: '和绫页互动' })
+  await expect(entry).toBeVisible()
+  expect(calls).toEqual([])
+  await entry.click()
+  const drawer = page.getByRole('dialog', { name: '和绫页互动' })
+  const input = drawer.getByLabel('对伙伴说的话')
+  await expect(input).toBeEnabled()
+  await expect(drawer.locator('.chat-card')).toHaveAttribute('data-chat-ready', 'true')
+  const message = '从真实快捷对话交接到留影小屋'
+  await input.fill(message)
+  await drawer.locator('.chat-input').evaluate(form => { form.requestSubmit(); form.requestSubmit() })
+  await expect(drawer.getByText(message, { exact: true })).toHaveCount(1)
+  await expect(input).toBeEnabled()
+  await expect(input).toHaveValue('')
+  expect(calls.filter(path => path === '/api/companion/chat/stream')).toHaveLength(1)
+
+  await input.fill('切换入口后保留的未发送草稿')
+  await drawer.getByRole('button', { name: /打开完整对话/ }).click()
+  await expect(page).toHaveURL(/\/companion$/)
+  await expect(page.locator('#companion-chat-input')).toBeFocused()
+  await expect(page.locator('#companion-chat-input')).toHaveValue('切换入口后保留的未发送草稿')
+  await expect(page.locator('.chat-card').getByText(message, { exact: true })).toHaveCount(1)
+  // Crossing routes releases the last owner, so Home deliberately reads the
+  // persisted history again. Two views mounted together must reuse that read.
+  expect(calls.filter(path => path === '/api/companion/chat/history')).toHaveLength(2)
+  await page.locator('.portrait-interaction').click()
+  await expect(drawer.locator('.chat-card')).toHaveAttribute('data-chat-ready', 'true')
+  await expect(input).toHaveValue('切换入口后保留的未发送草稿')
+  await expect(drawer.getByText(message, { exact: true })).toHaveCount(1)
+  expect(calls.filter(path => path === '/api/companion/chat/history')).toHaveLength(2)
+  await drawer.getByRole('button', { name: /打开完整对话/ }).click()
+  await expect(page.locator('#companion-chat-input')).toBeFocused()
+  const history = await page.request.get('/api/companion/chat/history')
+  const historyBody = await history.json()
+  expect(historyBody.code).toBe(0)
+  expect(historyBody.data.records.filter(record => record.content === message)).toHaveLength(1)
+  await page.reload()
+  await expect(page.locator('.chat-card').getByText(message, { exact: true })).toHaveCount(1)
+  expect(calls.filter(path => path === '/api/companion/chat/stream')).toHaveLength(1)
+  expect(errors).toEqual([])
 })
 
 test('memory lifecycle supports confirm correct ignore and delete', async ({ page }) => {
@@ -245,7 +304,7 @@ test('enabling the contract produces a gated weekly review proposal', async ({ p
   await expect(page).toHaveURL(/\/companion$/)
 
   // 默认契约关闭：没有主动提案。
-  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。'))
     .toBeVisible()
 
   // 开启契约：全天允许（起止相同 = 不设安静时段），频率保持 72 小时。
@@ -261,14 +320,14 @@ test('enabling the contract produces a gated weekly review proposal', async ({ p
 
   // 接受提案 → 终态并给出正向反馈，提案消失。
   await page.getByTestId('proposal-accept').click()
-  await expect(page.getByText('好呀，伙伴已经记下了。')).toBeVisible()
-  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+  await expect(page.getByText('已接受这次提议。')).toBeVisible()
+  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。'))
     .toBeVisible()
 
   // 关闭契约后刷新，保持关闭。
   await page.getByRole('button', { name: '主动设置' }).click()
   await page.getByRole('checkbox', { name: /允许伙伴主动提议/ }).uncheck()
   await page.getByRole('button', { name: '保存主动设置' }).click()
-  await expect(page.getByText('伙伴现在没有主动提议。开启主动设置后，它会挑合适的时刻轻轻出现。'))
+  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。'))
     .toBeVisible()
 })

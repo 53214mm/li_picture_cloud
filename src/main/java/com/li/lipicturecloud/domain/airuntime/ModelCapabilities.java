@@ -44,6 +44,14 @@ public record ModelCapabilities(
                 null, UNKNOWN, null);
     }
 
+    /**
+     * 平台已用该模型真实完成过一次最小对话：文本能力由验证确认，其余能力仍以认知表为准。
+     */
+    public ModelCapabilities withVerifiedText() {
+        return text ? this : new ModelCapabilities(true, vision, toolCall, structuredOutput,
+                reasoning, embedding, imageGeneration, maxContextTokens, syncAsync, costHint);
+    }
+
     public static ModelCapabilities of(boolean text, boolean vision, boolean toolCall,
                                        boolean structuredOutput, boolean reasoning,
                                        boolean embedding, boolean imageGeneration,

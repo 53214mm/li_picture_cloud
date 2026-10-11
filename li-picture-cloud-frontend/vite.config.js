@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
+  cacheDir: process.env.VITE_CACHE_DIR,
   plugins: [vue()],
   resolve: {
     alias: {

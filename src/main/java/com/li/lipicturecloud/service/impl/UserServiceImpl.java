@@ -49,6 +49,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     @Resource
     private PasswordHashService passwordHashService;
 
+    @Resource
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     // ============================================================
     // 账号与密码长度下限（注册时校验）
     // ============================================================
@@ -234,6 +237,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         //记录用户登录态到 Sa-token，便于空间鉴权时使用，注意保证该用户信息与 SpringSession 中的信息过期时间一致
         StpKit.SPACE.login(user.getId());
         StpKit.SPACE.getSession().set(SESSION_USER_KEY, user);
+        // 登录后伙伴聊天从新的一段开始；监听方自行吞掉异常，不影响登录。
+        eventPublisher.publishEvent(new com.li.lipicturecloud.service.event.UserLoggedInEvent(
+                user.getId(), java.time.Instant.now()));
 
         // ============================================================
         // 第 5 步：返回脱敏用户信息

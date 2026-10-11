@@ -33,12 +33,24 @@ public class RoutedVisualObservationProvider implements VisualObservationProvide
     private final DashScopeVisionClient platform;
     private final RestClient byokRestClient;
     private final ObjectMapper objectMapper;
+    /** Whether the subject asked vision to search the web first; only Qwen on DashScope honours it. */
+    private final java.util.function.LongPredicate forcedWebSearch;
 
     public RoutedVisualObservationProvider(VisionRouter visionRouter,
                                            ModelUsageService usageService,
                                            DashScopeVisionClient platform,
                                            RestClient byokRestClient,
                                            ObjectMapper objectMapper) {
+        this(visionRouter, usageService, platform, byokRestClient, objectMapper, subjectId -> false);
+    }
+
+    public RoutedVisualObservationProvider(VisionRouter visionRouter,
+                                           ModelUsageService usageService,
+                                           DashScopeVisionClient platform,
+                                           RestClient byokRestClient,
+                                           ObjectMapper objectMapper,
+                                           java.util.function.LongPredicate forcedWebSearch) {
+        this.forcedWebSearch = Objects.requireNonNull(forcedWebSearch, "forcedWebSearch");
         this.visionRouter = Objects.requireNonNull(visionRouter, "visionRouter");
         this.usageService = Objects.requireNonNull(usageService, "usageService");
         this.platform = Objects.requireNonNull(platform, "platform");
@@ -58,7 +70,8 @@ public class RoutedVisualObservationProvider implements VisualObservationProvide
 
     private VisualObservationResult platformObserve(AuthorizedPictureContent content, long subjectId) {
         try {
-            VisualObservationResult result = platform.observe(content, subjectId);
+            VisualObservationResult result = platform.observe(content, subjectId,
+                    forcedWebSearch.test(subjectId));
             recordSuccess(subjectId, null, ModelProvider.DASHSCOPE, result.modelCode());
             return result;
         } catch (VisionProviderException failure) {
@@ -77,7 +90,8 @@ public class RoutedVisualObservationProvider implements VisualObservationProvide
                 route.connection().provider().name().toLowerCase(java.util.Locale.ROOT),
                 route.connection().modelCode(), route.apiKey());
         try {
-            VisualObservationResult result = byok.observe(content, subjectId);
+            VisualObservationResult result = byok.observe(content, subjectId,
+                    forcedWebSearch.test(subjectId));
             recordSuccess(subjectId, route.connection().id(), route.connection().provider(),
                     result.modelCode());
             return result;

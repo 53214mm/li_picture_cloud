@@ -105,6 +105,90 @@ class OpenAiCompatibleLanguageClientTest {
     }
 
     @Test
+    void prematureEofAfterPartialTextIsAnErrorNotSuccessfulCompletion() {
+        respond(200, "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n");
+        var deltas = new java.util.ArrayList<String>();
+        var completed = new java.util.concurrent.atomic.AtomicBoolean();
+        assertThatThrownBy(() -> client.stream(route, List.of(ChatTurn.user("test")))
+                .doOnNext(deltas::add).doOnComplete(() -> completed.set(true)).blockLast())
+                .isInstanceOf(ModelInvocationException.class)
+                .extracting(error -> ((ModelInvocationException) error).safeErrorCode())
+                .isEqualTo(ConnectivityResult.UPSTREAM_ERROR);
+        assertThat(deltas).containsExactly("partial");
+        assertThat(completed).isFalse();
+    }
+
+    @Test
+    void emptySuccessfulHttpResponseStillRequiresProtocolCompletion() {
+        respond(200, ": keep-alive\n\n");
+        assertThatThrownBy(() -> client.stream(route, List.of(ChatTurn.user("test"))).blockLast())
+                .isInstanceOf(ModelInvocationException.class);
+    }
+
+    @Test
+    void doneStopsBeforeTrailingTextAndMalformedFrames() {
+        respond(200, "data: {\"choices\":[{\"delta\":{\"content\":\"complete\"}}]}\n\n"
+                + "data: [DONE]\n\ndata: not-json\n\n");
+        assertThat(client.stream(route, List.of(ChatTurn.user("test"))).collectList().block())
+                .containsExactly("complete");
+    }
+
+    @Test
+    void finishReasonStopCompletesWithoutDoneAndIncludesItsLastDelta() {
+        respond(200, "data: {\"choices\":[{\"delta\":{\"content\":\"last\"},\"finish_reason\":\"stop\"}]}\n\n"
+                + "data: not-json\n\n");
+        assertThat(client.stream(route, List.of(ChatTurn.user("test"))).collectList().block())
+                .containsExactly("last");
+    }
+
+    @Test
+    void boundedTokenLimitCompletionRemainsCompatible() {
+        respond(200, "data: {\"choices\":[{\"delta\":{\"content\":\"bounded\"},\"finish_reason\":\"length\"}]}\n\n");
+        assertThat(client.streamBounded(route, List.of(ChatTurn.user("test")), 128).collectList().block())
+                .containsExactly("bounded");
+        assertThat(lastBody.get()).contains("\"max_tokens\":128");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "data: [DONE]\n\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"
+    })
+    void terminalCompletesWhileUpstreamConnectionRemainsOpen(String terminal) throws Exception {
+        var release = new java.util.concurrent.CountDownLatch(1);
+        stub.createContext("/chat/completions", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            exchange.sendResponseHeaders(200, 0);
+            exchange.getResponseBody().write(("data: {\"choices\":[{\"delta\":{\"content\":\"complete\"}}]}\n\n"
+                    + terminal).getBytes(StandardCharsets.UTF_8));
+            exchange.getResponseBody().flush();
+            try {
+                release.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+        try {
+            assertThat(client.stream(route, List.of(ChatTurn.user("test"))).collectList()
+                    .block(Duration.ofSeconds(2))).containsExactly("complete");
+            assertThat(release.getCount()).isEqualTo(1);
+        } finally {
+            release.countDown();
+        }
+    }
+
+    @Test
+    void downstreamCancellationDoesNotRequireProtocolCompletionOrSignalSuccess() {
+        respond(200, "data: {\"choices\":[{\"delta\":{\"content\":\"first\"}}]}\n\n");
+        var completed = new java.util.concurrent.atomic.AtomicBoolean();
+        assertThat(client.stream(route, List.of(ChatTurn.user("test")))
+                .doOnComplete(() -> completed.set(true)).take(1).collectList().block()).containsExactly("first");
+        assertThat(completed).isFalse();
+    }
+
+    @Test
     void mapsUnauthorizedToCredentialRejected() {
         respond(401, "{\"error\":\"invalid api key\"}");
 

@@ -129,7 +129,7 @@ public class CreationServiceSupport {
     }
 
     public static String modelCode(ModelRouteDecision route) {
-        return route.isByok() ? route.connection().modelCode() : "qwen-max";
+        return route.isByok() ? route.connection().modelCode() : PlatformModels.CHAT;
     }
 
     public static String costSource(ModelRouteDecision route) {

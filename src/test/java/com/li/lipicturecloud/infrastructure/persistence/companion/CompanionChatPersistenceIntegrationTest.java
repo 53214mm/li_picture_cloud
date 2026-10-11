@@ -42,11 +42,22 @@ class CompanionChatPersistenceIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
+    void clearingOneCompanionsHistoryKeepsOtherCompanions() {
+        messageRepository.append(CompanionChatMessage.user(711L, 7L, "要清空的话", NOW));
+        messageRepository.append(CompanionChatMessage.companion(711L, 7L, "要清空的回复", "internal", "demo-v1", NOW.plusSeconds(1)));
+        messageRepository.append(CompanionChatMessage.user(712L, 8L, "别人的话", NOW));
+
+        assertThat(messageRepository.deleteByCompanion(711L)).isEqualTo(2);
+        assertThat(messageRepository.findRecent(711L, 10)).isEmpty();
+        assertThat(messageRepository.findRecent(712L, 10)).hasSize(1);
+    }
+
+    @Test
     void messagesAppendAndListInReverseChronologicalOrder() {
         CompanionChatMessage first = messageRepository.append(
                 CompanionChatMessage.user(701L, 7L, "第一句", NOW));
         CompanionChatMessage second = messageRepository.append(
-                CompanionChatMessage.companion(701L, 7L, "第二句", "internal", "demo-v1", NOW.plusSeconds(1)));
+                CompanionChatMessage.companion(701L, 7L, "第二句\n\n下一段\r\n\t缩进", "DEEPSEEK", "deepseek-flash", NOW.plusSeconds(1)));
 
         assertThat(first.id()).isPositive();
         assertThat(second.id()).isPositive();
@@ -55,6 +66,8 @@ class CompanionChatPersistenceIntegrationTest {
         assertThat(recent).hasSize(2);
         assertThat(recent.get(0).id()).isEqualTo(second.id());
         assertThat(recent.get(0).role()).isEqualTo(CompanionChatRole.COMPANION);
+        assertThat(recent.get(0).content()).isEqualTo("第二句\n\n下一段\r\n\t缩进");
+        assertThat(recent.get(0).modelCode()).isEqualTo("deepseek-flash");
         assertThat(recent.get(1).content()).isEqualTo("第一句");
     }
 

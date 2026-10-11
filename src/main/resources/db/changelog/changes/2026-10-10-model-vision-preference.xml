@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <preConditions onFail="HALT" onError="HALT">
+        <or>
+            <not><tableExists tableName="model_vision_preference"/></not>
+            <and>
+                <columnExists tableName="model_vision_preference" columnName="id"/>
+                <columnExists tableName="model_vision_preference" columnName="subjectId"/>
+                <columnExists tableName="model_vision_preference" columnName="forcedSearch"/>
+                <columnExists tableName="model_vision_preference" columnName="createTime"/>
+                <columnExists tableName="model_vision_preference" columnName="updateTime"/>
+            </and>
+        </or>
+    </preConditions>
+
+    <!-- 每个用户一行的识图偏好：开启后，千问识图前必须联网搜索作品、角色或出处。 -->
+    <changeSet id="20261010-01" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="model_vision_preference"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE model_vision_preference (
+    id BIGINT PRIMARY KEY,
+    subjectId BIGINT NOT NULL,
+    forcedSearch BOOLEAN NOT NULL DEFAULT FALSE,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_model_vision_preference_subject UNIQUE (subjectId)
+);
+        ]]></sql>
+        <rollback><dropTable tableName="model_vision_preference"/></rollback>
+    </changeSet>
+</databaseChangeLog>

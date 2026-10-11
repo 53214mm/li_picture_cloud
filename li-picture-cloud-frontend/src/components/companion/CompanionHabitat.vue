@@ -116,33 +116,31 @@ watch(photoUrl, () => { photoFailed.value = false })
   .room-window { right: 17%; }
   .room-plant { display: none; }
 }
-@media (max-width: 767px) {
-  .habitat-scene { min-height: 680px; }
-  .room-heading { top: 25px; left: 22px; }
-  .room-heading h1 { font-size: 34px; margin-top: 10px; }
+@media (width < 768px) {
+  /* Normal document flow keeps the compact resident and actions clear at zoom,
+     long labels, narrow portrait widths and short landscape heights. */
+  .habitat-scene { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 100px; gap: 12px; padding: 20px 16px; }
+  .room-heading { position: static; grid-column: 1 / -1; }
+  .room-heading h1 { font-size: 30px; margin: 8px 0; }
   .room-eyebrow { font-size: 8px; }
-  .room-status { top: 143px; left: 22px; right: auto; font-size: 10px; }
-  .room-window { width: 66%; height: 270px; top: 146px; right: 9%; border-width: 8px; }
-  .room-floor { top: 66%; }
-  .room-resident { width: 230px; left: 50%; bottom: 146px; transform: translateX(-50%); }
-  .room-rug { left: 17%; width: 71%; bottom: 175px; height: 70px; }
-  .room-invitation { left: 22px; bottom: 20px; width: calc(100% - 44px); }
-  .room-line { font-size: 19px; white-space: normal; }
+  .room-status { position: static; grid-column: 1 / -1; justify-self: start; max-width: 100%; margin: 0; font-size: 10px; }
+  .room-invitation { position: static; grid-column: 1; grid-row: 3; width: auto; min-width: 0; align-self: center; }
+  .room-line { font-size: 18px; white-space: normal; letter-spacing: .06em; }
   .room-description { display: none; }
-  .room-actions { grid-template-columns: 1fr 1fr; margin-top: 12px; gap: 8px; }
-  .room-actions button { max-width: none; padding-inline: 10px; }
-  .room-footnote, .room-shelf, .room-plant { display: none; }
-  .photo-nook { width: 86px; right: 13px; bottom: 243px; padding: 5px 5px 8px; }
+  .room-actions { grid-template-columns: 1fr; margin-top: 12px; gap: 8px; }
+  .room-actions button { width: 100%; max-width: none; padding-inline: 8px; }
+  .room-resident { position: relative; grid-column: 2; grid-row: 3; left: auto; bottom: auto; width: 100%; transform: none; align-self: center; }
+  .room-window { width: 55%; height: 210px; top: 90px; right: -10%; border-width: 8px; opacity: .5; }
+  .room-floor { inset: auto 0 0; height: 80px; }
+  .room-rug, .room-footnote, .room-shelf, .room-plant { display: none; }
+  .photo-nook { position: static; grid-column: 1 / -1; width: 100%; min-width: 0; display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 12px; padding: 8px; transform: none; }
+  .photo-frame { grid-row: 1 / 3; }
+  .photo-caption { align-self: end; margin-top: 0; font-size: 10px; }
+  .photo-name { display: block; margin-top: 3px; font-size: 11px; }
   .photo-placeholder { font-size: 8px; }
   .photo-placeholder > span { font-size: 16px; }
-  .photo-caption { margin-top: 7px; font-size: 9px; }
-  .photo-name { display: none; }
-  .room-empty-note { left: 38%; top: 44%; }
+  .room-empty-note { position: static; grid-column: 2; grid-row: 3; align-self: center; }
   .awaken-button { margin-top: 12px; }
-}
-@media (max-width: 360px) {
-  .room-resident { width: 204px; left: 44%; }
-  .photo-nook { right: 10px; width: 74px; }
-  .room-line { font-size: 17px; }
+  .is-empty .room-invitation, .is-empty .room-empty-note { grid-row: 2; }
 }
 </style>

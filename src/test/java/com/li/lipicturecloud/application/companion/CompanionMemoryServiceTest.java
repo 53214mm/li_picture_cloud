@@ -269,11 +269,10 @@ class CompanionMemoryServiceTest {
         CompanionMemory revoked = candidate(companion, 31L, 101L).confirm(NOW);
         CompanionMemory kept = candidate(companion, 32L, 202L).confirm(NOW);
         when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
-        when(memoryRepository.findActive(companion.id(), 100)).thenReturn(List.of(revoked, kept));
         // CAS 落库失败（他人并发推进）：撤权记忆绝不能因此回到可用集合。
         when(memoryRepository.save(any(), anyLong())).thenReturn(false);
         // 失效传播后列表查询仍返回（尚未被别的请求改成 INVALIDATED 的）原行。
-        when(memoryRepository.findRecent(companion.id(), 100)).thenReturn(List.of(revoked, kept));
+        when(memoryRepository.findConfirmed(companion.id(), 7L, 100)).thenReturn(List.of(revoked, kept));
         doThrow(new BusinessException(ErrorCode.NO_AUTH_ERROR, "缺少权限"))
                 .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
 
@@ -291,8 +290,7 @@ class CompanionMemoryServiceTest {
                 MemorySourceType.VISUAL, "待确认的记忆不应进入聊天上下文。",
                 new BigDecimal("0.5"), NOW);
         CompanionMemory confirmed = candidate(companion, 32L, 202L).confirm(NOW);
-        when(memoryRepository.findActive(companion.id(), 100)).thenReturn(List.of(pending, confirmed));
-        when(memoryRepository.findRecent(companion.id(), 100))
+        when(memoryRepository.findConfirmed(companion.id(), 7L, 100))
                 .thenReturn(List.of(confirmed, pending));
 
         List<CompanionMemory> usable = service.confirmedMemoriesUsableBy(companion, subject, 100);
@@ -307,8 +305,7 @@ class CompanionMemoryServiceTest {
     void chatUsableMemoriesFailClosedWhenAuthorizationCannotVerify() {
         Companion companion = persistedCompanion();
         CompanionMemory confirmed = candidate(companion, 31L, 101L).confirm(NOW);
-        when(memoryRepository.findActive(companion.id(), 100)).thenReturn(List.of(confirmed));
-        when(memoryRepository.findRecent(companion.id(), 100)).thenReturn(List.of(confirmed));
+        when(memoryRepository.findConfirmed(companion.id(), 7L, 100)).thenReturn(List.of(confirmed));
         doThrow(new BusinessException(ErrorCode.SYSTEM_ERROR, "授权服务数据库不可用"))
                 .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
 
@@ -318,6 +315,78 @@ class CompanionMemoryServiceTest {
                 .extracting(error -> ((BusinessException) error).getCode(), Throwable::getMessage)
                 .containsExactly(ErrorCode.OPERATION_ERROR.getCode(), "暂时无法验证图片访问权限，请稍后重试");
         verify(memoryRepository, never()).save(any(), anyLong());
+    }
+
+    @Test
+    void ownerCanDeleteInvalidatedMemoryAfterSourceAccessRevocation() {
+        Companion companion = persistedCompanion();
+        CompanionMemory memory = candidate(companion, 31L, 101L).invalidate("PICTURE_UNAVAILABLE", NOW);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(memoryRepository.findById(31L)).thenReturn(Optional.of(memory));
+        when(memoryRepository.save(any(), anyLong())).thenReturn(true);
+        doThrow(new BusinessException(ErrorCode.NO_AUTH_ERROR, "缺少权限"))
+                .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+
+        CompanionMemoryView view = service.delete(subject, 31L);
+
+        assertThat(view.status()).isEqualTo("DELETED");
+        assertThat(view.content()).isNull();
+        assertThat(view.originalContent()).isNull();
+        verify(authorization, never()).checkForUser(PICTURE_VIEW, 101L, 7L);
+    }
+
+    @Test
+    void recallRejectsAnotherCompanionOwnerBeforeQueryingMemories() {
+        assertThatThrownBy(() -> service.confirmedMemoriesUsableBy(
+                persistedCompanion(), AuthorizationSubject.user(999L), 100))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode())
+                .isEqualTo(ErrorCode.NOT_FOUND_ERROR.getCode());
+        verify(memoryRepository, never()).findConfirmed(anyLong(), anyLong(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void recallDefensivelyRejectsRowsOutsideItsOwnershipScope() {
+        Companion companion = persistedCompanion();
+        CompanionMemory foreignSubject = CompanionMemory.candidate(11L, 999L, 101L, 31L,
+                MemorySourceType.VISUAL, "另一个主体的记忆。", new BigDecimal("0.8"), NOW).confirm(NOW).withId(31L);
+        CompanionMemory foreignCompanion = CompanionMemory.candidate(99L, 7L, 202L, 32L,
+                MemorySourceType.VISUAL, "另一个伙伴的记忆。", new BigDecimal("0.8"), NOW).confirm(NOW).withId(32L);
+        when(memoryRepository.findConfirmed(11L, 7L, 100)).thenReturn(List.of(foreignSubject, foreignCompanion));
+
+        assertThat(service.confirmedMemoriesUsableBy(companion, subject, 100)).isEmpty();
+        verify(authorization, never()).checkForUser(any(), anyLong(), anyLong());
+    }
+
+    @Test
+    void deleteRejectsForeignSubjectEvenWhenCompanionIdMatches() {
+        Companion companion = persistedCompanion();
+        CompanionMemory foreign = CompanionMemory.candidate(11L, 999L, 101L, 31L,
+                MemorySourceType.VISUAL, "另一个主体的记忆。", new BigDecimal("0.8"), NOW).withId(31L);
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(companion));
+        when(memoryRepository.findById(31L)).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> service.delete(subject, 31L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode())
+                .isEqualTo(ErrorCode.NOT_FOUND_ERROR.getCode());
+        verify(memoryRepository, never()).save(any(), anyLong());
+    }
+
+    @Test
+    void actualRecallCandidateFailsClosedOnRuntimeAuthorizationFailureOutsideActiveWindow() {
+        Companion companion = persistedCompanion();
+        CompanionMemory confirmed = candidate(companion, 31L, 101L).confirm(NOW);
+        when(memoryRepository.findConfirmed(11L, 7L, 100)).thenReturn(List.of(confirmed));
+        doThrow(new IllegalStateException("authorization unavailable"))
+                .when(authorization).checkForUser(PICTURE_VIEW, 101L, 7L);
+
+        assertThatThrownBy(() -> service.confirmedMemoriesUsableBy(companion, subject, 100))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getCode())
+                .isEqualTo(ErrorCode.OPERATION_ERROR.getCode());
+        verify(memoryRepository, never()).save(any(), anyLong());
+        verify(memoryRepository, never()).findActive(anyLong(), org.mockito.ArgumentMatchers.anyInt());
     }
 
     private Companion persistedCompanion() {

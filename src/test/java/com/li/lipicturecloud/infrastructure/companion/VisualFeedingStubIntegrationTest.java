@@ -61,7 +61,7 @@ class VisualFeedingStubIntegrationTest {
     private static final String FINGERPRINT = "b".repeat(64);
     private static final String CORRELATION = "8c4f8a48-7c86-49a3-9d66-52f759d53d36";
     private static final String COMPANION_MESSAGE =
-            "我像走进一段暖洋洋的旅程：明亮色彩让我充满精神，层层细节又像沿途的小路，邀请我继续探索。";
+            "画面包含明亮的暖色区域，主体与背景层次清晰，右侧可见树木与道路。";
     private static final URI ENDPOINT = URI.create("https://dashscope.test/compatible-mode/v1/chat/completions");
 
     @Autowired private CompanionRepository companions;
@@ -110,7 +110,7 @@ class VisualFeedingStubIntegrationTest {
                     .containsExactly("dashscope", "qwen3.6-flash", null,
                             "Qwen 视觉营养 · 已分析图片内容");
             assertThat(result.growth().confidence()).isEqualByComparingTo("0.84");
-            assertThat(result.growth().reason()).isEqualTo(COMPANION_MESSAGE);
+            assertThat(result.growth().reason()).isEqualTo("可见观察：" + COMPANION_MESSAGE);
             assertThat(jdbc.queryForObject("""
                     SELECT attempts FROM companion_vision_usage WHERE subjectId = ?
                     """, Integer.class, SUBJECT_ID)).isEqualTo(1);
@@ -120,7 +120,7 @@ class VisualFeedingStubIntegrationTest {
                     NutritionPolicy.VISUAL_WITH_METADATA_FALLBACK, "dashscope", "qwen3.6-flash");
             assertThat(replay.kind()).isEqualTo(FeedReservation.Kind.REPLAY);
             assertThat(replay.replay().companion().revision()).isEqualTo(1L);
-            assertThat(replay.replay().growth().reason()).isEqualTo(COMPANION_MESSAGE);
+            assertThat(replay.replay().growth().reason()).isEqualTo("可见观察：" + COMPANION_MESSAGE);
             assertThat(growth.findRecent(companion.id(), 10)).hasSize(1);
             server.verify();
         } finally {
@@ -161,7 +161,7 @@ class VisualFeedingStubIntegrationTest {
     private static String response(String mood, int complexity, int energy, boolean social, int motion,
                                    int creativity, String confidence, String companionMessage) {
         return """
-                {"choices":[{"message":{"content":"{\\"mood\\":\\"%s\\",\\"sceneComplexity\\":%d,\\"energy\\":%d,\\"socialPresence\\":%s,\\"motionPotential\\":%d,\\"creativity\\":%d,\\"confidence\\":%s,\\"companionMessage\\":\\"%s\\"}"}}]}
+                {"choices":[{"message":{"content":"{\\"mood\\":\\"%s\\",\\"sceneComplexity\\":%d,\\"energy\\":%d,\\"socialPresence\\":%s,\\"motionPotential\\":%d,\\"creativity\\":%d,\\"confidence\\":%s,\\"visibleObservations\\":\\"%s\\",\\"uncertainInterpretation\\":\\"\\",\\"possibleIdentity\\":\\"\\"}"}}]}
                 """.formatted(mood, complexity, energy, social, motion, creativity, confidence, companionMessage);
     }
 }

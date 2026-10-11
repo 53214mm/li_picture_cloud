@@ -1,5 +1,6 @@
 // R07 consumes only the R06 protocol. These are rendering choices, not domain states.
 const activities = new Set(['idle', 'feeding', 'thinking', 'responding', 'acknowledging'])
+const idleTones = new Set(['neutral', 'energetic', 'cheerful', 'lonely', 'inspired', 'irritated'])
 
 export function mapCompanionAnimation(presentation) {
   const p = presentation
@@ -8,6 +9,8 @@ export function mapCompanionAnimation(presentation) {
     p.appearance.allowIdle === true && activities.has(p.activity)
   return Object.freeze({
     companionId: p?.companionId ?? null,
+    idleTone: supported && p.freshness === 'fresh' && p.disposition?.mood?.status === 'known' && idleTones.has(p.disposition.mood.idleTone)
+      ? p.disposition.mood.idleTone : 'neutral',
     state: !supported ? 'static' : p.activity !== 'idle' ? 'focus' : p.attention === 'proposal' ? 'attention' : 'idle'
   })
 }
@@ -20,6 +23,16 @@ const clips = {
   attention: [{ frame: 0, ms: 600 }, { frame: 1, ms: 140 }, { frame: 0, ms: 180 }, { frame: 1, ms: 140 }],
   greeting: [{ frame: 0, ms: 160 }, { frame: 1, ms: 140 }, { frame: 0, ms: 160 }]
 }
+// Same two frames, no new expression is painted onto the existing artwork.
+// Variations remain below 2px and are scheduled by the existing single clock.
+const idleClips = {
+  neutral: clips.idle,
+  energetic: [{ frame: 0, ms: 2800 }, { frame: 0, offsetY: -2, ms: 220 }, { frame: 1, ms: 140 }],
+  cheerful: [{ frame: 0, ms: 3600 }, { frame: 0, offsetY: -1, ms: 300 }, { frame: 1, ms: 140 }],
+  lonely: [{ frame: 0, ms: 5000 }, { frame: 1, ms: 140 }],
+  inspired: [{ frame: 0, ms: 4000 }, { frame: 0, offsetY: -1, ms: 240 }, { frame: 1, ms: 140 }],
+  irritated: [{ frame: 0, ms: 4800 }, { frame: 1, ms: 140 }]
+}
 
 /** One controller per mounted Home player. Only one pending timeout at any time. */
 export function createCompanionAnimator({ onChange, schedule = setTimeout, cancel = clearTimeout }) {
@@ -31,9 +44,11 @@ export function createCompanionAnimator({ onChange, schedule = setTimeout, cance
   let identity = null
   let attentionConsumed = false
   let lastInteraction = 0
+  let idleTone = 'neutral'
+  const currentClip = () => state === 'idle' ? idleClips[idleTone] : clips[state]
 
   function publish() {
-    const pose = clips[state]?.[step]
+    const pose = currentClip()?.[step]
     onChange(Object.freeze({ state, frame: pose?.frame ?? 0, offsetY: pose?.offsetY ?? 0, playing: state !== 'static' }))
   }
   function stop() {
@@ -47,13 +62,13 @@ export function createCompanionAnimator({ onChange, schedule = setTimeout, cance
       if (disposed || cycle !== generation) return
       timer = null
       step += 1
-      if (step === clips[state].length) {
+      if (step === currentClip().length) {
         step = 0
         if (state === 'attention' || state === 'greeting') state = 'idle'
       }
       publish()
       next()
-    }, clips[state][step].ms)
+    }, currentClip()[step].ms)
   }
   function start(target) {
     stop()
@@ -68,6 +83,8 @@ export function createCompanionAnimator({ onChange, schedule = setTimeout, cance
     update(presentation, playable, interactionRequest = 0) {
       if (disposed) return
       const intent = mapCompanionAnimation(presentation)
+      const changedTone = intent.idleTone !== idleTone
+      idleTone = intent.idleTone
       const direct = Number.isSafeInteger(interactionRequest) && interactionRequest > lastInteraction
       lastInteraction = interactionRequest
       const changedIdentity = intent.companionId !== identity
@@ -80,7 +97,7 @@ export function createCompanionAnimator({ onChange, schedule = setTimeout, cance
       // hidden, busy, reduced-motion or showing a proposal; never reset its quota.
       if (target === 'idle' && (direct || state === 'greeting' && !changedIdentity)) target = 'greeting'
       if (target === 'attention' && attentionConsumed && state !== 'attention') target = 'idle'
-      if (changedIdentity || target !== state) start(target)
+      if (changedIdentity || target !== state || target === 'idle' && changedTone) start(target)
     },
     destroy() {
       if (disposed) return

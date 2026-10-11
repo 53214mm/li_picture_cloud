@@ -26,6 +26,8 @@ export default defineConfig({
       timeout: 60_000,
       reuseExistingServer: false,
       env: {
+        // Keep browser prebundles out of the interactive development server cache.
+        VITE_CACHE_DIR: '.vite/e2e',
         VITE_API_PROXY_TARGET: 'http://127.0.0.1:18124',
         VITE_COMPANION_ENABLED: 'true'
       }

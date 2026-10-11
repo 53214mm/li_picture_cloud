@@ -146,6 +146,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { listPictureByPage, reviewPicture, deletePicture, getPictureTagCategory, uploadPictureByBatch, getImageSearchUrl } from '@/api/picture'
 import request from '@/api/request'
+import { formatDate } from '@/utils/date'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -341,9 +342,6 @@ function reviewLabel(s) {
   return '⏳ 待审'
 }
 
-function formatDate(d) {
-  return d ? new Date(d).toLocaleDateString('zh-CN') : '-'
-}
 </script>
 
 <style scoped>

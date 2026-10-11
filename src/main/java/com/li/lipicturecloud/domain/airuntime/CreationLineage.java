@@ -35,8 +35,8 @@ public record CreationLineage(
         if (capabilityId == null || !CODE.matcher(capabilityId).matches()) {
             throw new IllegalArgumentException("capabilityId must match " + CODE.pattern());
         }
-        if (modelCode == null || !CODE.matcher(modelCode).matches()) {
-            throw new IllegalArgumentException("modelCode must match " + CODE.pattern());
+        if (modelCode == null || !ModelConnection.MODEL_CODE.matcher(modelCode).matches()) {
+            throw new IllegalArgumentException("modelCode must match " + ModelConnection.MODEL_CODE.pattern());
         }
         if (promptTemplateVersion == null || !CODE.matcher(promptTemplateVersion).matches()) {
             throw new IllegalArgumentException("promptTemplateVersion must match " + CODE.pattern());

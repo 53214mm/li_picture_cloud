@@ -51,6 +51,16 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
 
     @Override
     public Flux<String> stream(ModelRouteDecision route, List<ChatTurn> turns) {
+        return streamInternal(route, turns, null);
+    }
+
+    @Override
+    public Flux<String> streamBounded(ModelRouteDecision route, List<ChatTurn> turns, int maxTokens) {
+        if (maxTokens < 1 || maxTokens > 256) throw new IllegalArgumentException("Invalid output token bound");
+        return streamInternal(route, turns, maxTokens);
+    }
+
+    private Flux<String> streamInternal(ModelRouteDecision route, List<ChatTurn> turns, Integer maxTokens) {
         Objects.requireNonNull(route, "route");
         if (!route.isByok()) {
             throw new IllegalArgumentException("BYOK client only handles BYOK routes");
@@ -67,7 +77,7 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
                     .timeout(timeout)
                     .header("Authorization", "Bearer " + route.apiKey())
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(encodeBody(route, turns)))
+                    .POST(HttpRequest.BodyPublishers.ofString(encodeBody(route, turns, maxTokens)))
                     .build();
         } catch (IOException bodyFailure) {
             throw new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
@@ -81,9 +91,19 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
                         response.body().close();
                         return Flux.error(statusFailure(response.statusCode()));
                     }
-                    return Flux.fromStream(response.body());
+                    // Completion is a protocol fact, not merely a closed TCP response.
+                    // State belongs to this response/subscription, never to the shared client.
+                    boolean[] terminal = { false };
+                    return Flux.fromStream(response.body())
+                            .map(this::parseFrame)
+                            .takeUntil(frame -> terminal[0] = frame.terminal())
+                            .<String>handle((frame, sink) -> {
+                                if (frame.content() != null) sink.next(frame.content());
+                            })
+                            .concatWith(Flux.defer(() -> terminal[0] ? Flux.empty()
+                                    : Flux.error(new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
+                                            "model stream ended before completion"))));
                 })
-                .mapNotNull(this::extractDelta)
                 // HttpRequest.timeout 只覆盖到响应头；对 SSE 正文叠加逐帧空闲超时，
                 // 上游 200 后停滞不发帧时也能及时终止而不是无限悬挂。
                 .timeout(timeout)
@@ -96,6 +116,10 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
     }
 
     String encodeBody(ModelRouteDecision route, List<ChatTurn> turns) throws IOException {
+        return encodeBody(route, turns, null);
+    }
+
+    String encodeBody(ModelRouteDecision route, List<ChatTurn> turns, Integer maxTokens) throws IOException {
         StringBuilder messages = new StringBuilder();
         for (ChatTurn turn : turns) {
             if (messages.length() > 0) {
@@ -108,27 +132,38 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
                     .append('}');
         }
         return "{\"model\":\"" + route.connection().modelCode()
-                + "\",\"messages\":[" + messages + "],\"stream\":true}";
+                + "\",\"messages\":[" + messages + "],\"stream\":true"
+                + (maxTokens == null ? "" : ",\"max_tokens\":" + maxTokens) + "}";
     }
 
     String extractDelta(String line) {
+        return parseFrame(line).content();
+    }
+
+    private record StreamFrame(String content, boolean terminal) { }
+
+    private StreamFrame parseFrame(String line) {
         String payload = line.strip();
         if (!payload.startsWith("data:")) {
-            return null;
+            return new StreamFrame(null, false);
         }
         String data = payload.substring("data:".length()).strip();
-        if (data.isEmpty() || "[DONE]".equals(data)) {
-            return null;
-        }
+        if ("[DONE]".equals(data)) return new StreamFrame(null, true);
+        if (data.isEmpty()) return new StreamFrame(null, false);
         try {
             JsonNode node = objectMapper.readTree(data);
             if (node.hasNonNull("error")) {
                 throw new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
                         "model endpoint reported an error");
             }
-            JsonNode content = node.path("choices").path(0).path("delta").path("content");
-            return content.isMissingNode() || content.isNull() || content.asText().isEmpty()
-                    ? null : content.asText();
+            JsonNode choice = node.path("choices").path(0);
+            JsonNode content = choice.path("delta").path("content");
+            JsonNode finish = choice.path("finish_reason");
+            // Providers may close after finish_reason without a separate [DONE].
+            // A token-limit finish (length) is still an explicit provider completion.
+            boolean terminal = finish.isTextual() && !finish.asText().isBlank();
+            return new StreamFrame(content.isMissingNode() || content.isNull() || content.asText().isEmpty()
+                    ? null : content.asText(), terminal);
         } catch (IOException malformed) {
             throw new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
                     "malformed model stream frame", malformed);

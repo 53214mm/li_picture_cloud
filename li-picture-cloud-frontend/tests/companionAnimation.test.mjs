@@ -3,8 +3,11 @@ import assert from 'node:assert/strict'
 import { mapCompanionPresentation } from '../src/presentation/companionPresentation.js'
 import { mapCompanionAnimation, createCompanionAnimator } from '../src/presentation/companionAnimation.js'
 
+// Retain legacy controller lifecycle coverage using an explicit synthetic motion capability.
+// Production projections disable this atlas; the static-identity suite verifies that boundary.
+const legacyMotion = p => ({ ...p, appearance: { ...p.appearance, allowIdle: true } })
 function presentation(overrides = {}) {
-  return { ...mapCompanionPresentation({ homeStatus: 'ready', home: { companion: { id: '7', lifeStage: 'LIGHT' } } }), ...overrides }
+  return { ...legacyMotion(mapCompanionPresentation({ homeStatus: 'ready', home: { companion: { id: '7', lifeStage: 'LIGHT' } } })), ...overrides }
 }
 function fixture() {
   const pending = new Map()
@@ -31,7 +34,7 @@ function fixture() {
 test('animation consumes all R06 conflict combinations without reordering its winner', () => {
   for (const phase of ['idle', 'waiting', 'streaming']) for (const pending of [false, true]) for (const busy of [false, true]) {
     const p = mapCompanionPresentation({ homeStatus: 'ready', home: { companion: { id: '7', lifeStage: 'LIGHT' } }, chat: { phase }, feed: { pending }, proposal: { status: 'PENDING', busy } })
-    const intent = mapCompanionAnimation(p)
+    const intent = mapCompanionAnimation(legacyMotion(p))
     assert.equal(intent.state, p.activity === 'idle' ? 'attention' : 'focus')
     assert.equal(intent.companionId, '7')
     assert.ok(Object.isFrozen(intent))

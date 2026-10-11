@@ -197,7 +197,8 @@ test('navigation disclosures align with primary entries, animate and remain keyb
   const toolsToggle = nav.getByRole('button', { name: '工具', exact: true })
   const toggle = nav.getByRole('button', { name: '管理', exact: true })
   await expect(spacesToggle).toHaveAttribute('aria-expanded', 'true')
-  await expect(toolsToggle).toHaveAttribute('aria-expanded', 'false')
+  if (testInfo.project.name === 'production-default') await expect(toolsToggle).toHaveCount(0)
+  else await expect(toolsToggle).toHaveAttribute('aria-expanded', 'false')
   const controlled = await toggle.getAttribute('aria-controls')
   const panel = page.locator(`[id="${controlled}"]`)
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -270,14 +271,14 @@ test('space disclosure, semantic breadcrumbs and compact toolbar actions remain 
   await expect(page).toHaveURL(/\/upload$/)
 })
 
-test('breadcrumbs reflect gallery, tools, admin and companion sections', async ({ page }) => {
+test('breadcrumbs reflect gallery, tools, admin and companion sections', async ({ page }, testInfo) => {
   await fixture(page, { user: { ...member, userRole: 'admin' } })
   await page.setViewportSize({ width: 1440, height: 900 })
   const cases = [
     ['/gallery', /^图库$/],
     ['/admin/users', /管理\s*\/\s*用户管理/],
-    ['/model-gateway', /工具\s*\/\s*模型连接/],
-    ['/companion', /^伙伴$/]
+    ['/model-gateway', testInfo.project.name === 'production-default' ? /^页面不可用$/ : /工具\s*\/\s*模型连接/],
+    ['/companion', testInfo.project.name === 'production-default' ? /^页面不可用$/ : /^伙伴$/]
   ]
   for (const [path, expected] of cases) {
     await page.goto(path)
@@ -317,12 +318,19 @@ test('required smoke screenshots preserve shell hierarchy and landing accent', a
   await page.screenshot({ path: testInfo.outputPath('space-my-390.png'), fullPage: true })
 })
 
-test('enabled feature links expose tools and companion together', async ({ page }, testInfo) => {
+test('feature links expose tools and companion only in enabled builds', async ({ page }, testInfo) => {
   await fixture(page, { user: { ...member, userRole: 'admin' } })
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/space/my')
   const nav = page.locator('.desktop-navigation')
   await expect(nav.getByText('管理', { exact: true })).toBeVisible()
+  if (testInfo.project.name === 'production-default') {
+    await expect(page.locator('.sidebar .presence')).toHaveCount(0)
+    await expect(nav.getByText('工具', { exact: true })).toHaveCount(0)
+    await page.goto('/model-gateway')
+    await expect(page.getByRole('heading', { name: '页面不可用' })).toBeVisible()
+    return
+  }
   await expect(page.locator('.sidebar .presence')).toBeVisible()
   await nav.getByText('工具', { exact: true }).click()
   await nav.getByRole('link', { name: '模型连接', exact: true }).click()

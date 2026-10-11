@@ -45,6 +45,21 @@ public class LanguageRouter {
         ModelRouteDecision decision = byokResolver.resolveByok(subjectId,
                 rule.get().connectionId(), "语言");
         ModelConnection connection = decision.connection();
+        requireTextProfile(connection);
+        return decision;
+    }
+
+    /** Current LANGUAGE_AGENT route metadata only; no key decryption, probe, or route mutation. */
+    public Optional<ModelConnection> inspectCurrentByok(long subjectId) {
+        if (subjectId <= 0) throw new IllegalArgumentException("subjectId must be positive");
+        Optional<TaskRoutingRule> rule = routingRepository.findBySubjectAndTask(subjectId, ModelTask.LANGUAGE_AGENT);
+        if (rule.isEmpty() || rule.get().connectionId() == null) return Optional.empty();
+        ModelConnection connection = byokResolver.inspectByok(subjectId, rule.get().connectionId(), "语言");
+        requireTextProfile(connection);
+        return Optional.of(connection);
+    }
+
+    private void requireTextProfile(ModelConnection connection) {
         com.li.lipicturecloud.domain.airuntime.ModelCapabilityProfile profile =
                 profileService.findLatest(connection.id())
                         .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_ERROR,
@@ -53,6 +68,5 @@ public class LanguageRouter {
             throw new BusinessException(ErrorCode.OPERATION_ERROR,
                     "语言任务路由的连接模型不支持文本能力，请修复或清除路由规则");
         }
-        return decision;
     }
 }

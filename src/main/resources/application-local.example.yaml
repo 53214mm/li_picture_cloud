@@ -19,9 +19,10 @@ spring:
 
 pgvector:
   datasource:
-    url: ${PGVECTOR_URL:jdbc:postgresql://localhost:5432/postgres}
+    # docker compose -f compose.pgvector.yaml up -d 启动的本地 pgvector
+    url: ${PGVECTOR_URL:jdbc:postgresql://localhost:5433/picture}
     username: ${PGVECTOR_USERNAME:postgres}
-    password: ${PGVECTOR_PASSWORD:}
+    password: ${PGVECTOR_PASSWORD:lingye-dev}
   store:
     index-type: ${PGVECTOR_INDEX_TYPE:HNSW}
     dimensions: ${PGVECTOR_DIMENSIONS:1536}

@@ -39,6 +39,26 @@ class CompanionSchemaMigrationTest {
             assertCreationTables(dataSource, 1);
             assertRecipeTables(dataSource, 1);
 
+            assertChatEpisodeTables(dataSource, 2);
+            rollback(dataSource, chatEpisodeChangeSetCount(dataSource));
+            // 聊天经历与登录时间表回滚后，识图联网偏好表不受影响。
+            assertChatEpisodeTables(dataSource, 0);
+            assertVisionPreferenceTable(dataSource, 1);
+            rollback(dataSource, visionPreferenceChangeSetCount(dataSource));
+            // 识图联网偏好表回滚后，主动判断额度表与聊天偏好表不受影响。
+            assertVisionPreferenceTable(dataSource, 0);
+            assertThat(new JdbcTemplate(dataSource).queryForObject(
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'COMPANION_PRESENCE_USAGE'", Integer.class)).isEqualTo(1);
+            rollback(dataSource, 1);
+            assertThat(new JdbcTemplate(dataSource).queryForObject(
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'COMPANION_PRESENCE_USAGE'", Integer.class)).isZero();
+            assertChatPreferenceTable(dataSource, 1);
+            rollback(dataSource, chatPreferenceChangeSetCount(dataSource));
+            // 聊天模式偏好表回滚后，观测索引与其余伙伴表不受影响。
+            assertChatPreferenceTable(dataSource, 0);
+            assertObservationIndexes(dataSource, true);
+            assertChatTables(dataSource, 1);
+
             rollback(dataSource, observationChangeSetCount(dataSource));
             // 观测索引回滚后，业务表及其他扩展能力不受影响。
             assertObservationIndexes(dataSource, false);
@@ -429,6 +449,49 @@ class CompanionSchemaMigrationTest {
                 SELECT COUNT(*) FROM DATABASECHANGELOG
                 WHERE FILENAME LIKE '%2026-08-13-companion-visual-provider.xml'
                 """, Integer.class);
+    }
+
+    private static int chatEpisodeChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-10-10-companion-chat-episode.xml'
+                """, Integer.class);
+    }
+
+    private static void assertChatEpisodeTables(DataSource dataSource, int expected) {
+        assertThat(new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_SCHEMA) = 'public'
+                  AND LOWER(TABLE_NAME) IN ('companion_chat_episode', 'companion_chat_boundary')
+                """, Integer.class)).isEqualTo(expected);
+    }
+
+    private static int visionPreferenceChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-10-10-model-vision-preference.xml'
+                """, Integer.class);
+    }
+
+    private static void assertVisionPreferenceTable(DataSource dataSource, int expected) {
+        assertThat(new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = 'model_vision_preference'
+                """, Integer.class)).isEqualTo(expected);
+    }
+
+    private static int chatPreferenceChangeSetCount(DataSource dataSource) {
+        return new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM DATABASECHANGELOG
+                WHERE FILENAME LIKE '%2026-10-09-companion-chat-preference.xml'
+                """, Integer.class);
+    }
+
+    private static void assertChatPreferenceTable(DataSource dataSource, int expected) {
+        assertThat(new JdbcTemplate(dataSource).queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_SCHEMA) = 'public' AND LOWER(TABLE_NAME) = 'companion_chat_preference'
+                """, Integer.class)).isEqualTo(expected);
     }
 
     private static int observationChangeSetCount(DataSource dataSource) {

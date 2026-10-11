@@ -1,12 +1,16 @@
 package com.li.lipicturecloud.config;
 
+import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
 import com.li.lipicturecloud.application.airuntime.CredentialCipher;
 import com.li.lipicturecloud.application.airuntime.EndpointAllowlist;
+import com.li.lipicturecloud.application.airuntime.ModelCatalogClient;
 import com.li.lipicturecloud.application.airuntime.ModelConnectivityTester;
+import com.li.lipicturecloud.application.airuntime.ModelProviderPresets;
 import com.li.lipicturecloud.infrastructure.airuntime.AesGcmCredentialCipher;
 import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleConnectivityTester;
 import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleImageClient;
 import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleLanguageClient;
+import com.li.lipicturecloud.infrastructure.airuntime.OpenAiCompatibleModelCatalogClient;
 import com.li.lipicturecloud.infrastructure.airuntime.PropertyEndpointAllowlist;
 import com.li.lipicturecloud.infrastructure.airuntime.StaticModelCapabilityRegistry;
 import org.slf4j.Logger;
@@ -69,6 +73,50 @@ public class ModelGatewayConfiguration {
     public ModelConnectivityTester stubbedModelConnectivityTester() {
         return (endpointUri, apiKey, provider) ->
                 com.li.lipicturecloud.application.airuntime.ConnectivityResult.success();
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "app.model.credential", name = "connectivity-stub",
+            havingValue = "false", matchIfMissing = true)
+    public ModelCatalogClient modelCatalogClient(com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+                                                 ModelCredentialProperties properties) {
+        return OpenAiCompatibleModelCatalogClient.production(objectMapper,
+                properties.getConnectivityTimeout());
+    }
+
+    /**
+     * E2E 专用：模型目录与最小对话不发外网请求。以 {@code sk-rejected} 开头的 Key 视为被拒，
+     * 名称含 {@code unavailable} 的模型视为不能对话，其余返回该供应商的推荐模型。
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "app.model.credential", name = "connectivity-stub",
+            havingValue = "true")
+    public ModelCatalogClient stubbedModelCatalogClient() {
+        return new ModelCatalogClient() {
+            @Override
+            public Catalog listModels(java.net.URI endpoint, String apiKey,
+                                      com.li.lipicturecloud.domain.airuntime.ModelProvider provider) {
+                if (apiKey.startsWith("sk-rejected")) {
+                    return Catalog.failed(ConnectivityResult.CREDENTIAL_REJECTED);
+                }
+                java.util.List<String> models = new java.util.ArrayList<>(
+                        ModelProviderPresets.of(provider).suggestedModels());
+                models.add("stub-unavailable-model");
+                return Catalog.of(models);
+            }
+
+            @Override
+            public ConnectivityResult probeChat(java.net.URI endpoint, String apiKey,
+                                                com.li.lipicturecloud.domain.airuntime.ModelProvider provider,
+                                                String modelCode) {
+                if (apiKey.startsWith("sk-rejected")) {
+                    return ConnectivityResult.failed(ConnectivityResult.CREDENTIAL_REJECTED);
+                }
+                return modelCode.contains("unavailable")
+                        ? ConnectivityResult.failed(ConnectivityResult.MODEL_UNAVAILABLE)
+                        : ConnectivityResult.success();
+            }
+        };
     }
 
     @Bean

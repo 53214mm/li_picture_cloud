@@ -7,7 +7,8 @@ import java.util.Objects;
  * 一条追加式的伙伴对话消息。
  *
  * <p>消息只属于一个主体的伙伴；内容允许包含普通链接文本（聊天是用户自己的内容，
- * 展示层由 Vue 转义），但拒绝 ISO 控制字符。日志与指标不得记录内容原文。</p>
+ * 展示层由 Vue 转义）。伙伴回复允许换行和制表排版，其他 ISO 控制字符仍被拒绝。
+ * 日志与指标不得记录内容原文。</p>
  */
 public record CompanionChatMessage(
         Long id,
@@ -29,7 +30,7 @@ public record CompanionChatMessage(
             throw new IllegalArgumentException("invalid chat message identity");
         }
         Objects.requireNonNull(role, "role");
-        content = checkContent(content);
+        content = checkContent(content, role);
         if (modelProvider != null && modelProvider.length() > 64) {
             throw new IllegalArgumentException("modelProvider is too long");
         }
@@ -58,13 +59,15 @@ public record CompanionChatMessage(
                 content, modelProvider, modelCode, createdTime);
     }
 
-    private static String checkContent(String value) {
+    private static String checkContent(String value, CompanionChatRole role) {
         String normalized = Objects.requireNonNull(value, "content").strip();
         int length = normalized.codePointCount(0, normalized.length());
         if (length < 1 || length > MAX_CONTENT_CODE_POINTS) {
             throw new IllegalArgumentException("chat content must be 1-1000 characters");
         }
-        if (normalized.codePoints().anyMatch(Character::isISOControl)) {
+        if (normalized.codePoints().anyMatch(codePoint -> Character.isISOControl(codePoint)
+                && !(role == CompanionChatRole.COMPANION
+                && (codePoint == '\n' || codePoint == '\r' || codePoint == '\t')))) {
             throw new IllegalArgumentException("chat content must not contain control characters");
         }
         return normalized;

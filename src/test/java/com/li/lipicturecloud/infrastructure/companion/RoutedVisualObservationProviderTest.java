@@ -55,7 +55,7 @@ class RoutedVisualObservationProviderTest {
     private static final String VALID_CANDIDATE = """
             {"mood":"JOYFUL","sceneComplexity":2,"energy":3,"socialPresence":true,
             "motionPotential":2,"creativity":3,"confidence":0.84,
-            "companionMessage":"我像走进了一段被阳光照亮的旅程：明快的色彩和人物间的呼应让我感到热闹，细节也勾起了我的好奇心。"}
+            "visibleObservations":"画面使用明亮暖色，几个人物相邻站立，背景包含建筑与树木。", "uncertainInterpretation":"", "possibleIdentity":""}
             """;
 
     @BeforeEach
@@ -97,7 +97,7 @@ class RoutedVisualObservationProviderTest {
     @Test
     void platformRouteUsesExistingDashScopePathAndRecordsPlatformUsage() {
         when(visionRouter.decide(7L)).thenReturn(ModelRouteDecision.platform());
-        when(platform.observe(content, 7L)).thenReturn(result("dashscope", "qwen3.6-flash"));
+        when(platform.observe(content, 7L, false)).thenReturn(result("dashscope", "qwen3.6-flash"));
 
         VisualObservationResult observed = provider.observe(content, 7L);
 
@@ -110,7 +110,7 @@ class RoutedVisualObservationProviderTest {
     void platformVisionFailureIsRecordedAndNeverSilentlyDowngraded() {
         when(visionRouter.decide(7L)).thenReturn(ModelRouteDecision.platform());
         VisionProviderException failure = new VisionProviderException("VISION_TIMEOUT", "视觉服务暂不可用");
-        when(platform.observe(content, 7L)).thenThrow(failure);
+        when(platform.observe(content, 7L, false)).thenThrow(failure);
 
         assertThatThrownBy(() -> provider.observe(content, 7L)).isSameAs(failure);
         verify(usageService).recordFailure(7L, ModelTask.VISION_UNDERSTANDING, null,
@@ -149,7 +149,18 @@ class RoutedVisualObservationProviderTest {
                 .isEqualTo("VISION_CREDENTIALS");
         verify(usageService).recordFailure(7L, ModelTask.VISION_UNDERSTANDING, 9L,
                 ModelProvider.DEEPSEEK, "deepseek-chat", CostSource.BYOK, "VISION_CREDENTIALS");
-        verify(platform, never()).observe(any(), anyLong());
+        verify(platform, never()).observe(any(), anyLong(), org.mockito.ArgumentMatchers.anyBoolean());
         byokServer.verify();
+    }
+
+    @Test
+    void forcedWebSearchPreferenceIsPassedToTheVisionClient() {
+        RoutedVisualObservationProvider searching = new RoutedVisualObservationProvider(visionRouter,
+                usageService, platform, RestClient.builder().build(), new ObjectMapper(), subject -> subject == 7L);
+        when(visionRouter.decide(7L)).thenReturn(ModelRouteDecision.platform());
+        when(platform.observe(content, 7L, true)).thenReturn(result("dashscope", "qwen3.8-max"));
+
+        assertThat(searching.observe(content, 7L).modelCode()).isEqualTo("qwen3.8-max");
+        verify(platform).observe(content, 7L, true);
     }
 }

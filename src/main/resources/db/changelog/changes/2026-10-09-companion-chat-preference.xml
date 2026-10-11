@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <preConditions onFail="HALT" onError="HALT">
+        <or>
+            <not><tableExists tableName="companion_chat_preference"/></not>
+            <and>
+                <columnExists tableName="companion_chat_preference" columnName="id"/>
+                <columnExists tableName="companion_chat_preference" columnName="subjectId"/>
+                <columnExists tableName="companion_chat_preference" columnName="chatMode"/>
+                <columnExists tableName="companion_chat_preference" columnName="createTime"/>
+                <columnExists tableName="companion_chat_preference" columnName="updateTime"/>
+            </and>
+        </or>
+    </preConditions>
+
+    <!-- 每个用户一行的伙伴聊天模式偏好（DEMO / MODEL）；没有行时按可用模型推导默认值。 -->
+    <changeSet id="20261009-01" author="li-picture-cloud">
+        <preConditions onFail="MARK_RAN" onError="HALT">
+            <not><tableExists tableName="companion_chat_preference"/></not>
+        </preConditions>
+        <sql splitStatements="false" stripComments="true"><![CDATA[
+CREATE TABLE companion_chat_preference (
+    id BIGINT PRIMARY KEY,
+    subjectId BIGINT NOT NULL,
+    chatMode VARCHAR(16) NOT NULL,
+    createTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_companion_chat_preference_subject UNIQUE (subjectId),
+    CONSTRAINT ck_companion_chat_preference_mode CHECK (chatMode IN ('DEMO', 'MODEL'))
+);
+        ]]></sql>
+        <rollback><dropTable tableName="companion_chat_preference"/></rollback>
+    </changeSet>
+</databaseChangeLog>

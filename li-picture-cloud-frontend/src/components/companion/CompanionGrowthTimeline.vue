@@ -22,7 +22,10 @@
               </div>
               <time :datetime="record.createdTime">{{ formatTime(record.createdTime) }}</time>
             </div>
-            <CompanionMessageBubble :message="record.reason" />
+            <section v-if="isObjectiveGrowthReason(record.reason)" class="objective-observation" aria-label="图片观察">
+              <strong>图片观察</strong><p>{{ record.reason }}</p>
+            </section>
+            <CompanionMessageBubble v-else :message="record.reason" />
             <div v-if="traitChanges(record).length || skillChanges(record).length" class="delta-list">
               <span v-for="item in traitChanges(record)" :key="item.key"
                     :data-testid="`growth-trait-${item.key}`">
@@ -52,6 +55,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { isObjectiveGrowthReason } from '@/presentation/companionGrowthReason'
 import { SKILL_LABEL, TRAIT_AXES } from '@/constants/companion'
 import { formatSignedDelta } from '@/utils/companion'
 import CompanionMessageBubble from '@/components/companion/CompanionMessageBubble.vue'
@@ -92,6 +96,9 @@ function formatTime(value) {
 </script>
 
 <style scoped>
+.objective-observation { margin-top: .85rem; padding: .9rem; border: 1px solid var(--gray-400); background: var(--white); }
+.objective-observation strong { font-size: .75rem; color: var(--gray-600); }
+.objective-observation p { margin-top: .4rem; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; font-size: .9rem; }
 .timeline-card { border: 2px solid var(--black); background: var(--white); }
 .timeline-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 2px solid var(--black); }
 .timeline-card h2 { font-size: 1.35rem; }

@@ -33,7 +33,7 @@ function onBackdrop(event) {
 }
 function trapFocus(event) {
   if (event.key !== 'Tab') return
-  const items = [...dialog.value.querySelectorAll('a[href],button:not([disabled]),summary,[tabindex="0"]')].filter(el => el.getClientRects().length)
+  const items = [...dialog.value.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),summary,[tabindex="0"]')].filter(el => el.getClientRects().length)
   const first = items[0]
   const last = items.at(-1)
   if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }

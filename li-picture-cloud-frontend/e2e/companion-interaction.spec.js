@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { freezeClock } from './helpers/clock.js'
 
 const member = { id: '42', userName: 'R08', userRole: 'user' }
 const specimen = { id: '7001', lifeStage: 'LIGHT', lifeExperience: '42', level: 1, levelStartExperience: '0', nextLevelExperience: '100', revision: '9', traits: {}, skills: [] }
@@ -55,9 +56,11 @@ test('Shell keyboard interaction traps focus, restores it and does not manufactu
   await page.keyboard.press('Escape')
   await expect(shell(page)).toBeFocused()
   await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden')
-  expect(state.calls.some(call => call.path.startsWith('/api/companion/'))).toBe(false)
+  expect(state.calls.filter(call => call.path.startsWith('/api/companion/')).every(call => ['/api/companion/me', '/api/companion/chat/history'].includes(call.path) && call.method === 'GET')).toBe(true)
   await shell(page).click()
-  await panel(page).getByRole('button', { name: /聊一聊/ }).click()
+  await expect(panel(page).getByLabel('对伙伴说的话')).toBeVisible()
+  await expect(page).toHaveURL(/\/gallery$/)
+  await panel(page).getByRole('button', { name: /打开完整对话/ }).click()
   await expect(page).toHaveURL(/\/companion$/)
   await expect(page.getByLabel('对伙伴说的话')).toBeFocused()
   await page.locator('.portrait-interaction').click()
@@ -90,7 +93,7 @@ test('chat handoff does not wait for an unrelated slow private-picture source', 
   await page.route('**/api/space/list/page/vo', async route => { await held.promise; await ok(route, { records: [space] }) })
   await page.goto('/gallery')
   await shell(page).click()
-  await panel(page).getByRole('button', { name: /聊一聊/ }).click()
+  await panel(page).getByRole('button', { name: /打开完整对话/ }).click()
   try {
     await expect(page.getByLabel('对伙伴说的话')).toBeFocused()
     noFeed(state)
@@ -111,7 +114,7 @@ test('native Gallery drag opens a verified candidate and hands off only a select
   expect(state.errors).toEqual([])
 })
 
-test('external and forged drops are ignored; public, team and other-owner candidates are explained', async ({ page }) => {
+test('external and forged drops are ignored; public pictures never offer a hand-off; team and other-owner candidates are explained', async ({ page }) => {
   const state = await fixture(page)
   await page.goto('/gallery')
   for (const type of ['text/uri-list', 'application/x-lipicturecloud-companion-picture']) {
@@ -121,8 +124,16 @@ test('external and forged drops are ignored; public, team and other-owner candid
     await expect(panel(page)).not.toBeVisible()
   }
   expect(state.calls.some(call => call.path === '/api/picture/get/vo')).toBe(false)
-  for (const kind of ['public', 'team', 'other']) {
-    state.photo.spaceId = kind === 'public' ? null : '51'
+  // The gallery list itself must carry a public picture, so reload after changing it.
+  state.photo.spaceId = null
+  await page.reload()
+  await ticketDrop(page, page.locator('.gallery-card').first())
+  await expect(panel(page)).not.toBeVisible()
+  await expect(page.locator('.sidebar .presence')).not.toHaveClass(/is-drop-target/)
+  expect(state.calls.some(call => call.path === '/api/picture/get/vo')).toBe(false)
+  state.photo.spaceId = '51'
+  await page.reload()
+  for (const kind of ['team', 'other']) {
     state.space = { ...space, spaceType: kind === 'team' ? 1 : 0, userId: kind === 'other' ? '43' : '42' }
     await ticketDrop(page, page.locator('.gallery-card').first())
     await expect(panel(page).getByRole('alert')).toContainText('仅支持你自己的私有空间')
@@ -130,6 +141,20 @@ test('external and forged drops are ignored; public, team and other-owner candid
     await page.keyboard.press('Escape')
   }
   noFeed(state)
+  expect(state.errors).toEqual([])
+})
+
+test("picture detail offers the companion action only for the owner's private-space pictures", async ({ page }) => {
+  const state = await fixture(page)
+  await page.goto('/picture/11')
+  await expect(page.getByRole('button', { name: '选给绫页' })).toBeVisible()
+  for (const variant of [{ photo: { spaceId: null } }, { space: { spaceType: 1 } }, { photo: { userId: '43' } }]) {
+    state.photo = { ...photo, ...variant.photo }
+    state.space = { ...space, ...variant.space }
+    await page.reload()
+    await expect(page.getByRole('button', { name: '分享', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '选给绫页' })).toHaveCount(0)
+  }
   expect(state.errors).toEqual([])
 })
 
@@ -156,33 +181,32 @@ test('closing an inspection discards its late reply; arrival rechecks revoked ac
   expect(state.errors).toEqual([])
 })
 
-test('R07 arbitrates hover/focus, modal interruption, pause and reduced motion', async ({ page }) => {
+test('L06 hover, focus and modal interactions work without restoring animation', async ({ page }) => {
   const state = await fixture(page)
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  await freezeClock(page)
   await page.goto('/companion')
-  const player = page.locator('.sprite-player')
+  const player = page.locator('.companion-body')
   const body = page.locator('.body-ground')
-  await expect(player).toHaveAttribute('data-animation-state', 'idle')
+  await expect(player).toHaveAttribute('data-animation-intent', 'static')
   await body.hover()
-  await expect(player).toHaveAttribute('data-animation-state', 'greeting')
+  await expect(player).toHaveAttribute('data-animation-intent', 'static')
   await page.clock.runFor(160)
-  await expect(player).toHaveAttribute('data-frame', '1')
+  await expect(page.locator('.sprite-player')).toHaveCount(0)
   await page.clock.runFor(300)
-  await expect(player).toHaveAttribute('data-animation-state', 'idle')
+  await expect(player).toHaveAttribute('data-animation-intent', 'static')
   await body.click()
-  await expect(player).toHaveAttribute('data-animation-state', 'static')
+  await expect(player).toHaveAttribute('data-animation-intent', 'static')
   await page.keyboard.press('Escape')
   await expect(body).toBeFocused()
-  await expect(player).toHaveAttribute('data-playback', 'playing')
-  await page.getByRole('button', { name: '暂停动作' }).click()
+  await expect(player).toHaveAttribute('data-animation-intent', 'static')
+  await expect(page.getByRole('button', { name: /暂停动作|恢复动作/ })).toHaveCount(0)
   await body.focus()
-  await expect(player).toHaveAttribute('data-animation-state', 'static')
+  await expect(player).toHaveAttribute('data-animation-intent', 'static')
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await body.click()
   await expect(panel(page)).toBeVisible()
   await page.keyboard.press('Escape')
-  await expect(player).toHaveAttribute('data-frame', '0')
+  await expect(page.locator('.sprite-player')).toHaveCount(0)
   noFeed(state)
   expect(state.errors).toEqual([])
 })

@@ -1,14 +1,18 @@
 <template>
   <div class="recipe-workshop" data-testid="recipe-workshop">
     <header class="recipe-header">
-      <h1>玩法配方工坊</h1>
-      <p>用「什么时候 + 条件 + 动作」组合白名单能力，配方只会收紧权限与费用，不会扩大。</p>
+      <h1>配方</h1>
+      <p>从模板创建配方，再设置触发时机、条件和动作。触发后仍需确认执行。</p>
     </header>
 
     <div v-if="error" class="panel-error" role="alert">{{ error }}</div>
 
     <section class="recipe-templates" aria-labelledby="templates-title">
       <h2 id="templates-title">官方模板</h2>
+      <p v-if="templatesStatus === 'loading'" class="empty-state" role="status">正在加载模板…</p>
+      <p v-else-if="templatesStatus === 'error'" class="empty-state" role="alert">
+        <span>{{ templatesError }}</span> <button class="btn btn-sm" type="button" :disabled="busy" @click="loadTemplates">重新加载模板</button>
+      </p>
       <ul v-if="templates.length" class="template-list">
         <li v-for="template in templates" :key="template.code" class="template-card"
             :class="{ unavailable: !template.available }"
@@ -28,11 +32,15 @@
           </button>
         </li>
       </ul>
-      <p v-else class="empty-state">模板加载中…</p>
+      <p v-else-if="templatesStatus === 'ready'" class="empty-state">暂无可用模板。</p>
     </section>
 
     <section class="recipe-mine" aria-labelledby="mine-title">
       <h2 id="mine-title">我的配方</h2>
+      <p v-if="recipesStatus === 'loading'" class="empty-state" role="status">正在加载配方…</p>
+      <p v-else-if="recipesStatus === 'error'" class="empty-state" role="alert">
+        <span>{{ recipesError }}</span> <button class="btn btn-sm" type="button" :disabled="busy" @click="loadRecipes">重新加载配方</button>
+      </p>
       <ul v-if="recipes.length" class="recipe-list" data-testid="recipe-list">
         <li v-for="recipe in recipes" :key="recipe.id" class="recipe-row"
             :data-status="recipe.status">
@@ -58,8 +66,8 @@
           </div>
         </li>
       </ul>
-      <p v-else class="empty-state" data-testid="recipe-empty">
-        还没有配方。从上面的官方模板开始，或直接创建后组合自己的触发与动作。
+      <p v-else-if="recipesStatus === 'ready'" class="empty-state" data-testid="recipe-empty">
+        还没有配方。选择上面的可用模板即可创建。
       </p>
     </section>
 
@@ -78,7 +86,7 @@
         </p>
         <p class="version-hint">版本 v{{ selected.latest.version }}（共 {{ selected.versions.length }} 个版本）</p>
       </div>
-      <p v-else class="empty-state">这个配方还没有发布定义版本。</p>
+      <p v-else class="empty-state">这个配方还没有版本。可在下方编辑并发布。</p>
 
       <div class="recipe-editor" data-testid="recipe-editor">
         <h3>组合编辑（发布新版本）</h3>
@@ -91,7 +99,7 @@
             </select>
           </label>
           <fieldset class="editor-field">
-            <legend>条件（最多 5 条，全部满足才执行；条件只会收紧范围与费用）</legend>
+            <legend>条件（最多 5 条，全部满足后可确认执行）</legend>
             <div class="editor-conditions">
               <span v-for="condition in editor.conditions" :key="condition.key" class="editor-chip">
                 {{ editorConditionLabel(condition) }}
@@ -99,7 +107,7 @@
                         :aria-label="`移除条件 ${editorConditionLabel(condition)}`"
                         @click="removeCondition(condition.key)">×</button>
               </span>
-              <p v-if="!editor.conditions.length" class="editor-empty">无条件（每次触发都会执行动作）。</p>
+              <p v-if="!editor.conditions.length" class="editor-empty">未添加额外条件。触发后仍需确认执行。</p>
             </div>
             <div class="editor-adds">
               <button type="button" class="btn btn-sm"
@@ -112,14 +120,14 @@
                       :disabled="busy || editor.conditions.length >= 5 || editor.costAdded"
                       @click="addCondition('MAX_TRIAL_COST')">+ 试用额度上限</button>
             </div>
-            <label v-if="editor.categoryAdded" class="editor-field">图片分类（安全纯文本）
+            <label v-if="editor.categoryAdded" class="editor-field">图片分类
               <input v-model="editor.category" type="text" maxlength="16" placeholder="如 旅行">
             </label>
             <label v-if="editor.costAdded" class="editor-field">试用额度上限（单位）
               <input v-model="editor.cost" type="number" min="1" max="1000000">
             </label>
           </fieldset>
-          <label class="editor-field">动作（白名单能力）
+          <label class="editor-field">动作（仅支持已开放的能力）
             <select v-model="editor.then" aria-label="动作">
               <option v-for="option in capabilityOptions" :key="option.value"
                       :value="option.value" :disabled="!option.open">
@@ -129,14 +137,18 @@
           </label>
           <p v-if="selectedCapability && !selectedCapability.open" class="capability-unavailable"
              data-testid="capability-unavailable">
-            该能力尚未开放，服务端会拒绝发布与执行：{{ selectedCapability.unavailableReason }}
+            该能力尚未开放，暂时无法发布或执行：{{ selectedCapability.unavailableReason }}
           </p>
           <button class="btn" type="submit" :disabled="busy || !editorValid">发布新版本</button>
-          <p class="dry-run-hint">新版本发布后，试运行与执行都会按最新版本重新评估。</p>
+          <p class="dry-run-hint">发布后，新试运行使用新版本；已有记录仍按记录中的版本确认执行。</p>
         </form>
       </div>
 
-      <div class="dry-run" v-if="pictures.length">
+      <p v-if="picturesStatus === 'loading'" class="empty-state" role="status">正在加载图片…</p>
+      <p v-else-if="picturesStatus === 'error'" class="empty-state" role="alert">
+        <span>{{ picturesError }}</span> <button class="btn btn-sm" type="button" :disabled="busy" @click="loadPictures">重新加载图片</button>
+      </p>
+      <div class="dry-run" v-else-if="pictures.length">
         <h3>试运行（不会产生真实创作）</h3>
         <div class="recipe-pictures">
           <label v-for="picture in pictures.slice(0, 12)" :key="picture.id"
@@ -150,9 +162,9 @@
         </div>
         <button class="btn" type="button" :disabled="busy || selectedIds.length === 0"
                 @click="dryRun">试运行</button>
-        <p class="dry-run-hint">试运行会按当前定义评估条件并给出费用报价，并把这次选中的图片绑定到执行记录上；确认执行只会用这组图片。</p>
+        <p class="dry-run-hint">试运行会检查条件并显示费用报价。确认执行只使用这次选中的图片；改选图片后需重新试运行。</p>
       </div>
-      <p v-else class="empty-state">私有图库里暂时没有可用图片，试运行需要先有授权图片。</p>
+      <p v-else class="empty-state">暂未找到可用于试运行的私有空间图片。请先上传图片，再重新加载页面。</p>
 
       <div class="executions" v-if="executions.length">
         <h3>执行回放</h3>
@@ -188,7 +200,7 @@
             </button>
             <p v-if="recipeExecutionIsAwaiting(execution.status) && !snapshotReady(execution)"
                class="snapshot-warning" data-testid="snapshot-missing">
-              这条记录没有来源图片快照，请重新试运行。
+              这条记录缺少来源图片，请重新试运行。
             </p>
             <p v-else-if="recipeExecutionIsAwaiting(execution.status) && !snapshotMatchesSelection(execution)"
                class="snapshot-warning" data-testid="snapshot-changed">
@@ -234,6 +246,12 @@ import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const templates = ref([])
+const templatesStatus = ref('loading')
+const templatesError = ref('')
+const recipesStatus = ref('loading')
+const recipesError = ref('')
+const picturesStatus = ref('loading')
+const picturesError = ref('')
 const capabilities = ref([])
 const recipes = ref([])
 const selected = ref(null)
@@ -283,10 +301,14 @@ onMounted(async () => {
 })
 
 async function loadTemplates() {
+  templatesStatus.value = 'loading'
+  templatesError.value = ''
   try {
     templates.value = (await listRecipeTemplates()) ?? []
+    templatesStatus.value = 'ready'
   } catch (failure) {
-    error.value = extractMessage(failure, '模板加载失败')
+    templatesStatus.value = 'error'
+    templatesError.value = extractMessage(failure, '模板加载失败')
   }
 }
 
@@ -299,17 +321,27 @@ async function loadCapabilities() {
 }
 
 async function loadRecipes() {
+  recipesStatus.value = 'loading'
+  recipesError.value = ''
   try {
     recipes.value = (await listRecipes()) ?? []
+    recipesStatus.value = 'ready'
   } catch (failure) {
-    error.value = extractMessage(failure, '配方列表加载失败')
+    recipesStatus.value = 'error'
+    recipesError.value = extractMessage(failure, '配方列表加载失败')
   }
 }
 
 async function loadPictures() {
+  picturesStatus.value = 'loading'
+  picturesError.value = ''
   try {
     const userId = userStore.currentUser?.id
-    if (userId == null) return
+    if (userId == null) {
+      pictures.value = []
+      picturesStatus.value = 'ready'
+      return
+    }
     const spacesPage = await listSpaceVOByPage({
       current: 1,
       pageSize: 20,
@@ -319,11 +351,17 @@ async function loadPictures() {
       sortOrder: 'ascend'
     })
     const privateSpace = selectOldestPrivateSpace(spacesPage.records || [], userId)
-    if (!privateSpace) return
+    if (!privateSpace) {
+      pictures.value = []
+      picturesStatus.value = 'ready'
+      return
+    }
     const picturePage = await listPictureVOByPageUncached(buildCompanionPictureQuery(privateSpace.id))
     pictures.value = picturePage.records || []
+    picturesStatus.value = 'ready'
   } catch (failure) {
-    error.value = extractMessage(failure, '图片列表加载失败')
+    picturesStatus.value = 'error'
+    picturesError.value = extractMessage(failure, '图片列表加载失败')
   }
 }
 

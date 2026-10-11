@@ -59,6 +59,37 @@ public class MybatisCompanionChatMessageRepository implements CompanionChatMessa
                 .stream().map(this::fromRow).toList();
     }
 
+    @Override
+    public List<CompanionChatMessage> findBefore(long companionId, java.time.Instant time, long id, int limit) {
+        return messageMapper.selectList(new LambdaQueryWrapper<CompanionChatMessageEntity>()
+                        .eq(CompanionChatMessageEntity::getCompanionId, companionId)
+                        .and(cursor -> cursor.lt(CompanionChatMessageEntity::getCreateTime, Date.from(time))
+                                .or(tie -> tie.eq(CompanionChatMessageEntity::getCreateTime, Date.from(time))
+                                        .lt(CompanionChatMessageEntity::getId, id)))
+                        .orderByDesc(CompanionChatMessageEntity::getCreateTime)
+                        .orderByDesc(CompanionChatMessageEntity::getId)
+                        .last("LIMIT " + boundedLimit(limit)))
+                .stream().map(this::fromRow).toList();
+    }
+
+    @Override
+    public List<CompanionChatMessage> findOlder(long companionId, long afterId, java.time.Instant before, int limit) {
+        return messageMapper.selectList(new LambdaQueryWrapper<CompanionChatMessageEntity>()
+                        .eq(CompanionChatMessageEntity::getCompanionId, companionId)
+                        .gt(CompanionChatMessageEntity::getId, afterId)
+                        .lt(CompanionChatMessageEntity::getCreateTime, Date.from(before))
+                        .orderByDesc(CompanionChatMessageEntity::getCreateTime)
+                        .orderByDesc(CompanionChatMessageEntity::getId)
+                        .last("LIMIT " + Math.max(1, Math.min(limit, 200))))
+                .stream().map(this::fromRow).toList();
+    }
+
+    @Override
+    public int deleteByCompanion(long companionId) {
+        return messageMapper.delete(new LambdaQueryWrapper<CompanionChatMessageEntity>()
+                .eq(CompanionChatMessageEntity::getCompanionId, companionId));
+    }
+
     private CompanionChatMessage fromRow(CompanionChatMessageEntity row) {
         return new CompanionChatMessage(row.getId(), row.getCompanionId(), row.getSubjectId(),
                 CompanionChatRole.valueOf(row.getRole()), row.getContent(),

@@ -45,7 +45,7 @@ test('R05 keeps exact business stage and identity, adult visual and static unkno
     assert.equal(state.lifeStage, stage)
     assert.equal(state.appearance.assetKey, 'lingye-adult-v1')
     assert.equal(state.appearance.visualStage, 'adult')
-    assert.equal(state.appearance.allowIdle, ['LIGHT', 'SEEDLING', 'COMPANION'].includes(stage))
+    assert.equal(state.appearance.allowIdle, false)
   }
 })
 

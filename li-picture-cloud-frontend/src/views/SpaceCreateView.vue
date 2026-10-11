@@ -117,8 +117,8 @@ const typeOptions = [
 
 const levelDescriptions = {
   [SPACE_LEVEL.COMMON]: '适合个人日常使用，存储少量图片素材。',
-  [SPACE_LEVEL.PROFESSIONAL]: '适合摄影爱好者，海量高清图片随心存。',
-  [SPACE_LEVEL.FLAGSHIP]: '适合专业团队，超大容量不设限。'
+  [SPACE_LEVEL.PROFESSIONAL]: '适合较多图片的存储与整理，容量和数量上限见上方。',
+  [SPACE_LEVEL.FLAGSHIP]: '适合更大规模的图片管理，容量和数量上限见上方。'
 }
 
 const levelHint = computed(() => {

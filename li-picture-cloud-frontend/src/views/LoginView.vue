@@ -28,33 +28,46 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, reactive, watch, onBeforeUnmount } from 'vue'
+import { useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { loginDestination } from '@/utils/shellAccess'
 
 const router = useRouter()
-const route = useRoute()
 const userStore = useUserStore()
 const form = reactive({ userAccount: '', userPassword: '' })
 const error = ref('')
 const loading = ref(false)
+let active = true
+let navigationIntent = 0
+
+// A route guard may still be pending when authentication finishes. Respect
+// that newer navigation without cancelling the store/server login result.
+function leaveIntent() { navigationIntent += 1 }
+onBeforeRouteLeave(leaveIntent)
+onBeforeRouteUpdate(leaveIntent)
+onBeforeUnmount(() => { active = false })
+watch(router.currentRoute, () => { error.value = '' }, { flush: 'sync' })
 
 async function handleLogin() {
+  if (!active || loading.value) return
   error.value = ''
   if (!form.userAccount || !form.userPassword) {
     error.value = '请填写账号和密码'
     return
   }
+  const submittedRoute = router.currentRoute.value
+  const submittedIntent = navigationIntent
+  const isCurrent = () => active && router.currentRoute.value === submittedRoute
+  const redirect = loginDestination(submittedRoute.query.redirect, value => router.resolve(value))
   loading.value = true
   try {
     await userStore.login({ userAccount: form.userAccount, userPassword: form.userPassword })
-    const redirect = loginDestination(route.query.redirect, value => router.resolve(value))
-    await router.push(redirect)
+    if (isCurrent() && navigationIntent === submittedIntent) await router.push(redirect)
   } catch (e) {
-    error.value = e.message || '登录失败'
+    if (isCurrent()) error.value = e.message || '登录失败'
   } finally {
-    loading.value = false
+    if (active) loading.value = false
   }
 }
 </script>

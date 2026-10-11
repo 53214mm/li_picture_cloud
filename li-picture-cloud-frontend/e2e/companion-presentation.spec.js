@@ -39,7 +39,11 @@ async function fixture(page) {
       return new Promise((resolve, reject) => {
         globalThis.r06ChatReject = reject
         globalThis.r06ChatOpen = () => {
-          const stream = new ReadableStream({ start(controller) { globalThis.r06ChatController = controller } })
+          globalThis.r06ChatCancelled = false
+          const stream = new ReadableStream({
+            start(controller) { globalThis.r06ChatController = controller },
+            cancel() { globalThis.r06ChatCancelled = true }
+          })
           resolve(new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } }))
         }
       })
@@ -48,7 +52,7 @@ async function fixture(page) {
   return state
 }
 async function allSurfaces(page, key, value) {
-  for (const selector of ['.sidebar .companion-presence', '.companion-body', '.companion-portrait']) {
+  for (const selector of ['.sidebar .companion-presence', '.companion-body', '.chat-card .companion-portrait']) {
     await expect(page.locator(selector)).toHaveAttribute(`data-presentation-${key}`, value)
   }
 }
@@ -99,7 +103,7 @@ test('loading, error, explicit absence and service unavailable never manufacture
   await page.route('**/api/companion/me', route => route.fulfill({ status: 404, json: { code: 40400, message: '未开放' } }))
   await page.reload()
   await expect(shell).toHaveAttribute('data-presentation-availability', 'unavailable')
-  await expect(page.locator('.companion-portrait')).toHaveCount(0)
+  await expect(page.locator('.chat-card .companion-portrait')).toHaveCount(0)
   expect(state.errors).toEqual([])
 })
 
@@ -152,7 +156,7 @@ test('uncertain Feed retries the same key and refresh failure remains neutral wi
   expect(state.errors).toEqual([])
 })
 
-test('stream error and network failure leave neutral request activity and allow retry', async ({ page }) => {
+test('stream error and network failure stay neutral and reconcile history before another send', async ({ page }) => {
   const state = await fixture(page)
   await page.goto('/companion')
   await sendChat(page)
@@ -161,12 +165,16 @@ test('stream error and network failure leave neutral request activity and allow 
   await chunk(page, 'event:error\ndata:模型暂时不可用\n\n')
   await allSurfaces(page, 'activity', 'idle')
   await allSurfaces(page, 'affect', 'cheerful')
+  await expect(page.getByLabel('对伙伴说的话')).toBeDisabled()
+  await page.getByRole('button', { name: '刷新对话' }).click()
   await page.getByLabel('对伙伴说的话').fill('再次尝试')
   await page.getByRole('button', { name: '发送', exact: true }).click()
   await allSurfaces(page, 'activity', 'thinking')
   await page.evaluate(() => globalThis.r06ChatReject(new Error('network offline')))
   await allSurfaces(page, 'activity', 'idle')
-  await expect(page.getByLabel('对伙伴说的话')).toHaveValue('再次尝试')
+  await expect(page.getByLabel('对伙伴说的话')).toHaveValue('')
+  await expect(page.getByLabel('对伙伴说的话')).toBeDisabled()
+  await expect(page.getByRole('button', { name: '刷新对话' })).toBeVisible()
   expect(state.errors).toEqual([])
 })
 
@@ -184,20 +192,29 @@ test('proposal action is bounded by its request and suppressed proposal never im
   await allSurfaces(page, 'activity', 'idle')
   await allSurfaces(page, 'attention', 'none')
   await allSurfaces(page, 'affect', 'cheerful')
-  await expect(page.getByText('伙伴安静了，这次提议已被止住。')).toBeVisible()
+  await expect(page.getByText('已停止这次提议。')).toBeVisible()
   expect(state.errors).toEqual([])
 })
 
-test('late chat chunks from the previous page cannot affect the next page or Shell', async ({ page }) => {
+test('leaving chat cancels its reader and late data cannot affect the next page or Shell', async ({ page }) => {
   const state = await fixture(page)
   await page.goto('/companion')
   await sendChat(page)
   await page.locator('.sidebar').getByRole('link', { name: '图库', exact: true }).click()
   await expect(page.locator('.sidebar .companion-presence')).toHaveAttribute('data-presentation-availability', 'unobserved')
+  await expect.poll(() => page.evaluate(() => globalThis.r06ChatCancelled)).toBe(true)
   await page.locator('.sidebar').getByRole('link', { name: '伙伴空间', exact: true }).click()
   await allSurfaces(page, 'activity', 'idle')
-  await chunk(page, 'data:我终于回来了\n\n')
-  await chunk(page, 'event:done\ndata:\n\n')
+  // A correctly cancelled native stream rejects late network chunks. Verify
+  // that rejection instead of treating enqueue-on-closed as an application bug.
+  const lateResult = await page.evaluate(() => {
+    try {
+      globalThis.r06ChatController.enqueue(new TextEncoder().encode('data:我终于回来了\n\nevent:done\ndata:\n\n'))
+      return 'accepted'
+    } catch (error) { return error.name }
+  })
+  expect(lateResult).toBe('TypeError')
+  await expect(page.getByText('我终于回来了', { exact: true })).toHaveCount(0)
   await allSurfaces(page, 'activity', 'idle')
   expect(state.errors).toEqual([])
 })
@@ -231,7 +248,7 @@ test('Feed refresh cannot resurrect a proposal after a concurrent scold has comp
   feedGate.release()
   await expect(page.getByRole('button', { name: '再选一张' })).toBeEnabled()
   actionGate.release()
-  await expect(page.getByText('伙伴安静了，这次提议已被止住。')).toBeVisible()
+  await expect(page.getByText('已停止这次提议。')).toBeVisible()
   readGate.release()
   if (reads) await expect.poll(() => readReturned).toBe(true)
   await allSurfaces(page, 'attention', 'none')

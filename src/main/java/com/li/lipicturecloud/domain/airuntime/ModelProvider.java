@@ -9,5 +9,7 @@ public enum ModelProvider {
     GOOGLE,
     DEEPSEEK,
     MOONSHOT,
-    DASHSCOPE
+    DASHSCOPE,
+    SILICONFLOW,
+    ZHIPU
 }

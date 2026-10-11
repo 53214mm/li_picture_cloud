@@ -95,7 +95,7 @@
           class="gallery-card"
           :to="`/picture/${pic.id}`"
           :aria-label="`查看图片：${pic.name || '未命名'}`"
-          @dragstart="interaction.startDrag($event, pic.id)" @dragend="interaction.cancelDrag"
+          @dragstart="interaction.startDrag($event, pic)" @dragend="interaction.cancelDrag"
         >
           <div v-if="failedImages.has(pic.id)" class="image-fallback">预览暂不可用<br />可进入详情查看</div>
           <img
@@ -141,6 +141,7 @@ import { useUserStore } from '@/stores/user'
 import { listPictureVOByPage, getPictureTagCategory } from '@/api/picture'
 import LpStateBlock from '@/components/ui/LpStateBlock.vue'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
+import { formatDate } from '@/utils/date'
 const interaction = useCompanionInteractionStore()
 
 const router = useRouter()
@@ -292,9 +293,6 @@ function clearFilters() {
   handleSearch()
 }
 
-function formatDate(d) {
-  return d ? new Date(d).toLocaleDateString('zh-CN') : '-'
-}
 </script>
 
 <style scoped>
@@ -424,7 +422,7 @@ function formatDate(d) {
   .pagination { gap: 0.75rem; margin-top: 2rem; flex-wrap: wrap; }
   .page-summary { flex-basis: 100%; text-align: center; order: -1; }
   .jumper { flex-basis: 100%; justify-content: center; }
-  .jump-input { scroll-margin-block: calc(80px + env(safe-area-inset-bottom)); }
+  .jump-input, .btn-jump { scroll-margin-block: calc(80px + env(safe-area-inset-bottom)); }
 }
 
 @media (max-width: 480px) {

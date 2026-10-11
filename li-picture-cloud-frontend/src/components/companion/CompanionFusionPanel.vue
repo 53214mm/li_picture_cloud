@@ -2,19 +2,18 @@
   <section class="fusion-card" aria-labelledby="fusion-title">
     <header>
       <div>
-        <span class="eyebrow">多图融合</span>
-        <h2 id="fusion-title">把多张图片融合成一张新作品</h2>
+        <h2 id="fusion-title">多图融合</h2>
       </div>
     </header>
 
     <div v-if="error" class="panel-error" role="alert">{{ error }}</div>
 
     <p class="panel-notice" role="status" data-testid="fusion-unavailable">
-      真实多图融合能力尚未开放：当前图像模型适配器不支持把多张授权图片作为参考图输入。
-      需要支持图片编辑/多参考图的适配器完成供应商能力验证后才会开放，届时这里会恢复入口。
+      多图融合暂未开放。当前服务还不支持使用多张参考图片生成融合结果。
     </p>
 
-    <ul v-if="tasks.length" class="fusion-list" data-testid="fusion-list">
+    <p v-if="loading" class="empty-state" role="status">正在加载作品记录…</p>
+    <ul v-else-if="tasks.length" class="fusion-list" data-testid="fusion-list">
       <li v-for="task in tasks" :key="task.id" class="fusion-row"
           :data-status="task.status">
         <div class="fusion-main">
@@ -34,7 +33,7 @@
         </div>
       </li>
     </ul>
-    <p v-else class="empty-state">还没有融合作品。多图融合开放后，选好至少两张图片即可开始。</p>
+    <p v-else-if="!error" class="empty-state">暂无融合作品记录。</p>
   </section>
 </template>
 
@@ -49,17 +48,21 @@ const props = defineProps({
 })
 
 const tasks = ref([])
+const loading = ref(true)
 const error = ref('')
 
 onMounted(loadTasks)
 watch(() => props.refreshKey, loadTasks)
 
 async function loadTasks() {
+  loading.value = true
   try {
     tasks.value = ((await listFusionTasks()) ?? []).filter(task => task.kind === 'IMAGE_FUSION')
     error.value = ''
   } catch (failure) {
     error.value = extractMessage(failure, '融合任务加载失败')
+  } finally {
+    loading.value = false
   }
 }
 

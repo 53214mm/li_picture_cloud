@@ -14,6 +14,7 @@ export default defineConfig({
     {
       command: 'npm run dev -- --host 127.0.0.1 --port 15276 --strictPort',
       url: 'http://127.0.0.1:15276',
+      env: { VITE_CACHE_DIR: '.vite/e2e-landing' },
       reuseExistingServer: false
     },
     {

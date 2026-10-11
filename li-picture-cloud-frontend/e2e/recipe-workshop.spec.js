@@ -34,7 +34,7 @@ test('gates official templates and editor actions by capability availability', a
   await login(page)
   await page.goto('/recipes')
   await expect(page).toHaveURL(/\/recipes$/)
-  await expect(page.getByText('玩法配方工坊')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '配方', exact: true })).toBeVisible()
 
   // 四个官方模板仍然可见，但依赖未开放能力的两个必须显式禁用并给出原因。
   for (const name of ['旅行回顾', '生日故事', '每周表情', '旧照重制']) {
@@ -168,7 +168,7 @@ test('a real WHEN opportunity produces a pending confirmation the user confirms'
   const awaken = page.getByRole('button', { name: '唤醒我的伙伴' })
   if (await awaken.isVisible()) {
     await awaken.click()
-    await expect(page.getByText('光点', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('growth-stage')).toBeVisible()
   }
   await page.getByRole('button', { name: /旅行样片/ }).click()
   await page.getByRole('button', { name: '喂给伙伴' }).click()
