@@ -40,13 +40,12 @@
         <template v-if="home.companion">
           <nav class="habitat-navigation" aria-label="小屋区域">
             <span class="navigation-caption">在小屋里</span>
-            <a href="#habitat-chat" @click.prevent="visitHabitat('chat')"><span>01</span> 窗边对话</a>
-            <a href="#habitat-feed" @click.prevent="visitHabitat('feed')"><span>02</span> 照片桌</a>
-            <a href="#habitat-journal" @click.prevent="visitHabitat('journal')"><span>03</span> 留影手记</a>
-            <a href="#habitat-growth" @click.prevent="visitHabitat('growth')"><span>04</span> 相处与成长</a>
+            <a v-for="zone in HABITAT_ZONES" :key="zone.key" :href="`#habitat-${zone.key}`"
+               :class="{ active: activeZone === zone.zone }" :aria-current="activeZone === zone.zone ? 'true' : null"
+               @click.prevent="visitHabitat(zone.key)"><span>{{ zone.index }}</span> {{ zone.label }}</a>
           </nav>
           <div class="habitat-content">
-            <section id="habitat-chat" class="home-zone" aria-labelledby="window-title">
+            <section v-show="activeZone === 'daily'" id="habitat-chat" class="home-zone" aria-labelledby="window-title">
               <header class="zone-heading"><div><span>01 / BY THE WINDOW</span><h2 id="window-title" tabindex="-1">在窗边，聊一会儿</h2></div><p>你说的话，她的回应。</p></header>
               <div class="conversation-layout">
                 <CompanionChatPanel :chat-mode="home?.chatMode" :presentation="presentation"
@@ -54,7 +53,7 @@
                 <CompanionProposalPanel :refresh-key="panelsRefreshKey" @presentation-change="proposalSignal = $event" />
               </div>
             </section>
-            <section id="habitat-feed" class="home-zone" aria-labelledby="desk-title">
+            <section v-show="activeZone === 'daily'" id="habitat-feed" class="home-zone" aria-labelledby="desk-title">
               <header class="zone-heading"><div><span>02 / PHOTO DESK</span><h2 id="desk-title" tabindex="-1">把照片放到桌上</h2></div><p>从自己的图库里，挑一张想分享的图片。</p></header>
               <div class="desk-layout">
                 <section class="feeding-column" aria-labelledby="feeding-title">
@@ -98,7 +97,7 @@
                 </aside>
               </div>
             </section>
-            <section id="habitat-journal" class="home-zone" aria-labelledby="journal-title">
+            <section v-show="activeZone === 'journal'" id="habitat-journal" class="home-zone" aria-labelledby="journal-title">
               <header class="zone-heading"><div><span>03 / NOTES & STORIES</span><h2 id="journal-title" tabindex="-1">留影手记</h2></div><p>记忆可以确认与纠正，故事由你决定是否保存。</p></header>
               <div class="journal-layout">
                 <CompanionMemoryPanel :refresh-key="panelsRefreshKey" />
@@ -109,7 +108,7 @@
                 <CompanionFusionPanel :pictures="pictures" :refresh-key="panelsRefreshKey" />
               </div>
             </section>
-            <section id="habitat-growth" class="home-zone" aria-labelledby="habitat-growth-title">
+            <section v-show="activeZone === 'growth'" id="habitat-growth" class="home-zone" aria-labelledby="habitat-growth-title">
               <header class="zone-heading"><div><span>04 / GROWING TOGETHER</span><h2 id="habitat-growth-title" tabindex="-1">相处，慢慢有了痕迹</h2></div><p>此刻的状态，与一路积累的成长。</p></header>
               <div class="state-grid">
                 <CompanionMoodPanel :presentation="presentation" />
@@ -234,11 +233,36 @@ function initializeFeeding() {
 }
 // Scroll a section target into view and move focus there. A disabled chat
 // input cannot take focus, so callers may name a heading to fall back to.
+// 小屋分三页：聊天和照片桌一起（边聊边喂），留影手记、相处与成长各一页。
+// 隐藏的页保持挂载，聊天和喂养进行中的状态不丢。
+// 跳到某个区域里的元素时先切到那个区域，等它显示出来再滚动和聚焦。
 function focusSection(id, { fallback = null, block = 'start' } = {}) {
   let target = document.getElementById(id)
   if (fallback && (!target || target.disabled)) target = document.getElementById(fallback)
+  const zone = zoneOfSection(target?.closest('.home-zone')?.id)
+  if (zone && zone !== activeZone.value) {
+    activeZone.value = zone
+    nextTick(() => revealSection(target, block))
+    return
+  }
+  revealSection(target, block)
+}
+function revealSection(target, block) {
   target?.scrollIntoView({ block, behavior: 'instant' })
   target?.focus({ preventScroll: true })
+}
+// 01 和 02 在同一页，两个入口都保留，分别跳到聊天和照片桌。
+const HABITAT_ZONES = [
+  { key: 'chat', zone: 'daily', index: '01', label: '窗边对话' },
+  { key: 'feed', zone: 'daily', index: '02', label: '照片桌' },
+  { key: 'journal', zone: 'journal', index: '03', label: '留影手记' },
+  { key: 'growth', zone: 'growth', index: '04', label: '相处与成长' }
+]
+const activeZone = ref('daily')
+function zoneOfSection(sectionId) {
+  if (!sectionId) return null
+  const area = sectionId.replace('habitat-', '')
+  return area === 'chat' || area === 'feed' ? 'daily' : area
 }
 function visitHabitat(area) {
   const ids = { home: 'habitat-title', chat: 'companion-chat-input', feed: 'feeding-title', journal: 'journal-title', growth: 'habitat-growth-title' }
@@ -451,6 +475,7 @@ async function submitFeed() {
 .habitat-navigation a { display: flex; gap: 9px; align-items: center; min-height: 44px; font-size: 12px; padding-inline: 4px; }
 .habitat-navigation a span { color: #859179; font-family: Georgia, serif; font-size: 11px; }
 .habitat-navigation a:hover, .habitat-footer a:hover { color: #45644e; text-decoration: underline; text-underline-offset: 5px; }
+.habitat-navigation a.active { color: #2f4a37; font-weight: 600; box-shadow: inset 0 -2px 0 #45644e; }
 .habitat-content { display: grid; gap: 56px; margin-top: 48px; }
 .home-zone { min-width: 0; display: grid; gap: 20px; scroll-margin-top: 24px; }
 :deep(#companion-chat-input), :deep(#habitat-title), :deep(#picture-picker-title), :deep(#growth-title), #window-title, #feeding-title, #journal-title, #habitat-growth-title { scroll-margin-top: 96px; }

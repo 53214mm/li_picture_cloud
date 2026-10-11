@@ -16,4 +16,5 @@ public class CompanionChatBoundaryEntity {
     private Long subjectId;
     private Date loginTime;
     private Date updateTime;
+    private Long chatEpoch;
 }

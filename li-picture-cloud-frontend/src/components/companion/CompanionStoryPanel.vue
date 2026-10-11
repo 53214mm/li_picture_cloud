@@ -152,7 +152,7 @@ function extractMessage(failure, fallback) {
 .story-picture-choice input { position: absolute; opacity: 0; }
 .story-picture-choice:has(input:focus-visible) { outline: 3px solid var(--blue); outline-offset: 2px; }
 .story-picture-choice img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--gray-100); }
-.story-list { list-style: none; }
+.story-list { list-style: none; max-height: 640px; overflow-y: auto; overscroll-behavior: contain; }
 .story-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .8rem; padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-200); }
 .story-main { display: grid; gap: .35rem; }
 .story-status { justify-self: start; padding: .15rem .45rem; background: var(--gray-100); border: 1px solid var(--gray-400); font-size: .72rem; font-weight: 700; }

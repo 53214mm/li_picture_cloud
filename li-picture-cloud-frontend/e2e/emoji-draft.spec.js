@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { visitRoomZone } from './helpers/habitat-navigation.js'
 
 // 表情草稿当前暂未开放：文字表情候选必须来自"授权图片的视觉理解"（安全元素摘要），
 // 不能用图片数量与分类模拟。本切片验证：前端明示"暂未开放（需要视觉理解能力）"，
@@ -30,9 +31,11 @@ test('shows the explicit emoji not-open notice and never calls any creator', asy
     const awaken = page.getByRole('button', { name: '唤醒我的伙伴' })
     if (await awaken.isVisible()) {
       await awaken.click()
+      await visitRoomZone(page, '相处与成长')
       await expect(page.getByTestId('growth-stage')).toBeVisible()
     }
 
+  await visitRoomZone(page, '留影手记')
     // 面板明示"文字表情草稿暂未开放（需要视觉理解）"，且不提供任何生成/保存入口。
     await expect(page.getByRole('heading', { name: '文字表情草稿', exact: true })).toBeVisible()
     await expect(page.getByTestId('emoji-unavailable')).toBeVisible()

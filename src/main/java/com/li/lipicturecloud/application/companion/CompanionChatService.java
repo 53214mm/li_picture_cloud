@@ -241,7 +241,12 @@ public class CompanionChatService {
                 episodes.recall(message, companion.id(), subject.userId()));
         String systemPrompt = contextAssembler.systemPrompt(companion.id(), subject.userId(),
                 properties.getChatMemoryLimit(), currentMood, memoryRecall.recall(
-                        message, usableMemories, companion.id(), subject.userId(), properties.getChatMemoryLimit()),
+                        message, usableMemories, companion.id(), subject.userId(), properties.getChatMemoryLimit(),
+                        session.messagesNewestFirst().stream()
+                                .filter(past -> past.role().name().equals("USER")
+                                        && past.companionId() == companion.id() && past.subjectId() == subject.userId())
+                                .limit(3).map(past -> past.content().substring(0, Math.min(500, past.content().length())))
+                                .toList()),
                 conversation);
         int used = codePoints(systemPrompt) + codePoints(message) + PER_MESSAGE_OVERHEAD;
         List<CompanionChatMessage> included = new ArrayList<>();

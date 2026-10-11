@@ -11,6 +11,11 @@ import java.util.List;
 public interface LanguageModelInvoker {
 
     Flux<String> stream(ModelRouteDecision route, List<ChatTurn> turns);
+    /** Optional safe observations; consumers must explicitly opt in per manual request. */
+    interface Observed extends LanguageModelInvoker {
+        Flux<String> streamBoundedObserved(ModelRouteDecision route, List<ChatTurn> turns, int maxTokens,
+                                          LanguageStreamDiagnostics diagnostics);
+    }
     /** Opt-in bounded generation; unsupported adapters fail closed rather than ignore the cap. */
     default Flux<String> streamBounded(ModelRouteDecision route, List<ChatTurn> turns, int maxTokens) {
         return Flux.error(new UnsupportedOperationException("Bounded generation is unsupported"));

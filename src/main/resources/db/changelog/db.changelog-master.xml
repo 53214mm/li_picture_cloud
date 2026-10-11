@@ -35,4 +35,5 @@
              relativeToChangelogFile="true"/>
     <include file="changes/2026-10-10-companion-chat-episode.xml"
              relativeToChangelogFile="true"/>
+    <include file="changes/2026-10-11-companion-observation.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

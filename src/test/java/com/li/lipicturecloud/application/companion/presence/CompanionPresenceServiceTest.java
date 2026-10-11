@@ -4,6 +4,7 @@ import com.li.lipicturecloud.application.airuntime.*;
 import com.li.lipicturecloud.domain.airuntime.*;
 import com.li.lipicturecloud.domain.companion.*;
 import com.li.lipicturecloud.exception.BusinessException;
+import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.model.dto.companion.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -135,6 +136,53 @@ class CompanionPresenceServiceTest {
         assertThat(service.decide(7,event(open("BYOK",3,false),1,"PAGE_ENTER")).action()).isEqualTo("SILENT");
         verify(invoker,times(1)).streamBounded(any(),anyList(),anyInt());
     }
+
+    @Test void safeInvocationErrorsAreDistinguishedWithoutExposingMessagesOrRetrying() {
+        for (var entry : Map.of(ConnectivityResult.CREDENTIAL_REJECTED, "MODEL_CREDENTIAL_REJECTED",
+                ConnectivityResult.UPSTREAM_TIMEOUT, "MODEL_TIMEOUT").entrySet()) {
+            reset(invoker);
+            when(invoker.streamBounded(any(), anyList(), anyInt())).thenReturn(Flux.error(
+                    new ModelInvocationException(entry.getKey(), "fixture-secret-response")));
+            var result = service.decide(7, event(open("BYOK", 1, false), 1, "PAGE_ENTER"));
+            assertThat(result.reason()).isEqualTo(entry.getValue());
+            assertThat(result.action()).isEqualTo("SILENT");
+            assertThat(result.text()).isNull();
+            assertThat(result.remainingDecisions()).isZero();
+            assertThat(result.toString()).doesNotContain("fixture-secret-response");
+            verify(invoker, times(1)).streamBounded(any(), anyList(), eq(160));
+            verify(invoker, never()).stream(any(), any());
+        }
+    }
+
+    @Test void emptyInvalidAndOversizedDecisionsHaveDifferentSafeReasons() {
+        for (var entry : Map.of("", "EMPTY_OUTPUT", "not json", "INVALID_DECISION",
+                "x".repeat(1025), "OUTPUT_LIMIT").entrySet()) {
+            when(invoker.streamBounded(any(), anyList(), anyInt())).thenReturn(Flux.just(entry.getKey()));
+            var result = service.decide(7, event(open("BYOK", 1, false), 1, "PAGE_ENTER"));
+            assertThat(result.reason()).isEqualTo(entry.getValue());
+            assertThat(result.action()).isEqualTo("SILENT");
+            assertThat(result.text()).isNull();
+        }
+    }
+
+    @Test void dailyBudgetFailureIsReportedBeforeRoutingAndNeverCallsModel() {
+        doThrow(new BusinessException(com.li.lipicturecloud.exception.ErrorCode.FORBIDDEN_ERROR,
+                "fixture-secret-quota")).when(quota).reserve(anyLong(), any(), anyInt());
+        var result = service.decide(7, event(open("BYOK", 1, false), 1, "PAGE_ENTER"));
+        assertThat(result.reason()).isEqualTo("DAILY_BUDGET");
+        assertThat(result.text()).isNull();
+        verifyNoInteractions(router, invoker, usage);
+    }
+
+    @Test void accountingFailureDoesNotMasqueradeAsModelFailureOrRetry() {
+        doThrow(new IllegalStateException("fixture-secret-accounting"))
+                .when(usage).recordSuccess(anyLong(), any(), any(), any(), anyString(), any());
+        var result = service.decide(7, event(open("BYOK", 1, false), 1, "PAGE_ENTER"));
+        assertThat(result.reason()).isEqualTo("ACCOUNTING_FAILED");
+        assertThat(result.text()).isNull();
+        verify(invoker, times(1)).streamBounded(any(), anyList(), eq(160));
+        verify(invoker, never()).stream(any(), any());
+    }
     @Test void malformedAndOverlongOutputsFailClosedAndSpendAttempt() {
         for (String raw : List.of("not json", "x".repeat(1025))) {
             when(invoker.streamBounded(any(),anyList(),anyInt())).thenReturn(Flux.just(raw));
@@ -176,7 +224,7 @@ class CompanionPresenceServiceTest {
     @Test void stalledModelTimesOutWithoutRetryAndKeepsSpentBudget() {
         when(invoker.streamBounded(any(),anyList(),anyInt())).thenReturn(Flux.never());
         var result = service.decide(7,event(open("BYOK",1,false),1,"PAGE_ENTER"));
-        assertThat(result.reason()).isEqualTo("UNAVAILABLE");
+        assertThat(result.reason()).isEqualTo("MODEL_TIMEOUT");
         assertThat(result.remainingDecisions()).isZero();
         verify(invoker,times(1)).streamBounded(any(),anyList(),anyInt());
         verify(quota,times(1)).reserve(anyLong(),any(),eq(24));
@@ -244,8 +292,192 @@ class CompanionPresenceServiceTest {
         verifyNoInteractions(invoker);
         when(router.decide(7)).thenThrow(new IllegalStateException("connection deleted"));
         clock.advance(15);
-        assertThat(service.decide(7,event(session,2,"PAGE_ENTER")).reason()).isEqualTo("UNAVAILABLE");
+        assertThat(service.decide(7,event(session,2,"PAGE_ENTER")).reason()).isEqualTo("ROUTE_UNAVAILABLE");
         verifyNoInteractions(invoker);
+    }
+
+    @Test void explicitManualDebugFieldsAreAcceptedAndRemainServerGated() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var request = mapper.readValue("{\"enabled\":true,\"mode\":\"BYOK\",\"maxDecisions\":6,\"scope\":\"REHEARSAL\",\"cooldownSeconds\":2}", PresenceSessionRequest.class);
+        assertThatThrownBy(() -> service.open(7, request)).isInstanceOf(BusinessException.class);
+    }
+
+
+    void enableDebug(int dailyLimit) {
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "rehearsalEnabled", true);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "rehearsalDailyLimit", dailyLimit);
+    }
+    PresenceSessionView debug(int cooldown) {
+        return service.open(7, new PresenceSessionRequest(true, "BYOK", 6, false, "LOW", "REHEARSAL", cooldown));
+    }
+    @Test void manualSlotIsIndependentAndOnlyServerConfigurationRaisesSharedDailyLimit() {
+        enableDebug(100);
+        var site = open("BYOK", 3, false);
+        var manual = debug(5);
+        assertThat(service.decide(7, event(site, 1, "PAGE_ENTER")).dailyLimit()).isEqualTo(24);
+        var result = service.decide(7, event(manual, 1, "PAGE_ENTER"));
+        assertThat(result.dailyLimit()).isEqualTo(100);
+        assertThat(result.modelDispatched()).isTrue();
+        assertThat(result.attemptConsumed()).isTrue();
+        assertThat(result.stage()).isEqualTo("DONE");
+        assertThat(service.close(7, manual.sessionId())).isTrue();
+        clock.advance(15);
+        assertThat(service.decide(7, event(site, 2, "PAGE_ENTER")).reason()).isEqualTo("DECIDED");
+        verify(quota, times(2)).reserve(eq(7L), any(), eq(24));
+        verify(quota).reserve(eq(7L), any(), eq(100));
+    }
+    @Test void manualCooldownHasAuthoritativeCountdownWithoutSpendingRejectedAttempt() {
+        enableDebug(24);
+        var manual = debug(2);
+        service.decide(7, event(manual, 1, "PAGE_ENTER"));
+        var blocked = service.decide(7, event(manual, 2, "PAGE_ENTER"));
+        assertThat(blocked.reason()).isEqualTo("COOLDOWN");
+        assertThat(blocked.modelDispatched()).isFalse();
+        assertThat(blocked.attemptConsumed()).isFalse();
+        assertThat(blocked.remainingDecisions()).isEqualTo(5);
+        assertThat(blocked.nextAllowedAt()).isEqualTo(clock.instant().plusSeconds(2));
+        clock.advance(2);
+        assertThat(service.decide(7, event(manual, 3, "PAGE_ENTER")).reason()).isEqualTo("DECIDED");
+        verify(quota, times(2)).reserve(eq(7L), any(), eq(24));
+    }
+    @Test void quotaRejectionRestoresUnconsumedSessionSlotButEmptyOutputKeepsRealAttempt() {
+        enableDebug(24);
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN_ERROR)).when(quota).reserve(anyLong(), any(), anyInt());
+        var blocked = service.decide(7, event(debug(5), 1, "PAGE_ENTER"));
+        assertThat(blocked.remainingDecisions()).isEqualTo(6);
+        assertThat(blocked.attemptConsumed()).isFalse();
+        assertThat(blocked.modelDispatched()).isFalse();
+        reset(quota);
+        when(invoker.streamBounded(any(), anyList(), anyInt())).thenReturn(Flux.empty());
+        var failed = service.decide(7, event(debug(5), 1, "PAGE_ENTER"));
+        assertThat(failed.reason()).isEqualTo("EMPTY_OUTPUT");
+        assertThat(failed.stage()).isEqualTo("PARSE");
+        assertThat(failed.outputChars()).isZero();
+        assertThat(failed.attemptConsumed()).isTrue();
+        assertThat(failed.modelDispatched()).isTrue();
+        assertThat(failed.remainingDecisions()).isEqualTo(5);
+    }
+    @Test void debugBudgetReadKeepsExistingUsageWithoutReservingOrChangingProvider() {
+        enableDebug(100);
+        when(quota.used(eq(7L), any())).thenReturn(6);
+        assertThat(service.status(7).rehearsalDailyRemaining()).isEqualTo(94);
+        verify(quota, never()).reserve(anyLong(), any(), anyInt());
+        verifyNoInteractions(invoker, usage);
+    }
+    @Test void manualParameterBoundsAndSiteOverridesFailClosed() {
+        enableDebug(24);
+        for (int cooldown : new int[]{0, 1, 31, 100})
+            assertThatThrownBy(() -> debug(cooldown)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.open(7, new PresenceSessionRequest(true, "DEMO", 6, false, "LOW", "SITE", 2))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.open(7, new PresenceSessionRequest(true, "DEMO", 100, false, "LOW", "REHEARSAL", 5))).isInstanceOf(BusinessException.class);
+        enableDebug(101);
+        assertThatThrownBy(() -> debug(5)).isInstanceOf(BusinessException.class);
+        verifyNoInteractions(invoker, quota);
+    }
+
+
+    @Test void replacingManualSlotCannotOverlapOldPaidCallOrAnotherScope() throws Exception {
+        enableDebug(24);
+        var manual = debug(2);
+        Sinks.Many<String> sink = Sinks.many().unicast().onBackpressureBuffer();
+        CountDownLatch entered = new CountDownLatch(1);
+        when(invoker.streamBounded(any(), anyList(), anyInt())).thenAnswer(a -> { entered.countDown(); return sink.asFlux(); });
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var pending = executor.submit(() -> service.decide(7, event(manual, 1, "PAGE_ENTER")));
+            assertThat(entered.await(2, TimeUnit.SECONDS)).isTrue();
+            service.close(7, manual.sessionId());
+            var replacement = debug(2);
+            assertThat(service.decide(7, event(replacement, 1, "PAGE_ENTER")).reason()).isEqualTo("BUSY");
+            var site = open("BYOK", 3, false);
+            assertThat(service.decide(7, event(site, 1, "PAGE_ENTER")).reason()).isEqualTo("BUSY");
+            sink.tryEmitNext("{\"action\":\"SILENT\",\"emote\":null,\"text\":null}"); sink.tryEmitComplete();
+            assertThat(pending.get(2, TimeUnit.SECONDS).reason()).isEqualTo("SUPERSEDED");
+            when(invoker.streamBounded(any(), anyList(), anyInt())).thenReturn(Flux.just(
+                    "{\"action\":\"SILENT\",\"emote\":null,\"text\":null}"));
+            assertThat(service.decide(7, event(replacement, 2, "PAGE_ENTER")).reason()).isEqualTo("DECIDED");
+        }
+        verify(quota, times(2)).reserve(eq(7L), any(), eq(24));
+    }
+
+    @Test void manualTraceUsesActualMessagesAndRawSilentWhileSiteAndDemoOmitIt() throws Exception {
+        enableDebug(100);
+        String raw = "{\"action\":\"SILENT\",\"emote\":null,\"text\":null}";
+        when(invoker.streamBounded(any(), anyList(), eq(160))).thenReturn(Flux.just(raw));
+        var manual = debug(2);
+        var result = service.decide(7, event(manual, 1, "PICTURE_OPENED"));
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+        var data = mapper.valueToTree(result).path("debug");
+        assertThat(data.isObject()).as("manual request must return its actual trace").isTrue();
+        assertThat(data.path("rawBody").asText()).isEqualTo(raw);
+        assertThat(data.path("parsedDecision").path("action").asText()).isEqualTo("SILENT");
+        assertThat(data.path("messages").get(1).path("content").asText()).isEqualTo("eventType=PICTURE_OPENED;page=PICTURE_DETAIL");
+        assertThat(data.path("parameters").path("maxTokens").asInt()).isEqualTo(160);
+        assertThat(data.toString()).doesNotContain("fixture-only", "api.deepseek.com", "Authorization");
+        assertThat(mapper.valueToTree(service.decide(7, event(open("BYOK", 2, false), 1, "PAGE_ENTER"))).path("debug").isNull()).isTrue();
+        var demo = service.open(7, new PresenceSessionRequest(true, "DEMO", 2, false, "LOW", "REHEARSAL", 2));
+        assertThat(mapper.valueToTree(service.decide(7, event(demo, 1, "PAGE_ENTER"))).path("debug").isNull()).isTrue();
+    }
+    @Test void emptyManualTraceIsEmptyNotSyntheticSilentAndCannotBeReadByAnotherOwner() {
+        enableDebug(100); when(invoker.streamBounded(any(), anyList(), eq(160))).thenReturn(Flux.empty());
+        var session = debug(2); var request = event(session, 1, "PAGE_ENTER");
+        assertThatThrownBy(() -> service.decide(8, request)).isInstanceOf(BusinessException.class);
+        var result = service.decide(7, request);
+        var data = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().valueToTree(result).path("debug");
+        assertThat(data.isObject()).isTrue(); assertThat(data.path("rawBody").asText()).isEmpty();
+        assertThat(data.path("parsedDecision").isNull()).isTrue(); assertThat(result.reason()).isEqualTo("EMPTY_OUTPUT");
+        assertThat(data.path("rawBodyComplete").asBoolean()).isTrue();
+    }
+
+    @Test void manualPartialBodyRemainsIncompleteAndOutputCapStillRejectsWithoutParsingPrefix() {
+        enableDebug(100); var mapper = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+        when(invoker.streamBounded(any(), anyList(), eq(160))).thenReturn(Flux.concat(Flux.just("PARTIAL_BODY_SENTINEL"), Flux.error(
+                new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR, "safe failure", null, ModelInvocationException.FailureKind.PROTOCOL, null))));
+        var result = service.decide(7, event(debug(2), 1, "PAGE_ENTER"));
+        var data = mapper.valueToTree(result).path("debug");
+        assertThat(data.path("rawBody").asText()).isEqualTo("PARTIAL_BODY_SENTINEL");
+        assertThat(data.path("rawBodyComplete").asBoolean()).isFalse(); assertThat(data.path("parsedDecision").isNull()).isTrue();
+        assertThat(result.reason()).isEqualTo("MODEL_STREAM_INVALID"); assertThat(result.attemptConsumed()).isTrue();
+        when(invoker.streamBounded(any(), anyList(), eq(160))).thenReturn(Flux.just("x".repeat(1025)));
+        result = service.decide(7, event(debug(2), 1, "PAGE_ENTER")); data = mapper.valueToTree(result).path("debug");
+        assertThat(result.reason()).isEqualTo("OUTPUT_LIMIT"); assertThat(data.path("rawBody").asText()).hasSize(1024);
+        assertThat(data.path("rawBodyTruncated").asBoolean()).isTrue(); assertThat(data.path("parsedDecision").isNull()).isTrue();
+    }
+    @Test void manualRawAndParsedTextRedactCredentialEvenIfProviderJsonEscapesIt() {
+        enableDebug(100); String raw = "{\"action\":\"SPEAK\",\"emote\":null,\"text\":\"\\u0066ixture-only\"}";
+        when(invoker.streamBounded(any(), anyList(), eq(160))).thenReturn(Flux.just(raw));
+        var result = service.decide(7, event(debug(2), 1, "PAGE_ENTER"));
+        var data = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().valueToTree(result).path("debug");
+        assertThat(data.path("rawBody").asText()).doesNotContain("fixture-only", "\\u0066ixture-only").contains("REDACTED_CREDENTIAL");
+        assertThat(data.path("parsedDecision").path("text").asText()).isEqualTo("[REDACTED_CREDENTIAL]");
+        assertThat(result.text()).isEqualTo("[REDACTED_CREDENTIAL]");
+        assertThat(result.debug().toString()).doesNotContain("REDACTED_CREDENTIAL", "SPEAK");
+        assertThat(data.path("redactedFields").get(0).asText()).isEqualTo("CREDENTIAL");
+    }
+    @Test void mixedPlainAndEscapedCredentialAreBothRedacted() {
+        enableDebug(100); String raw = "{\"action\":\"SPEAK\",\"emote\":null,\"text\":\"fixture-only + \\u0066ixture-only\"}";
+        when(invoker.streamBounded(any(), anyList(), eq(160))).thenReturn(Flux.just(raw));
+        var result = service.decide(7, event(debug(2), 1, "PAGE_ENTER"));
+        assertThat(result.debug().rawBody()).doesNotContain("fixture-only", "\\u0066ixture-only");
+        assertThat(result.debug().rawBody()).contains("[REDACTED_CREDENTIAL] + [REDACTED_CREDENTIAL]");
+    }
+    @Test void deeplyEscapedAndPlainCredentialAreBothRedacted() throws Exception {
+        enableDebug(100);
+        String text = "fixture-only + " + "\\".repeat(8) + "u0066ixture-only";
+        String raw = "{\"action\":\"SPEAK\",\"emote\":null,\"text\":"
+                + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(text) + "}";
+        when(invoker.streamBounded(any(), anyList(), eq(160))).thenReturn(Flux.just(raw));
+        var result = service.decide(7, event(debug(2), 1, "PAGE_ENTER"));
+        assertThat(result.debug().rawBody()).doesNotContain("ixture-only", "u0066");
+        assertThat(result.debug().rawBody()).contains("[REDACTED_CREDENTIAL] + [REDACTED_CREDENTIAL]");
+        assertThat(result.debug().parsedDecision().text()).isEqualTo("[REDACTED_CREDENTIAL] + [REDACTED_CREDENTIAL]");
+        assertThat(result.text()).isEqualTo("[REDACTED_CREDENTIAL] + [REDACTED_CREDENTIAL]");
+        assertThat(result.debug().redactedFields()).containsExactly("CREDENTIAL");
+    }
+    @Test void gatedManualRequestDoesNotFabricateModelMessagesOrBody() {
+        enableDebug(100); var session = debug(2); service.decide(7, event(session, 1, "PAGE_ENTER"));
+        var gated = service.decide(7, event(session, 2, "PAGE_ENTER"));
+        assertThat(gated.reason()).isEqualTo("COOLDOWN"); assertThat(gated.modelDispatched()).isFalse();
+        assertThat(gated.debug().messages()).isNull(); assertThat(gated.debug().parameters()).isNull(); assertThat(gated.debug().rawBody()).isNull(); assertThat(gated.debug().parsedDecision()).isNull();
     }
 
     static class MutableClock extends Clock {

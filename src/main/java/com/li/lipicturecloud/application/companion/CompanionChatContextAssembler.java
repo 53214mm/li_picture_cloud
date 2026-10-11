@@ -104,7 +104,10 @@ public class CompanionChatContextAssembler {
         // 让她知道自己记得图片，但不主动提。
         prompt.append("- 记忆：").append(recall.pictureCount() > 0
                 ? "你记得对方喂过的 " + recall.pictureCount() + " 张图；对方问起或聊到相关的才用，不主动提"
-                : "对方还没有喂过让你记住的图").append("\n");
+                : "没有可用于对话的已确认图片记忆；不能据此断言对方从未喂养").append("\n");
+        if (recall.referenceAmbiguous()) {
+            prompt.append("- 这轮图片指代不明确：先问对方说的是哪张，不猜是哪张，也不把候选内容当成那张图。\n");
+        }
 
         // 防御性状态过滤：输入已由调用方做过撤权扫描与 CONFIRMED 过滤，这里不再查询数据库。
         List<CompanionMemoryRecall.RecalledMemory> memories = owned(recall.recalled(), companionId, subjectId)
@@ -133,9 +136,10 @@ public class CompanionChatContextAssembler {
             }
         }
         List<CompanionMemoryRecall.RecalledMemory> recent = owned(recall.recentPictures(), companionId, subjectId)
+                .limit(Math.max(0, Math.min(memoryLimit, 3)))
                 .toList();
         if (!recent.isEmpty()) {
-            prompt.append("\n## 对方最近喂过的图（对方正在问这个，可以照着说，不要编多出来的）\n");
+            prompt.append("\n## 对方最近确认过的图片记录（可用于澄清，不代表这轮指的就是它；不要编多出来的）\n");
             for (CompanionMemoryRecall.RecalledMemory recalled : recent) {
                 prompt.append("- ").append(pictureName(recalled)).append("：")
                         .append(truncate(recalled.memory().content(), RECENT_PICTURE_CODE_POINT_LIMIT)).append("\n");
@@ -146,7 +150,9 @@ public class CompanionChatContextAssembler {
                 ## 补充
                 - 一般不超过 60 字；对方让你解释或讲点东西时可以长一些，但不超过 200 字。
                 - 历史对话里你以前的一些回复是旧版本的你写的，可能又长又端着。那不是现在的你，不要模仿那种口吻。
-                - 对方问起以前的事，而上面没有对应的记录时，就说记不太清了，不要拿别的事硬凑，也不要编。
+                - 对方问起以前的事，而上面没有对应的记录时，就说目前没有可用记录，不据此否认对方经历，不要拿别的事硬凑，也不编。
+                - 视觉描述里的身份、角色、出处和意义推测仍是推测；对方亲口说明的身份与模型猜测要分清。
+                - 不能知道对方页面是否成功显示了回复；对方说没看到时，不猜测页面状态或编造送达情况。
                 """);
         return prompt.toString();
     }
@@ -290,7 +296,8 @@ public class CompanionChatContextAssembler {
                 : "对方上传的图片 #" + memory.pictureId() + (described.isEmpty() ? "" : " " + described);
         String date = MEMORY_DATE.format(memory.createdTime().atZone(SHANGHAI));
         String origin = memory.content().equals(memory.originalContent())
-                ? "视觉模型的客观描述" : "对方亲自改过的描述";
+                ? (memory.sourceType() == com.li.lipicturecloud.domain.companion.MemorySourceType.DEMO
+                        ? "演示记录，不是视觉识别" : "视觉模型的观察与推测") : "对方亲自改过的描述";
         return picture + " · " + date + " · " + origin;
     }
 

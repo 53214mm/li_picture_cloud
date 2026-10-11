@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+ <changeSet id="20261011-observation-epoch" author="li-picture-cloud">
+  <addColumn tableName="companion_chat_boundary"><column name="chatEpoch" type="BIGINT" defaultValueNumeric="0"><constraints nullable="false"/></column></addColumn>
+ </changeSet>
+ <changeSet id="20261011-observation-usage" author="li-picture-cloud">
+  <sql><![CDATA[CREATE TABLE companion_observation_usage (
+    subjectId BIGINT PRIMARY KEY, usageDate DATE NOT NULL, textAttempts INT NOT NULL DEFAULT 0,
+    visionAttempts INT NOT NULL DEFAULT 0, leaseToken VARCHAR(64) NULL, leaseUntil TIMESTAMP NULL,
+    nextAt TIMESTAMP NULL, updateTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )]]></sql>
+  <rollback><dropTable tableName="companion_observation_usage"/></rollback>
+ </changeSet>
+</databaseChangeLog>

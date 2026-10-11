@@ -3,6 +3,8 @@ package com.li.lipicturecloud.infrastructure.airuntime;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.li.lipicturecloud.application.airuntime.ChatTurn;
+import com.li.lipicturecloud.application.airuntime.BoundedGenerationProfile;
+import com.li.lipicturecloud.application.airuntime.LanguageStreamDiagnostics;
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
 import com.li.lipicturecloud.application.airuntime.ModelInvocationException;
 import com.li.lipicturecloud.application.airuntime.LanguageModelInvoker;
@@ -30,7 +32,7 @@ import java.util.stream.Stream;
  * <p>失败只抛带安全错误码的 {@link ModelInvocationException}；日志与异常
  * 均不携带提示词、响应正文或凭据。</p>
  */
-public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
+public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker.Observed {
 
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
@@ -51,16 +53,25 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
 
     @Override
     public Flux<String> stream(ModelRouteDecision route, List<ChatTurn> turns) {
-        return streamInternal(route, turns, null);
+        return streamInternal(route, turns, null, null);
     }
 
     @Override
     public Flux<String> streamBounded(ModelRouteDecision route, List<ChatTurn> turns, int maxTokens) {
         if (maxTokens < 1 || maxTokens > 256) throw new IllegalArgumentException("Invalid output token bound");
-        return streamInternal(route, turns, maxTokens);
+        return streamInternal(route, turns, maxTokens, null);
     }
 
-    private Flux<String> streamInternal(ModelRouteDecision route, List<ChatTurn> turns, Integer maxTokens) {
+    @Override
+    public Flux<String> streamBoundedObserved(ModelRouteDecision route, List<ChatTurn> turns, int maxTokens,
+                                             LanguageStreamDiagnostics diagnostics) {
+        if (maxTokens < 1 || maxTokens > 256) throw new IllegalArgumentException("Invalid output token bound");
+        Objects.requireNonNull(diagnostics, "diagnostics").started(timeout.toMillis());
+        return streamInternal(route, turns, maxTokens, diagnostics);
+    }
+
+    private Flux<String> streamInternal(ModelRouteDecision route, List<ChatTurn> turns, Integer maxTokens,
+                                        LanguageStreamDiagnostics diagnostics) {
         Objects.requireNonNull(route, "route");
         if (!route.isByok()) {
             throw new IllegalArgumentException("BYOK client only handles BYOK routes");
@@ -87,6 +98,7 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
         return Mono.<HttpResponse<Stream<String>>>fromFuture(
                         httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofLines()))
                 .flatMapMany(response -> {
+                    if (diagnostics != null) diagnostics.status(response.statusCode());
                     if (!isSuccess(response.statusCode())) {
                         response.body().close();
                         return Flux.error(statusFailure(response.statusCode()));
@@ -96,18 +108,28 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
                     boolean[] terminal = { false };
                     return Flux.fromStream(response.body())
                             .map(this::parseFrame)
+                            .doOnNext(frame -> { if (diagnostics != null) diagnostics.frame(frame.content() != null,
+                                    frame.reasoningPresent(), frame.finishReason(), frame.done()); })
                             .takeUntil(frame -> terminal[0] = frame.terminal())
                             .<String>handle((frame, sink) -> {
                                 if (frame.content() != null) sink.next(frame.content());
                             })
-                            .concatWith(Flux.defer(() -> terminal[0] ? Flux.empty()
-                                    : Flux.error(new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
-                                            "model stream ended before completion"))));
+                            .concatWith(Flux.defer(() -> {
+                                if (terminal[0]) return Flux.empty();
+                                if (diagnostics != null) diagnostics.ended("EOF");
+                                return Flux.error(new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
+                                        "model stream ended before completion", null,
+                                        ModelInvocationException.FailureKind.PROTOCOL, null));
+                            }));
                 })
-                // HttpRequest.timeout 只覆盖到响应头；对 SSE 正文叠加逐帧空闲超时，
-                // 上游 200 后停滞不发帧时也能及时终止而不是无限悬挂。
+                // HttpRequest.timeout covers headers; this timeout covers emitted answer text.
+                // Bounded observation also has its own shorter absolute collection deadline.
                 .timeout(timeout)
-                .onErrorMap(this::normalizeFailure);
+                .onErrorMap(this::normalizeFailure)
+                .doOnError(error -> { if (diagnostics != null) diagnostics.ended(error instanceof ModelInvocationException failure
+                        && failure.failureKind() == ModelInvocationException.FailureKind.TIMEOUT ? "TIMEOUT"
+                        : "ERROR"); })
+                .doFinally(signal -> { if (diagnostics != null && signal == reactor.core.publisher.SignalType.CANCEL) diagnostics.ended("CANCELLED"); });
     }
 
     URI resolveEndpoint(ModelRouteDecision route) {
@@ -131,30 +153,33 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
                     .append(objectMapper.writeValueAsString(turn.content()))
                     .append('}');
         }
+        var profile = BoundedGenerationProfile.forConnection(route.connection());
         return "{\"model\":\"" + route.connection().modelCode()
                 + "\",\"messages\":[" + messages + "],\"stream\":true"
-                + (maxTokens == null ? "" : ",\"max_tokens\":" + maxTokens) + "}";
+                + (maxTokens == null ? "" : (profile.nonThinking() ? ",\"enable_thinking\":false" : "")
+                    + ",\"" + profile.tokenLimitParameter() + "\":" + maxTokens) + "}";
     }
 
     String extractDelta(String line) {
         return parseFrame(line).content();
     }
 
-    private record StreamFrame(String content, boolean terminal) { }
+    private record StreamFrame(String content, boolean terminal, String finishReason, boolean reasoningPresent, boolean done) { }
 
     private StreamFrame parseFrame(String line) {
         String payload = line.strip();
         if (!payload.startsWith("data:")) {
-            return new StreamFrame(null, false);
+            return new StreamFrame(null, false, null, false, false);
         }
         String data = payload.substring("data:".length()).strip();
-        if ("[DONE]".equals(data)) return new StreamFrame(null, true);
-        if (data.isEmpty()) return new StreamFrame(null, false);
+        if ("[DONE]".equals(data)) return new StreamFrame(null, true, null, false, true);
+        if (data.isEmpty()) return new StreamFrame(null, false, null, false, false);
         try {
             JsonNode node = objectMapper.readTree(data);
             if (node.hasNonNull("error")) {
                 throw new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
-                        "model endpoint reported an error");
+                        "model endpoint reported an error", null,
+                        ModelInvocationException.FailureKind.REQUEST_REJECTED, null);
             }
             JsonNode choice = node.path("choices").path(0);
             JsonNode content = choice.path("delta").path("content");
@@ -163,10 +188,13 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
             // A token-limit finish (length) is still an explicit provider completion.
             boolean terminal = finish.isTextual() && !finish.asText().isBlank();
             return new StreamFrame(content.isMissingNode() || content.isNull() || content.asText().isEmpty()
-                    ? null : content.asText(), terminal);
+                    ? null : content.asText(), terminal, terminal ? finish.asText() : null,
+                    choice.path("delta").path("reasoning_content").isTextual()
+                            && !choice.path("delta").path("reasoning_content").textValue().isEmpty(), false);
         } catch (IOException malformed) {
             throw new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
-                    "malformed model stream frame", malformed);
+                    "malformed model stream frame", malformed,
+                    ModelInvocationException.FailureKind.PROTOCOL, null);
         }
     }
 
@@ -178,7 +206,8 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
         String code = (statusCode == 401 || statusCode == 403)
                 ? ConnectivityResult.CREDENTIAL_REJECTED
                 : ConnectivityResult.UPSTREAM_ERROR;
-        return new ModelInvocationException(code, "model endpoint rejected the request");
+        return new ModelInvocationException(code, "model endpoint rejected the request", null,
+                ModelInvocationException.FailureKind.REQUEST_REJECTED, statusCode);
     }
 
     private Throwable normalizeFailure(Throwable failure) {
@@ -193,11 +222,11 @@ public class OpenAiCompatibleLanguageClient implements LanguageModelInvoker {
                 || root instanceof java.io.InterruptedIOException
                 || root instanceof java.util.concurrent.TimeoutException) {
             return new ModelInvocationException(ConnectivityResult.UPSTREAM_TIMEOUT,
-                    "model endpoint timed out", failure);
+                    "model endpoint timed out", failure, ModelInvocationException.FailureKind.TIMEOUT, null);
         }
-        if (root instanceof UncheckedIOException) {
+        if (root instanceof UncheckedIOException || root instanceof IOException) {
             return new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
-                    "model endpoint transport failed", failure);
+                    "model endpoint transport failed", failure, ModelInvocationException.FailureKind.NETWORK, null);
         }
         return new ModelInvocationException(ConnectivityResult.UPSTREAM_ERROR,
                 "model invocation failed", failure);

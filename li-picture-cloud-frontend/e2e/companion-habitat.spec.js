@@ -36,7 +36,8 @@ test('the room and resident lead the first screen while data remains in its own 
   await expect(page.locator('.body-static img')).toHaveJSProperty('naturalWidth', 576)
   await expect(page.locator('.companion-body')).toBeInViewport({ ratio: 1 })
   await expect(page.locator('.room-status')).toHaveText('此刻在小屋里')
-  expect((await page.locator('.stats-card').boundingBox()).y).toBeGreaterThan(900)
+  // 成长数据不在首屏，而在单独的"相处与成长"页。
+  await expect(page.locator('.stats-card')).toBeHidden()
   await expect(page.locator('.photo-nook')).toContainText('从你的图库选一张')
   await page.screenshot({ path: testInfo.outputPath('habitat-desktop.png') })
   noWrites(state)
@@ -171,7 +172,9 @@ test('room, resident and every existing area fit tablet and narrow phones', asyn
     expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth)).toBe(true)
     await page.screenshot({ path: testInfo.outputPath(`habitat-${width}.png`) })
   }
+  const links = { chat: /窗边对话/, feed: /照片桌/, journal: /留影手记/, growth: /相处与成长/ }
   for (const area of ['chat', 'feed', 'journal', 'growth']) {
+    await page.getByRole('navigation', { name: '小屋区域' }).getByRole('link', { name: links[area] }).click()
     await page.locator(`#habitat-${area}`).scrollIntoViewIfNeeded()
     expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth)).toBe(true)
     await page.screenshot({ path: testInfo.outputPath(`narrow-${area}.png`) })

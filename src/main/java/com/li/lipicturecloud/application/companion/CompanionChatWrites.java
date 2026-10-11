@@ -17,12 +17,20 @@ public class CompanionChatWrites {
     private final CompanionChatMessageRepository messages;
     private final CompanionChatEpisodeRepository episodes;
     private final TransactionTemplate transactions;
+    private final com.li.lipicturecloud.domain.companion.ChatSessionBoundaryRepository boundaries;
 
     public CompanionChatWrites(CompanionRepository companions, CompanionChatMessageRepository messages,
                                CompanionChatEpisodeRepository episodes, PlatformTransactionManager manager) {
+        this(companions,messages,episodes,manager,null);
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public CompanionChatWrites(CompanionRepository companions, CompanionChatMessageRepository messages,
+            CompanionChatEpisodeRepository episodes, PlatformTransactionManager manager,
+            com.li.lipicturecloud.domain.companion.ChatSessionBoundaryRepository boundaries) {
         this.companions = companions;
         this.messages = messages;
         this.episodes = episodes;
+        this.boundaries = boundaries;
         transactions = new TransactionTemplate(manager);
         transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -61,6 +69,7 @@ public class CompanionChatWrites {
             lock(companionId, subjectId);
             int deleted = messages.deleteByCompanion(companionId);
             episodes.deleteByCompanion(companionId);
+            if (boundaries != null) boundaries.advanceChatEpoch(subjectId);
             return deleted;
         });
     }

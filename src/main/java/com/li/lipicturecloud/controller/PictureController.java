@@ -126,6 +126,21 @@ public class PictureController {
 
 
     /**
+     * 把一张能看到的图片添加到自己的空间
+     */
+    @PostMapping("/copy-to-space")
+    public BaseResponse<PictureVO> copyPictureToSpace(@RequestBody PictureCopyRequest copyRequest,
+                                                      HttpServletRequest request) {
+        ThrowUtils.throwIf(copyRequest == null || copyRequest.getPictureId() == null
+                || copyRequest.getSpaceId() == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUserEntity(request);
+        PictureVO pictureVO = pictureService.copyPictureToSpace(copyRequest.getPictureId(),
+                copyRequest.getSpaceId(), loginUser);
+        clearListCache();
+        return ResultUtils.success(pictureVO);
+    }
+
+    /**
      * 删除图片
      */
     @PostMapping("/delete")

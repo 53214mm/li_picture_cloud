@@ -2,6 +2,7 @@ package com.li.lipicturecloud.infrastructure.airuntime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.li.lipicturecloud.application.airuntime.ChatTurn;
+import com.li.lipicturecloud.application.airuntime.LanguageStreamDiagnostics;
 import com.li.lipicturecloud.application.airuntime.ConnectivityResult;
 import com.li.lipicturecloud.application.airuntime.ModelInvocationException;
 import com.li.lipicturecloud.application.airuntime.ModelRouteDecision;
@@ -76,6 +77,68 @@ class OpenAiCompatibleLanguageClientTest {
             exchange.getResponseBody().write(payload);
             exchange.close();
         });
+    }
+
+    @Test
+    void observedOnlyReasoningLengthIsEmptyAndNeverRetainsReasoningContent() throws Exception {
+        respond(200, "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"PRIVATE_REASONING_SENTINEL\"}}]}\n\n"
+                + "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"length\"}]}\n\n");
+        var method = java.util.Arrays.stream(client.getClass().getMethods()).filter(m -> m.getName().equals("streamBoundedObserved")).findFirst();
+        assertThat(method).as("bounded stream must support request-local safe observations").isPresent();
+        var diagnostics = method.orElseThrow().getParameterTypes()[3].getConstructor().newInstance();
+        @SuppressWarnings("unchecked") Flux<String> output = (Flux<String>)method.orElseThrow().invoke(client, route, List.of(ChatTurn.user("event")), 160, diagnostics);
+        assertThat(output.collectList().block()).isEmpty();
+        var snapshot = diagnostics.getClass().getMethod("snapshot").invoke(diagnostics);
+        var data = new ObjectMapper().valueToTree(snapshot);
+        assertThat(data.path("finishReason").asText()).isEqualTo("length");
+        assertThat(data.path("terminal").asText()).isEqualTo("FINISH_REASON");
+        assertThat(data.path("reasoningPresent").asBoolean()).isTrue();
+        assertThat(data.path("contentFrames").asInt()).isZero();
+        assertThat(data.toString()).doesNotContain("PRIVATE_REASONING_SENTINEL", "sk-test-key");
+        assertThat(lastBody.get()).contains("\"max_tokens\":160").doesNotContain("thinking");
+    }
+
+    @Test void boundedDashscopeQwenUsesDocumentedNonThinkingAndTotalCapWithoutChangingModelOrNormalChat() throws Exception {
+        var qwen = ModelRouteDecision.byok(ModelConnection.restore(9L, 7L, ModelProvider.DASHSCOPE,
+                "fixture", URI.create("https://dashscope.aliyuncs.com/compatible-mode/v1"), "qwen3.8-max", 5L, true, 1L), "fixture-key");
+        var bounded = new ObjectMapper().readTree(client.encodeBody(qwen, List.of(ChatTurn.user("synthetic")), 160));
+        assertThat(bounded.path("model").asText()).isEqualTo("qwen3.8-max");
+        assertThat(bounded.path("enable_thinking").asBoolean(true)).isFalse();
+        assertThat(bounded.path("max_completion_tokens").asInt()).isEqualTo(160);
+        assertThat(bounded.has("max_tokens")).isFalse();
+        var normal = new ObjectMapper().readTree(client.encodeBody(qwen, List.of(ChatTurn.user("synthetic"))));
+        assertThat(normal.has("enable_thinking")).isFalse();assertThat(normal.has("max_completion_tokens")).isFalse();
+    }
+
+    @Test void observedFinalContentCountsOnceAndUnknownFinishIsWhitelisted() {
+        respond(200, "data: {\"choices\":[{\"delta\":{\"content\":\"actual-last\"},\"finish_reason\":\"PRIVATE_FINISH_SENTINEL\"}]}\n\n");
+        var diagnostics = new LanguageStreamDiagnostics();
+        assertThat(client.streamBoundedObserved(route, List.of(ChatTurn.user("event")), 160, diagnostics).collectList().block()).containsExactly("actual-last");
+        assertThat(diagnostics.snapshot().contentFrames()).isEqualTo(1);
+        assertThat(diagnostics.snapshot().reasoningPresent()).isFalse();
+        assertThat(diagnostics.snapshot().finishReason()).isEqualTo("OTHER");
+        assertThat(diagnostics.snapshot().toString()).doesNotContain("PRIVATE_FINISH_SENTINEL", "actual-last");
+    }
+    @Test void observedEofKeepsProtocolFailureDistinctFromMalformedFrame() {
+        respond(200, "data: {\"choices\":[{\"delta\":{\"content\":\"prefix\"}}]}\n\n");
+        var diagnostics = new LanguageStreamDiagnostics();
+        assertThatThrownBy(() -> client.streamBoundedObserved(route, List.of(ChatTurn.user("event")), 160, diagnostics).blockLast()).isInstanceOf(ModelInvocationException.class);
+        assertThat(diagnostics.snapshot().terminal()).isEqualTo("EOF");
+        assertThat(diagnostics.snapshot().contentFrames()).isEqualTo(1);
+    }
+    @Test void observedMalformedFrameReportsErrorWithoutRawPayload() {
+        respond(200, "data: PRIVATE_MALFORMED_SENTINEL\n\n");
+        var diagnostics = new LanguageStreamDiagnostics();
+        assertThatThrownBy(() -> client.streamBoundedObserved(route, List.of(ChatTurn.user("event")), 160, diagnostics).blockLast()).isInstanceOf(ModelInvocationException.class);
+        assertThat(diagnostics.snapshot().terminal()).isEqualTo("ERROR");
+        assertThat(diagnostics.snapshot().toString()).doesNotContain("PRIVATE_MALFORMED_SENTINEL");
+    }
+    @Test void observedDoneIsAProtocolFactAndCollectorsDoNotShareState() {
+        respond(200, "data: [DONE]\n\n");
+        var first = new LanguageStreamDiagnostics(); var other = new LanguageStreamDiagnostics();
+        assertThat(client.streamBoundedObserved(route, List.of(ChatTurn.user("event")), 160, first).collectList().block()).isEmpty();
+        assertThat(first.snapshot().terminal()).isEqualTo("DONE");
+        assertThat(other.snapshot().supported()).isFalse(); assertThat(other.snapshot().reasoningPresent()).isNull();
     }
 
     @Test

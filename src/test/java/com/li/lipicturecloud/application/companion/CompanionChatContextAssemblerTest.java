@@ -60,7 +60,7 @@ class CompanionChatContextAssemblerTest {
         assertThat(prompt).doesNotContain("光点", "幼体", "与主人的关系", "精力 30", "让用户愿意继续");
         assertThat(prompt).contains("- 成长：刚诞生不久（你的名字始终是绫页）", "- 心情：平常", "- 和对方：刚认识");
         // 调用方保证可用记忆已通过撤权检查；这里仍防御性只放行 CONFIRMED。
-        assertThat(prompt).contains("这轮可能用得上的记录", "[对方上传的图片 #101 · 8月14日 · 视觉模型的客观描述] 伙伴记得一张明亮的图片。");
+        assertThat(prompt).contains("这轮可能用得上的记录", "[对方上传的图片 #101 · 8月14日 · 视觉模型的观察与推测] 伙伴记得一张明亮的图片。");
         assertThat(prompt).doesNotContain("待确认的记忆不应进入上下文");
         assertThat(prompt).contains("不要模仿那种口吻");
     }
@@ -77,6 +77,15 @@ class CompanionChatContextAssemblerTest {
         assertThat(prompt).contains("编造");
         assertThat(prompt).contains("- 心情：平常", "- 和对方：刚认识");
         assertThat(prompt).doesNotContain("最近的小倾向");
+    }
+
+    @Test
+    void noConfirmedMemoriesDoesNotClaimNoFeedingEverOccurred() {
+        when(companionRepository.findByOwnerId(7L)).thenReturn(Optional.of(
+                Companion.awaken(7L, CompanionBalance.v1()).persistedAs(11L)));
+        String prompt = assembler.systemPrompt(11L, 7L, 5, null, List.of());
+        assertThat(prompt).contains("没有可用于对话的已确认图片记忆");
+        assertThat(prompt).doesNotContain("对方还没有喂过");
     }
 
     @Test
@@ -161,18 +170,18 @@ class CompanionChatContextAssemblerTest {
         String quiet = assembler.systemPrompt(11L, 7L, 5, null,
                 new CompanionMemoryRecall.MemoryRecall(List.of(), List.of(), 3));
         assertThat(quiet).contains("- 记忆：你记得对方喂过的 3 张图；对方问起或聊到相关的才用，不主动提");
-        assertThat(quiet).doesNotContain("这轮可能用得上的记录", "对方最近喂过的图");
+        assertThat(quiet).doesNotContain("这轮可能用得上的记录", "对方最近确认过的图片记录");
 
         String relevant = assembler.systemPrompt(11L, 7L, 5, null,
                 new CompanionMemoryRecall.MemoryRecall(List.of(recalled), List.of(), 3));
-        assertThat(relevant).contains("[对方上传的图片 #301 《骑士》 标签：剑 · 8月14日 · 视觉模型的客观描述] 可见观察：一位少女");
+        assertThat(relevant).contains("[对方上传的图片 #301 《骑士》 标签：剑 · 8月14日 · 视觉模型的观察与推测] 可见观察：一位少女");
 
         String asked = assembler.systemPrompt(11L, 7L, 5, null,
                 new CompanionMemoryRecall.MemoryRecall(List.of(), List.of(recalled), 3));
-        assertThat(asked).contains("## 对方最近喂过的图", "- 《骑士》（8月14日）：可见观察：一位少女");
+        assertThat(asked).contains("## 对方最近确认过的图片记录", "- 《骑士》（8月14日）：可见观察：一位少女");
 
         String none = assembler.systemPrompt(11L, 7L, 5, null, CompanionMemoryRecall.MemoryRecall.empty());
-        assertThat(none).contains("- 记忆：对方还没有喂过让你记住的图");
+        assertThat(none).contains("- 记忆：没有可用于对话的已确认图片记忆");
     }
 
     private static BigDecimal bd(String value) {

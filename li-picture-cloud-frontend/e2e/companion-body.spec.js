@@ -49,9 +49,12 @@ for (const [stage, label] of [['LIGHT', '初始阶段'], ['SEEDLING', '成长阶
     const before = JSON.stringify(state.snapshot)
     await page.goto('/companion')
     await expect(page.locator('.companion-body')).toHaveAttribute('data-visual-stage', 'adult')
+    // 成长数据在"相处与成长"那一页。
+    await page.getByRole('navigation', { name: '小屋区域' }).getByRole('link', { name: /相处与成长/ }).click()
     await expect(page.locator('#companion-stats-title')).toHaveText('绫页')
     await expect(page.getByTestId('growth-stage')).toHaveText(label)
     await expect(page.getByText('42 / 100 生命经验')).toBeVisible()
+    await page.getByRole('navigation', { name: '小屋区域' }).getByRole('link', { name: /窗边对话/ }).click()
     await page.locator('.chat-card').scrollIntoViewIfNeeded()
     await expect(page.locator('.chat-card .companion-portrait img')).toHaveJSProperty('naturalWidth', 384)
     await expect(page.getByLabel('对伙伴说的话')).toBeEditable()
@@ -206,9 +209,9 @@ test('loading, failed and absent companion never manufacture a body or request a
   await expect(page.getByRole('button', { name: '唤醒我的伙伴' })).toBeVisible()
   await expect(page.locator('.companion-body')).toHaveCount(0)
   await expect(page.locator('main .companion-portrait')).toHaveCount(0)
-  // The shell's opt-in site-presence widget has a static neutral thumbnail;
+  // The shell's opt-in observation widget remains off;
   // it does not create an owned companion, Home body or idle animation.
-  await expect(page.getByTestId('site-presence')).toContainText('默认关闭')
+  await expect(page.getByTestId('companion-observation')).toContainText('默认关闭')
   expect(state.assetRequests.some(url => /adult-(home|idle)/.test(url))).toBe(false)
   expect(state.writes).toEqual([])
 })

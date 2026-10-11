@@ -4,6 +4,7 @@
       <div>
         <span class="eyebrow">伙伴记忆</span>
         <h2 id="memory-title">它记得的事</h2>
+        <p v-if="memories.length" class="memory-count">共 {{ memories.length }} 条</p>
       </div>
       <button class="refresh-button" type="button" :disabled="loading" @click="loadMemories">
         {{ loading ? '正在读取…' : '刷新' }}
@@ -205,7 +206,9 @@ function formatTime(value) {
 .memory-state { padding: 2rem 1.5rem; color: var(--gray-600); }
 .memory-state.error { color: var(--red); }
 .memory-state .btn { margin-top: 1rem; }
-.memory-list { display: grid; gap: 1rem; padding: 1.25rem 1.5rem 1.5rem; }
+/* 记忆多了在卡片里滚动，不把整页往下撑。 */
+.memory-list { display: grid; gap: 1rem; padding: 1.25rem 1.5rem 1.5rem; max-height: 640px; overflow-y: auto; overscroll-behavior: contain; }
+.memory-count { margin-top: .25rem; color: #77816c; font-size: .75rem; }
 .memory-item { padding: 1rem; background: var(--gray-100); border-left: 4px solid var(--black); }
 .memory-meta { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; color: var(--gray-600); font-size: .72rem; }
 .status-badge { padding: .2rem .45rem; border: 1px solid currentColor; font-weight: 800; }
