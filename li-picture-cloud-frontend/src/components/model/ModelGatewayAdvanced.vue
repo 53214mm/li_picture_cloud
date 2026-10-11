@@ -268,7 +268,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="record in usage" :key="record.id">
+            <tr v-for="record in usagePageRecords" :key="record.id">
               <td>{{ formatTime(record.createdTime) }}</td>
               <td>{{ taskLabel(record.task) }}</td>
               <td>{{ providerLabel(record.provider) }} / {{ record.modelCode }}</td>
@@ -282,12 +282,17 @@
           </tbody>
         </table>
         <p v-else-if="usageStatus === 'ready'" class="empty-state">还没有调用记录。测试连接或使用模型后，可在这里查看。</p>
+        <nav v-if="usagePageCount > 1" class="usage-pager" aria-label="调用记录分页" data-testid="usage-pager">
+          <button type="button" :disabled="usagePage <= 1" @click="usagePage -= 1">上一页</button>
+          <span>第 {{ usagePage }} / {{ usagePageCount }} 页 · 共 {{ usage.length }} 条</span>
+          <button type="button" :disabled="usagePage >= usagePageCount" @click="usagePage += 1">下一页</button>
+        </nav>
       </section>
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import {
   MODEL_PROVIDERS,
@@ -341,6 +346,13 @@ const credentials = ref([])
 const connections = ref([])
 const routing = ref([])
 const usage = ref([])
+// 最近调用最多 50 条，每页 10 条，不把整页往下撑。
+const USAGE_PAGE_SIZE = 10
+const usagePage = ref(1)
+const usagePageCount = computed(() => Math.max(1, Math.ceil(usage.value.length / USAGE_PAGE_SIZE)))
+const usagePageRecords = computed(() =>
+  usage.value.slice((usagePage.value - 1) * USAGE_PAGE_SIZE, usagePage.value * USAGE_PAGE_SIZE))
+watch(usage, () => { usagePage.value = 1 })
 const mcpServices = ref([])
 const credentialBusy = ref(false)
 const connectionBusy = ref(false)
@@ -704,6 +716,9 @@ input, select { min-width: 0; padding: .6rem .75rem; border: 2px solid var(--bla
 .routing-task { font-weight: 700; }
 .routing-note { margin: 1rem 1.5rem 1.5rem; padding: .6rem .8rem; border-left: 4px solid var(--red); background: var(--gray-100); color: var(--gray-600); font-size: .75rem; }
 .usage-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.usage-pager { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; padding: .75rem .8rem; font-size: .8rem; color: var(--gray-600); }
+.usage-pager button { min-height: 36px; padding: 0 .9rem; border: 1px solid var(--gray-300); background: var(--white); cursor: pointer; }
+.usage-pager button:disabled { opacity: .45; cursor: default; }
 .usage-table th, .usage-table td { padding: .65rem .8rem; border-bottom: 1px solid var(--gray-200); text-align: left; }
 .usage-table th { background: var(--gray-100); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
 .usage-success { color: #075d2a; font-weight: 700; }

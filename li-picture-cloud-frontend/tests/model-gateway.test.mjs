@@ -115,6 +115,10 @@ test('usage table exposes the minimal unified usage snapshot columns', async () 
 
   // 控制中心使用记录展示最小统一用量（输入/输出 token 与图片张数）。
   assert.match(view, /data-testid="usage-table"/)
+  // 最近调用分页显示，不再一次铺满 50 行。
+  assert.match(view, /usagePageRecords/)
+  assert.match(view, /USAGE_PAGE_SIZE = 10/)
+  assert.match(view, /data-testid="usage-pager"/)
   assert.match(view, /用量（输入 \/ 输出 \/ 图片）/)
   assert.match(view, /usageAmountLabel\(record\)/)
   assert.match(view, /function usageAmountLabel\(record\)/)

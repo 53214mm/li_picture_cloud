@@ -6,7 +6,7 @@ const KEY = 'sk-quick-e2e-0001'
 const DEEPSEEK_MODELS = ['deepseek-chat', 'deepseek-reasoner']
 const PROVIDERS = ['DEEPSEEK', 'OPENAI', 'ANTHROPIC', 'GOOGLE', 'MOONSHOT', 'DASHSCOPE', 'SILICONFLOW', 'ZHIPU']
 
-async function fixture(page, { current = { status: 'PLATFORM' }, models = DEEPSEEK_MODELS, listed = true, saved = [] } = {}) {
+async function fixture(page, { current = { status: 'PLATFORM' }, models = DEEPSEEK_MODELS, listed = true, saved = [], usage = [] } = {}) {
   const state = { calls: [], errors: [], current, savedError: null, savedListError: false,
     vision: { forcedSearch: false, supported: true, modelCode: 'qwen3.8-max' } }
   page.on('pageerror', error => state.errors.push(error.message))
@@ -46,6 +46,7 @@ async function fixture(page, { current = { status: 'PLATFORM' }, models = DEEPSE
       state.current = { status: 'CONNECTED', provider: body.provider, providerLabel: 'DeepSeek', modelCode: body.modelCode, connectionId: '9' }
       return ok(route, state.current)
     }
+    if (url.pathname === '/api/model/usage') return ok(route, usage)
     if (url.pathname.startsWith('/api/model/')) return ok(route, [])
     return ok(route, { records: [], total: 0 })
   })
@@ -186,6 +187,29 @@ test('connected models can be replaced or dropped back to the platform default',
   await page.getByTestId('gateway-advanced').getByText('高级设置', { exact: true }).click()
   await expect(page.getByRole('heading', { name: 'API Key', level: 2 })).toBeVisible()
   expect(state.calls.some(call => call.path === '/api/model/credentials')).toBe(true)
+  expect(state.errors).toEqual([])
+})
+
+test('recent calls are paged ten at a time instead of stretching the page', async ({ page }) => {
+  const usage = Array.from({ length: 23 }, (_, index) => ({
+    id: String(index + 1), createdTime: '2026-10-11T08:00:00Z', task: 'LANGUAGE_AGENT', provider: 'DEEPSEEK',
+    modelCode: `model-${index + 1}`, costSource: 'BYOK', success: true
+  }))
+  const state = await fixture(page, { usage })
+  await page.goto('/model-gateway')
+  await page.getByTestId('gateway-advanced').getByText('高级设置', { exact: true }).click()
+  const table = page.getByTestId('usage-table')
+  const pager = page.getByTestId('usage-pager')
+  await expect(table.locator('tbody tr')).toHaveCount(10)
+  await expect(table).toContainText('model-1')
+  await expect(pager).toContainText('第 1 / 3 页 · 共 23 条')
+  await expect(pager.getByRole('button', { name: '上一页' })).toBeDisabled()
+  await pager.getByRole('button', { name: '下一页' }).click()
+  await expect(table).toContainText('model-11')
+  await expect(table).not.toContainText('model-10 ')
+  await pager.getByRole('button', { name: '下一页' }).click()
+  await expect(table.locator('tbody tr')).toHaveCount(3)
+  await expect(pager.getByRole('button', { name: '下一页' })).toBeDisabled()
   expect(state.errors).toEqual([])
 })
 
