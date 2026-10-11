@@ -14,6 +14,7 @@ test('admin registers an mcp service and gates tools through the whitelist', asy
   await loginAsAdmin(page)
   await page.goto('/model-gateway')
   await expect(page).toHaveURL(/\/model-gateway$/)
+  await page.getByTestId('gateway-advanced').getByText('高级设置', { exact: true }).click()
   const mcpSection = page.getByTestId('mcp-section')
   await expect(mcpSection).toBeVisible()
   await expect(page.getByText('还没有 MCP 服务。登记服务后，再添加允许使用的工具。')).toBeVisible()
@@ -52,6 +53,8 @@ test('admin registers an mcp service and gates tools through the whitelist', asy
   })
   expect(loginResponse.ok()).toBeTruthy()
   await page.goto('/model-gateway')
+  await page.getByTestId('gateway-advanced').getByText('高级设置', { exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'API Key', exact: true })).toBeVisible()
   await expect(page.getByTestId('mcp-section')).toHaveCount(0)
 
   // 服务端契约锁定：非管理员调用管理面 API 必须被拒绝。

@@ -100,7 +100,8 @@ test('control center manages credentials connections routing and usage', async (
 test('quick connect lists models with a key, connects one and switches companion chat to it', async ({ page }) => {
   await login(page)
   await page.goto('/model-gateway')
-  await expect(page.getByTestId('quick-status')).toContainText('还没有连接自己的模型')
+  await expect(page.getByTestId('quick-status')).toHaveAttribute('data-status', 'platform')
+  await expect(page.getByTestId('quick-status')).toContainText('伙伴聊天正在使用平台默认')
 
   // E2E 后端的目录替身：以 sk-rejected 开头的 Key 被拒，其余返回厂商推荐模型。
   await page.getByRole('button', { name: /DeepSeek/ }).click()
@@ -128,7 +129,8 @@ test('quick connect lists models with a key, connects one and switches companion
 
   // 清理：改回平台默认后服务端仅演示，聊天自动回到演示回复；再删掉连接与凭据。
   await page.getByRole('button', { name: '改用平台默认' }).click()
-  await expect(page.getByTestId('quick-status')).toContainText('还没有连接自己的模型')
+  await expect(page.getByTestId('quick-status')).toHaveAttribute('data-status', 'platform')
+  await expect(page.getByTestId('quick-status')).toContainText('伙伴聊天正在使用平台默认')
   expect(await json(await page.request.get('/api/companion/chat/mode'))).toMatchObject({ mode: 'DEMO', modelAvailable: false })
   expect((await page.request.delete(`/api/model/connections/${connections[0].id}`)).ok()).toBeTruthy()
   for (const credential of await json(await page.request.get('/api/model/credentials'))) {

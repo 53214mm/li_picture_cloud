@@ -21,6 +21,9 @@ async function fixture(page) {
 }
 
 async function fillForm(page, register = false) {
+  // Login and registration share field labels. Wait for the lazy route's form
+  // before filling, otherwise navigation can discard values entered in login.
+  await expect(page.getByRole('heading', { name: register ? '注册' : '登录', exact: true })).toBeVisible()
   await page.getByLabel('账号', { exact: true }).fill('auth-fixture')
   await page.getByLabel('密码', { exact: true }).fill('fixture-only')
   if (register) await page.getByLabel('确认密码', { exact: true }).fill('fixture-only')

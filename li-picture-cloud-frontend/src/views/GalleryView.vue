@@ -422,7 +422,7 @@ function clearFilters() {
   .pagination { gap: 0.75rem; margin-top: 2rem; flex-wrap: wrap; }
   .page-summary { flex-basis: 100%; text-align: center; order: -1; }
   .jumper { flex-basis: 100%; justify-content: center; }
-  .jump-input { scroll-margin-block: calc(80px + env(safe-area-inset-bottom)); }
+  .jump-input, .btn-jump { scroll-margin-block: calc(80px + env(safe-area-inset-bottom)); }
 }
 
 @media (max-width: 480px) {

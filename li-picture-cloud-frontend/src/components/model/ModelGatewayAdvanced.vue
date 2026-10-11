@@ -680,7 +680,7 @@ summary:focus-visible { outline: 2px solid var(--black); outline-offset: 3px; }
 .empty-state { padding: 1.5rem; color: var(--gray-600); font-size: .9rem; }
 .credential-form, .connection-form { display: grid; gap: .9rem; padding: 1.25rem 1.5rem; }
 label { display: grid; gap: .3rem; font-size: .82rem; font-weight: 600; }
-input, select { padding: .6rem .75rem; border: 2px solid var(--black); background: var(--white); font: inherit; min-height: 44px; }
+input, select { min-width: 0; padding: .6rem .75rem; border: 2px solid var(--black); background: var(--white); font: inherit; min-height: 44px; }
 .credential-form .btn, .connection-form .btn { justify-self: start; }
 .credential-list, .connection-list { list-style: none; border-top: 2px solid var(--black); }
 .credential-list li { display: flex; flex-wrap: wrap; gap: .7rem; align-items: center; padding: .8rem 1.5rem; border-bottom: 1px solid var(--gray-200); font-size: .85rem; }

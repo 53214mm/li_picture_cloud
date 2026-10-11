@@ -19,6 +19,9 @@ async function fixture(page, overrides = {}) {
     if (overrides[path]) return overrides[path](route)
     let data = []
     if (path === '/api/user/current') data = member
+    else if (path === '/api/model/quick/current') data = { status: 'PLATFORM' }
+    else if (path === '/api/model/quick/providers') data = ['DEEPSEEK']
+    else if (path === '/api/model/quick/vision-search') data = { forcedSearch: false, supported: true, modelCode: 'qwen3.8-max' }
     else if (path.includes('/list/page')) data = { records: [], total: 0 }
     else if (path === '/api/space/list/level') data = [
       { value: 0, text: '普通版', maxCount: 100, maxSize: 104857600 },
@@ -30,6 +33,14 @@ async function fixture(page, overrides = {}) {
   return mutations
 }
 const ok = (route, data) => route.fulfill({ json: { code: 0, data } })
+
+async function openAdvanced(page) {
+  const advanced = page.getByTestId('gateway-advanced')
+  await expect(advanced).not.toHaveAttribute('open')
+  await advanced.locator('summary').focus()
+  await page.keyboard.press('Enter')
+  await expect(advanced).toHaveAttribute('open', '')
+}
 
 test('recipe delayed, failed, and successful empty reads have distinct copy and explicit recovery', async ({ page }) => {
   let release
@@ -90,7 +101,7 @@ test('space tiers show finite limits without unlimited promises on a narrow scre
 })
 
 for (const width of [1440, 320]) {
-  test(`model connection rules stay visible and metadata is keyboard-disclosable at ${width}px`, async ({ page }, testInfo) => {
+  test(`advanced model connection rules and metadata are keyboard-disclosable at ${width}px`, async ({ page }, testInfo) => {
     const mutations = await fixture(page, {
       '/api/model/credentials': route => ok(route, [{ id: 'key-1', provider: 'DEEPSEEK', tail4: '1234', algorithm: 'AES-GCM', revision: 1 }]),
       '/api/model/connections': route => ok(route, [{ id: 'connection-1', provider: 'DEEPSEEK', displayName: '测试连接', endpointUri: 'https://api.deepseek.com/v1', modelCode: 'deepseek-chat', enabled: false, revision: 1 }])
@@ -98,6 +109,7 @@ for (const width of [1440, 320]) {
     await page.setViewportSize({ width, height: 900 })
     await page.goto('/model-gateway')
     await expect(page.getByRole('heading', { name: '模型连接', exact: true })).toBeVisible()
+    await openAdvanced(page)
     await expect(page.getByText(/不会自动使用平台额度/)).toBeVisible()
     await expect(page.getByText(/平台白名单内的 HTTPS 端点/)).toBeVisible()
     await expect(page.getByText(/删除 API Key 后/)).toBeVisible()
@@ -131,6 +143,7 @@ test('model connection loading and read failure never claim there are no saved k
     }
   })
   await page.goto('/model-gateway')
+  await openAdvanced(page)
   await expect(page.getByText('正在加载模型连接…', { exact: true })).toBeVisible()
   await expect(page.getByText('还没有 API Key。填写供应商和密钥后保存。')).toHaveCount(0)
   await expect(page.getByText('还没有模型连接。填写端点和模型信息，添加后可启用并测试。')).toHaveCount(0)
@@ -141,6 +154,7 @@ test('model connection loading and read failure never claim there are no saved k
   await expect(page.getByText('还没有调用记录。测试连接或使用模型后，可在这里查看。')).toHaveCount(0)
   failed = false
   await page.reload()
+  await openAdvanced(page)
   await expect(page.getByText('还没有 API Key。填写供应商和密钥后保存。')).toBeVisible()
   await expect(page.getByText('还没有调用记录。测试连接或使用模型后，可在这里查看。')).toBeVisible()
   await expect(page.getByText('调用记录暂不可用', { exact: true })).toHaveCount(0)
