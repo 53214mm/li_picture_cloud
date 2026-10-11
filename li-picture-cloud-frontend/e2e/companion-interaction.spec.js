@@ -162,6 +162,8 @@ test('closing an inspection discards its late reply; arrival rechecks revoked ac
   const state = await fixture(page)
   const held = gate()
   await page.goto('/picture/11')
+  // Delay the inspection read only after the detail's initial read has rendered.
+  await expect(page.getByRole('button', { name: '选给绫页' })).toBeVisible()
   await page.route('**/api/picture/get/vo?id=11', async route => { await held.promise; await ok(route, photo) })
   await page.getByRole('button', { name: '选给绫页' }).click()
   await expect(panel(page).getByRole('status').filter({ hasText: '正在确认图片与所属空间' })).toBeVisible()
