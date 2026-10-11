@@ -254,6 +254,7 @@ onMounted(() => { timer = setInterval(() => { tick.value = Date.now() }, 250); v
 onBeforeUnmount(() => { history.journal.leave(); unbindCancel(); clearInterval(timer); ownerGeneration++; cancelStatus(); session.reset(); stopTransport(); document.removeEventListener('visibilitychange', visibility) })
 </script>
 <style scoped>
+code { overflow-wrap: anywhere; }
 .rehearsal { max-width: 1040px; margin: 0 auto; padding: 24px; color: #37463b; }
 .model-status { overflow-wrap: anywhere; }.model-status a { display: inline-block; margin: 8px; }fieldset { min-width: 0; }
 .intro { margin-bottom: 24px; }.eyebrow { color: #68765c; font-size: .8rem; }h1 { font-size: clamp(1.5rem, 4vw, 2.2rem); margin: .6rem 0; }h2 { font-size: 1.15rem; margin: 0 0 1rem; }p { line-height: 1.7; margin: .6rem 0; }a { color: #426c4a; }

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { visitRoomZone } from './helpers/habitat-navigation.js'
 
 // 多图融合当前未开放：真实融合需要支持多图参考输入的图像适配器（供应商能力验证）。
 // 本切片验证：前端明示"未开放"文案、没有创建/生成/保存按钮，全程不会发出任何
@@ -30,9 +31,11 @@ test('shows the explicit fusion not-open notice and never calls the generator', 
     const awaken = page.getByRole('button', { name: '唤醒我的伙伴' })
     if (await awaken.isVisible()) {
       await awaken.click()
+      await visitRoomZone(page, '相处与成长')
       await expect(page.getByTestId('growth-stage')).toBeVisible()
     }
 
+  await visitRoomZone(page, '留影手记')
     // 面板明示"多图融合暂未开放"，且不提供任何创建/生成/保存入口。
     await expect(page.getByRole('heading', { name: '多图融合', exact: true })).toBeVisible()
     await expect(page.getByTestId('fusion-unavailable')).toBeVisible()

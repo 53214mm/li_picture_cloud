@@ -209,9 +209,9 @@ test('loading, failed and absent companion never manufacture a body or request a
   await expect(page.getByRole('button', { name: '唤醒我的伙伴' })).toBeVisible()
   await expect(page.locator('.companion-body')).toHaveCount(0)
   await expect(page.locator('main .companion-portrait')).toHaveCount(0)
-  // The shell's opt-in site-presence widget has a static neutral thumbnail;
+  // The shell's opt-in observation widget remains off;
   // it does not create an owned companion, Home body or idle animation.
-  await expect(page.getByTestId('site-presence')).toContainText('默认关闭')
+  await expect(page.getByTestId('companion-observation')).toContainText('默认关闭')
   expect(state.assetRequests.some(url => /adult-(home|idle)/.test(url))).toBe(false)
   expect(state.writes).toEqual([])
 })

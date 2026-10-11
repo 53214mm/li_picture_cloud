@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { visitRoomZone } from './helpers/habitat-navigation.js'
 import { freezeClock } from './helpers/clock.js'
 
 const mood = { energy: 0, joy: 0, loneliness: 0, inspiration: 0, irritation: 0 }
@@ -31,6 +32,7 @@ test('R11 summaries lead; keyboard disclosure reveals exact signed values withou
   await expect(page.getByTestId('mood-label')).toHaveText('心情明朗')
   await expect(page.getByTestId('relationship-label')).toHaveText('相处渐近')
   await expect(page.getByTestId('traits-label')).toHaveText('明显偏创造 · 明显偏谨慎')
+  await visitRoomZone(page, '相处与成长')
   for (const section of ['mood', 'relationship', 'traits']) {
     const details = page.getByTestId(`${section}-details`)
     await expect(details).not.toHaveAttribute('open', '')
@@ -71,6 +73,7 @@ test('R11 high loneliness remains passive and 320px reduced-motion disclosure st
   await expect(page.locator('.companion-body')).toHaveAttribute('data-animation-intent', 'static')
   await expect(page.locator('.sprite-atlas')).toHaveCount(0)
   await expect(page.getByRole('dialog')).toHaveCount(0)
+  await visitRoomZone(page, '相处与成长')
   await page.getByTestId('mood-details').locator('summary').click()
   await expect(page.getByTestId('mood-value-loneliness')).toBeVisible()
   await expect(page.getByTestId('mood-value-loneliness')).toHaveText('90')

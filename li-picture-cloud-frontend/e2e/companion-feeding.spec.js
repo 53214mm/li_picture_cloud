@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { visitRoomZone } from './helpers/habitat-navigation.js'
 import { FEED_RECOVERY_KEY } from '../src/presentation/companionFeeding.js'
 
 const member = { id: '42', userName: '照片桌测试', userRole: 'user' }
@@ -60,6 +61,7 @@ test('keyboard selection and confirmation send once, show the real receipt, and 
   await page.screenshot({ path: testInfo.outputPath('feeding-receipt-desktop.png') })
   await card(page).getByRole('button', { name: '查看成长档案' }).click()
   await expect(page.locator('#growth-title')).toBeFocused()
+  await visitRoomZone(page, '照片桌')
   await card(page).getByRole('button', { name: '再选一张' }).click()
   await expect(page.locator('#picture-picker-title')).toBeFocused()
   await expect(card(page)).toHaveAttribute('data-phase', 'empty')

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { visitRoomZone, openDisclosure } from './helpers/habitat-navigation.js'
 
 // 同一个后端进程内的串行故事线：测试 1 完成唤醒与喂养，
 // 测试 2 操作测试 1 留下的记忆候选，测试 3 开启契约并验证提案闭环。
@@ -19,14 +20,17 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByText('实际来源会逐条写入成长档案')).toBeVisible()
   await expect(page.getByText('未读取图片内容，也未调用视觉模型')).toBeVisible()
   await page.getByRole('button', { name: '唤醒我的伙伴' }).click()
+  await visitRoomZone(page, '相处与成长')
   await expect(page.getByTestId('growth-stage')).toBeVisible()
   // 已唤醒但尚未喂养：主页返回服务端中性情绪视图（五轴为 0），关系面板保持空状态。
-  await page.getByTestId('mood-details').locator('summary').click()
+  await visitRoomZone(page, '相处与成长')
+  await openDisclosure(page, 'mood-details')
   await expect(page.getByTestId('mood-value-energy')).toBeVisible()
   await expect(page.getByTestId('mood-value-energy')).toHaveText('0')
   await expect(page.getByTestId('relationship-label')).toHaveText('暂无记录')
   await expect(page.getByTestId('relationship-details')).toHaveCount(0)
 
+  await visitRoomZone(page, '照片桌')
   await page.getByRole('button', { name: /旅行样片/ }).click()
   const keys = []
   let loseFirstResponse = true
@@ -54,6 +58,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByText('这次喂养已安全完成，没有重复成长。')).toBeVisible()
   expect(keys).toHaveLength(2)
   expect(keys[1]).toBe(keys[0])
+  await visitRoomZone(page, '相处与成长')
   await expect(page.getByText('42 / 100 生命经验')).toBeVisible()
   await expect(page.getByText('+42 生命经验')).toBeVisible()
   // 喂养故事与记忆保留"伙伴说"气泡；情绪由统一表现协议展示。
@@ -68,12 +73,14 @@ test('awakens a companion and recovers one private-picture feed without double g
     .toContainText('演示营养（未读取图片内容）')
   await expect(page.getByText('未进行内容理解').first()).toBeVisible()
   // Demo 喂养产生一条待确认记忆候选，情绪与关系面板也随喂养出现。
+  await visitRoomZone(page, '留影手记')
   await expect(page.getByTestId('memory-status').first()).toHaveText('待确认')
   await expect(page.getByText('伙伴记得一张让它练习了观察与叙事的演示图片，它把这次练习记进了档案。')).toBeVisible()
   // 无需 reload：喂养成功后页面自动重取权威主页，情绪与关系面板立即出现最新值。
   // Demo 档每次喂养五轴 +2；首次完整喂养关系为 熟悉 +5 / 信任 +2 / 亲密 +1 / 默契 +1 / 近期反馈 +5。
-  await page.getByTestId('mood-details').locator('summary').click()
-  await page.getByTestId('relationship-details').locator('summary').click()
+  await visitRoomZone(page, '相处与成长')
+  await openDisclosure(page, 'mood-details')
+  await openDisclosure(page, 'relationship-details')
   await expect(page.getByTestId('mood-value-energy')).toBeVisible()
   await expect(page.getByTestId('relationship-value-familiarity')).toBeVisible()
   await expect(page.getByTestId('mood-value-energy')).toHaveText('2')
@@ -85,6 +92,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByTestId('relationship-value-tacit')).toHaveText('1')
   await expect(page.getByTestId('relationship-value-recentFeedback')).toHaveText('5')
   // 站内对话与主动提案面板：Demo 档聊天不调模型，契约默认关闭所以没有主动提案。
+  await visitRoomZone(page, '窗边对话')
   await expect(page.getByRole('heading', { name: '和绫页聊聊' })).toBeVisible()
   await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。')).toBeVisible()
   // Demo 档对话：发送一条消息收到确定性回复，用户气泡与伙伴气泡都在。
@@ -104,6 +112,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await page.reload()
   // 先等主页稳定锚点再断言成长数据，避免 reload 渲染竞态。
   await expect(page.getByText('实际来源会逐条写入成长档案')).toBeVisible()
+  await visitRoomZone(page, '相处与成长')
   await expect(page.getByText('42 / 100 生命经验')).toBeVisible()
   await expect(page.getByText('+42 生命经验')).toBeVisible()
   await expect(page.getByTestId('skill-IMAGE_OBSERVATION')).toContainText('18 / 100')
@@ -111,6 +120,7 @@ test('awakens a companion and recovers one private-picture feed without double g
     .toHaveAttribute('href', '/picture/102')
   await expect(page.getByTestId('growth-nutrition-label').first())
     .toContainText('演示营养（未读取图片内容）')
+  await visitRoomZone(page, '照片桌')
   await expect(page.getByText('未读取图片内容，也未调用视觉模型')).toBeVisible()
 
   const sourceResponse = await page.request.get('/api/picture/get/vo?id=102')
@@ -159,7 +169,9 @@ test('awakens a companion and recovers one private-picture feed without double g
   })
 
   await page.reload()
+  await visitRoomZone(page, '相处与成长')
   const labels = page.getByTestId('growth-nutrition-label')
+  await visitRoomZone(page, '相处与成长')
   await expect(labels.nth(0)).toHaveText('Qwen 视觉营养 · 已分析图片内容')
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
   await expect(page.getByText('来源 dashscope / qwen3.6-flash')).toBeVisible()
@@ -172,6 +184,7 @@ test('awakens a companion and recovers one private-picture feed without double g
 
   await page.reload()
   await expect(page.getByText('实际来源会逐条写入成长档案')).toBeVisible()
+  await visitRoomZone(page, '相处与成长')
   await expect(labels.nth(0)).toHaveText('Qwen 视觉营养 · 已分析图片内容')
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
 })
@@ -218,15 +231,18 @@ test('real quick chat shares one send and persisted history with the full Home v
   await login(page)
   const errors = []
   const calls = []
+  const observationStatusMethods = []
   page.on('pageerror', error => errors.push(error.message))
   page.on('request', request => {
     const path = new URL(request.url()).pathname
     if (path.startsWith('/api/companion/')) calls.push(path)
+    if (path === '/api/companion/observation/status') observationStatusMethods.push(request.method())
   })
   await page.goto('/gallery')
   const entry = page.locator('.sidebar').getByRole('button', { name: '和绫页互动' })
   await expect(entry).toBeVisible()
-  expect(calls).toEqual([])
+  expect(calls.filter(path => path !== '/api/companion/observation/status')).toEqual([])
+  expect(observationStatusMethods.every(method => method === 'GET')).toBe(true)
   await entry.click()
   const drawer = page.getByRole('dialog', { name: '和绫页互动' })
   const input = drawer.getByLabel('对伙伴说的话')
@@ -271,6 +287,7 @@ test('memory lifecycle supports confirm correct ignore and delete', async ({ pag
   await page.goto('/companion')
   await expect(page).toHaveURL(/\/companion$/)
 
+  await visitRoomZone(page, '留影手记')
   // 测试 1 留下了一条待确认记忆候选。
   const status = page.getByTestId('memory-status').first()
   await expect(status).toHaveText('待确认')

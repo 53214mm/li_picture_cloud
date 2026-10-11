@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { visitRoomZone } from './helpers/habitat-navigation.js'
 
 // 玩法配方工坊纵向切片（阶段 5 复审整改后）：
 // 1) 官方模板与编辑器按"能力可用性"守门：未开放能力（表情草稿、多图融合）在前后端都被拒绝；
@@ -168,12 +169,17 @@ test('a real WHEN opportunity produces a pending confirmation the user confirms'
   const awaken = page.getByRole('button', { name: '唤醒我的伙伴' })
   if (await awaken.isVisible()) {
     await awaken.click()
+    await visitRoomZone(page, '相处与成长')
     await expect(page.getByTestId('growth-stage')).toBeVisible()
   }
+  await visitRoomZone(page, '照片桌')
   await page.getByRole('button', { name: /旅行样片/ }).click()
   await page.getByRole('button', { name: '喂给伙伴' }).click()
   // 一次完整喂养后伙伴获得生命经验（E2E 走演示营养档，不读取图片内容、不调用视觉模型）。
+  await visitRoomZone(page, '相处与成长')
   await expect(page.getByText(/\+\d+ 生命经验/).first()).toBeVisible()
+  await visitRoomZone(page, '窗边对话')
+
 
   await page.getByRole('button', { name: '主动设置' }).click()
   await page.getByRole('checkbox', { name: /允许伙伴主动提议/ }).check()

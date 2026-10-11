@@ -33,7 +33,7 @@ async function fixture(page, overrides = {}) {
 test('R12 avatar opens chat in place, lazy reads only, and retains a draft across close/reopen', async ({ page }) => {
   const state = await fixture(page)
   await page.goto('/gallery')
-  expect(state.calls.some(call => call.path.startsWith('/api/companion/'))).toBe(false)
+  expect(state.calls.filter(call => call.path.startsWith('/api/companion/')).every(call => call.path === '/api/companion/observation/status' && call.method === 'GET')).toBe(true)
   await shell(page).click()
   const input = dialog(page).getByLabel('对伙伴说的话')
   await expect(input).toBeEnabled()
@@ -45,7 +45,7 @@ test('R12 avatar opens chat in place, lazy reads only, and retains a draft acros
   await expect(input).toBeEnabled()
   await expect(input).toHaveValue('还没发送的草稿')
   expect(state.calls.filter(isBusinessWrite)).toEqual([])
-  expect(state.calls.filter(call => call.path.startsWith('/api/companion/')).every(call => ['/api/companion/me', '/api/companion/chat/history'].includes(call.path))).toBe(true)
+  expect(state.calls.filter(call => call.path.startsWith('/api/companion/')).every(call => ['/api/companion/me', '/api/companion/chat/history', '/api/companion/observation/status'].includes(call.path) && call.method === 'GET')).toBe(true)
   expect(state.errors).toEqual([])
 })
 
