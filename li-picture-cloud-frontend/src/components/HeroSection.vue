@@ -28,7 +28,7 @@
       </div>
     </div>
 
-    <div class="landing-canvas" aria-label="图片与伙伴栖居位概念示意">
+    <div class="landing-canvas" aria-label="图片与伙伴绫页">
       <figure class="landing-canvas__photo landing-canvas__photo--main">
         <img
           src="/images/mosaic/nature.jpg"
@@ -44,20 +44,22 @@
       <figure class="landing-canvas__photo landing-canvas__photo--city">
         <img src="/images/mosaic/city.jpg" alt="城市建筑，本地展示图片" width="800" height="600">
       </figure>
-      <div class="landing-habitat">
-        <span class="landing-habitat__shape" aria-hidden="true"></span>
-        <span class="landing-habitat__ground" aria-hidden="true"></span>
-        <strong>伙伴的位置</strong>
-        <span>概念示意 · 非正式角色</span>
-      </div>
+      <router-link to="/companion" class="landing-habitat">
+        <img class="landing-habitat__portrait" :src="lingyeAssets.home.src" alt="绫页，住在图库里的伙伴"
+             :width="lingyeAssets.home.width" :height="lingyeAssets.home.height" decoding="async">
+        <strong>绫页</strong>
+        <span>住在图库里的伙伴 · 喂她图片，或者找她聊聊</span>
+      </router-link>
     </div>
     <p class="landing-canvas__caption">
-      图片与栖居位的关系示意 · 本地展示图片，不代表用户空间或伙伴喜好
+      展示图片为本地示例，不代表你的空间
     </p>
   </section>
 </template>
 
 <script setup>
+import { lingyeAssets } from '@/components/companion/body/lingyeAssets'
+
 defineProps({
   presentation: {
     type: Object,
@@ -171,22 +173,18 @@ h1 {
   text-align: center;
 }
 
-.landing-habitat__shape {
-  width: 70px;
-  height: 88px;
-  border: 2px solid var(--lp-accent);
-  border-radius: 52% 48% 43% 57% / 42% 45% 55% 58%;
-  background: var(--lp-accent-soft);
+.landing-habitat { color: inherit; text-decoration: none; transition: border-color .2s; }
+.landing-habitat:hover { border-color: var(--lp-accent); }
+
+.landing-habitat__portrait {
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+  max-height: 72%;
+  object-fit: contain;
 }
 
-.landing-habitat__ground {
-  width: min(100%, 110px);
-  height: 1px;
-  margin-top: var(--lp-space-5);
-  background: var(--lp-border-strong);
-}
-
-.landing-habitat strong { margin-top: var(--lp-space-5); font-size: 1rem; }
+.landing-habitat strong { margin-top: var(--lp-space-4); font-size: 1rem; }
 
 .landing-habitat > span:last-child {
   margin-top: var(--lp-space-1);
@@ -221,8 +219,8 @@ h1 {
   .landing-canvas__photo--main { grid-column: 1 / 3; grid-row: 1; }
   .landing-canvas__photo--city { display: none; }
   .landing-habitat { grid-column: 2; grid-row: 2; padding: var(--lp-space-4); }
-  .landing-habitat__shape { width: 48px; height: 60px; }
-  .landing-habitat__ground, .landing-habitat strong { margin-top: var(--lp-space-3); }
+  .landing-habitat__portrait { max-width: 96px; }
+  .landing-habitat strong { margin-top: var(--lp-space-3); }
 }
 
 @media (max-width: 480px) {

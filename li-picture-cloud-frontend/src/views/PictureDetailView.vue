@@ -96,6 +96,7 @@
                 {{ collaborationButtonText }}
               </button>
               <button class="btn btn-outline" @click="handleDownload">下载图片</button>
+              <AddToSpaceButton v-if="userStore.isLoggedIn" :key="picture.id" :picture="picture" />
               <template v-if="canEdit">
                 <button class="btn btn-outline" @click="openEditModal">编辑信息</button>
                 <button class="btn btn-danger" @click="handleDelete">删除图片</button>
@@ -196,6 +197,7 @@ import { useUserStore } from '@/stores/user'
 import { getPictureVOById, editPicture, deletePicture, reviewPicture, getPictureTagCategory, uploadPicture } from '@/api/picture'
 import { getMyPicturePermissions } from '@/api/spaceUser'
 import ShareModal from '@/components/ShareModal.vue'
+import AddToSpaceButton from '@/components/AddToSpaceButton.vue'
 import ImageEditModal from '@/components/ImageEditModal.vue'
 import { getSpaceVOById } from '@/api/space'
 import { SPACE_TYPE } from '@/constants/space'

@@ -4,6 +4,7 @@ import {
   buildSpaceCreatePayload,
   buildMySpaceQuery,
   collaborationMode,
+  copyTargets,
   groupMySpaces,
   hasPermission,
   normalizePermissions
@@ -78,4 +79,19 @@ test('chooses edit, view, or no collaboration mode', () => {
   assert.equal(collaborationMode(['collaboration:join'], true), 'view')
   assert.equal(collaborationMode(['collaboration:join'], false), null)
   assert.equal(collaborationMode([], true), null)
+})
+
+test('lists spaces a picture can be added to, skipping viewer-only teams and its current space', () => {
+  const groups = {
+    privateSpaces: [{ id: 1, spaceName: '我的空间' }],
+    ownedTeamSpaces: [{ id: 2, spaceName: '我建的团队' }],
+    joinedTeamSpaces: [
+      { id: 3, spaceName: '能编辑的团队', currentRole: SPACE_ROLE.EDITOR },
+      { id: 4, spaceName: '只能看的团队', currentRole: SPACE_ROLE.VIEWER }
+    ]
+  }
+  assert.deepEqual(copyTargets(groups, null).map((target) => target.id), [1, 2, 3])
+  assert.deepEqual(copyTargets(groups, '1').map((target) => target.id), [2, 3])
+  assert.equal(copyTargets(groups, 2)[0].kind, '私有空间')
+  assert.deepEqual(copyTargets(undefined, null), [])
 })

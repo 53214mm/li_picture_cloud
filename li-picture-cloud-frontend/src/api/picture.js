@@ -29,6 +29,11 @@ export function editPicture(data) {
   return request.post('/picture/edit', data)
 }
 
+/** 把一张能看到的图片添加到自己的空间（复用原图，计入空间额度） */
+export function copyPictureToSpace(pictureId, spaceId) {
+  return request.post('/picture/copy-to-space', { pictureId, spaceId })
+}
+
 /** 删除图片（仅本人或管理员） */
 export function deletePicture(id) {
   return request.post('/picture/delete', { id })

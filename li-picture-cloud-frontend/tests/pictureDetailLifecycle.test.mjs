@@ -69,7 +69,7 @@ async function compileFixture(overrides) {
   `)
   const aliases = {
     vue: import.meta.resolve('vue'), 'vue-router': import.meta.resolve('vue-router'),
-    '@/components/ShareModal.vue': stub, '@/components/ImageEditModal.vue': editorStub,
+    '@/components/ShareModal.vue': stub, '@/components/AddToSpaceButton.vue': stub, '@/components/ImageEditModal.vue': editorStub,
     '@/presentation/sitePresence': boundaryUrl, '@/config/features': boundaryUrl
   }
   const filename = new URL('../src/views/PictureDetailView.vue', import.meta.url)

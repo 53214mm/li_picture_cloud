@@ -108,6 +108,12 @@ public interface PictureService extends IService<Picture> {
     void deletePicture(long pictureId, User loginUser);
 
     /**
+     * 把一张自己能看到的图片添加到自己有上传权限的空间：新建一条图片记录，复用原图文件，
+     * 计入目标空间额度。同一空间里已有同一张图时拒绝。
+     */
+    PictureVO copyPictureToSpace(long pictureId, long spaceId, User loginUser);
+
+    /**
      * 编辑图片
      * @param pictureEditRequest
      * @param loginUser

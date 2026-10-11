@@ -39,6 +39,21 @@ export function groupMySpaces(ownedSpaces = [], memberships = [], currentUserId)
   }
 }
 
+/**
+ * 可以把图片添加进去的空间：自己的私有空间、自己的团队空间，以及自己是管理员或编辑者的团队空间。
+ * 图片当前所在的空间不算。
+ */
+export function copyTargets(groups, currentSpaceId) {
+  const writable = new Set([SPACE_ROLE.ADMIN, SPACE_ROLE.EDITOR])
+  const targets = [
+    ...(groups?.privateSpaces || []).map((space) => ({ id: space.id, name: space.spaceName, kind: '私有空间' })),
+    ...(groups?.ownedTeamSpaces || []).map((space) => ({ id: space.id, name: space.spaceName, kind: '团队空间' })),
+    ...(groups?.joinedTeamSpaces || []).filter((space) => writable.has(space.currentRole))
+      .map((space) => ({ id: space.id, name: space.spaceName, kind: '团队空间' }))
+  ]
+  return targets.filter((target) => currentSpaceId == null || String(target.id) !== String(currentSpaceId))
+}
+
 export function buildSpaceCreatePayload(form) {
   const name = form.spaceName?.trim()
   return {

@@ -549,6 +549,67 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
+    public PictureVO copyPictureToSpace(long pictureId, long spaceId, User loginUser) {
+        ThrowUtils.throwIf(pictureId <= 0 || spaceId <= 0, ErrorCode.PARAMS_ERROR);
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NO_AUTH_ERROR);
+        Picture source = this.getById(pictureId);
+        ThrowUtils.throwIf(source == null, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+        // 来源必须是自己能看到的：公共图库只认已过审的（上传者和管理员除外），空间图片要有查看权限。
+        if (source.getSpaceId() == null) {
+            boolean visible = Objects.equals(PictureReviewStatusEnum.PASS.getValue(), source.getReviewStatus())
+                    || loginUser.getId().equals(source.getUserId()) || userService.isAdmin(loginUser);
+            ThrowUtils.throwIf(!visible, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+        } else {
+            authorizationAccessService.checkSpaceForUser(
+                    SpaceUserPermissionConstant.PICTURE_VIEW, source.getSpaceId(), loginUser.getId());
+        }
+        ThrowUtils.throwIf(Long.valueOf(spaceId).equals(source.getSpaceId()), ErrorCode.PARAMS_ERROR,
+                "这张图已经在这个空间里了");
+        Space space = spaceService.getById(spaceId);
+        ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR, "空间不存在");
+        authorizationAccessService.checkSpaceForUser(
+                SpaceUserPermissionConstant.PICTURE_UPLOAD, spaceId, loginUser.getId());
+        boolean duplicated = this.lambdaQuery().eq(Picture::getSpaceId, spaceId)
+                .eq(Picture::getUrl, source.getUrl()).exists();
+        ThrowUtils.throwIf(duplicated, ErrorCode.OPERATION_ERROR, "这张图已经在这个空间里了");
+        long size = source.getPicSize() == null ? 0L : source.getPicSize();
+        ThrowUtils.throwIf(space.getTotalCount() + 1 > space.getMaxCount(), ErrorCode.OPERATION_ERROR, "空间条数不足");
+        ThrowUtils.throwIf(space.getTotalSize() + size > space.getMaxSize(), ErrorCode.OPERATION_ERROR, "空间大小不足");
+
+        Picture copy = new Picture();
+        // 复用同一份文件：删除图片只删记录、不删文件，所以两条记录互不影响。
+        copy.setUrl(source.getUrl());
+        copy.setThumbnailUrl(source.getThumbnailUrl());
+        copy.setOriginalUrl(source.getOriginalUrl());
+        copy.setName(source.getName());
+        copy.setIntroduction(source.getIntroduction());
+        copy.setCategory(source.getCategory());
+        copy.setTags(source.getTags());
+        copy.setPicSize(size);
+        copy.setPicWidth(source.getPicWidth());
+        copy.setPicHeight(source.getPicHeight());
+        copy.setPicScale(source.getPicScale());
+        copy.setPicFormat(source.getPicFormat());
+        copy.setUserId(loginUser.getId());
+        copy.setSpaceId(spaceId);
+        fillReviewParams(copy, loginUser);
+        transactionTemplate.execute(status -> {
+            ThrowUtils.throwIf(!this.save(copy), ErrorCode.OPERATION_ERROR, "添加失败");
+            // 条件更新：并发添加时不会把额度挤破。
+            boolean update = spaceService.lambdaUpdate()
+                    .eq(Space::getId, spaceId)
+                    .apply("totalCount + 1 <= maxCount")
+                    .apply("totalSize + {0} <= maxSize", size)
+                    .setSql("totalSize = totalSize + " + size)
+                    .setSql("totalCount = totalCount + 1")
+                    .update();
+            ThrowUtils.throwIf(!update, ErrorCode.OPERATION_ERROR, "空间额度不足");
+            return copy;
+        });
+        return PictureVO.objToVo(copy);
+    }
+
+    @Override
     public void editPicture(PictureEditRequest pictureEditRequest, User loginUser) {
         // 在此处将实体类和 DTO 进行转换
         Picture picture = new Picture();
