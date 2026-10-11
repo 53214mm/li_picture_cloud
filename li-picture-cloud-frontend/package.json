@@ -18,12 +18,12 @@
     "test:api:e2e": "node scripts/run-api-e2e.mjs"
   },
   "dependencies": {
-    "axios": "^1.7.2",
-    "dompurify": "^3.4.12",
+    "axios": "^1.20.0",
+    "dompurify": "^3.4.16",
     "echarts": "^6.1.0",
     "marked": "^18.0.6",
     "pinia": "^2.1.7",
-    "vue": "^3.4.21",
+    "vue": "^3.5.42",
     "vue-echarts": "^8.0.1",
     "vue-router": "^4.3.0"
   },
