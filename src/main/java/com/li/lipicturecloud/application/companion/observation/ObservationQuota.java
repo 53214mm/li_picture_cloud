@@ -17,12 +17,14 @@ public class ObservationQuota {
     private final JdbcTemplate db;
     private final TransactionTemplate tx;
     public ObservationQuota(JdbcTemplate db, PlatformTransactionManager manager) { this.db=db;tx=new TransactionTemplate(manager); }
-    public record Counts(int text,int vision,Instant nextAt) {}
+    public record Counts(int text,int vision,Instant nextAt,LocalDate usageDate) {
+        public Counts(int text,int vision,Instant nextAt) { this(text,vision,nextAt,null); }
+    }
     public Counts status(long owner,Instant now) {
         var rows=db.query("SELECT usageDate,textAttempts,visionAttempts,nextAt FROM companion_observation_usage WHERE subjectId=?",
             (rs,n)->new Counts(rs.getDate(1).toLocalDate().equals(day(now))?rs.getInt(2):0,
-                rs.getDate(1).toLocalDate().equals(day(now))?rs.getInt(3):0,instant(rs.getTimestamp(4))),owner);
-        return rows.isEmpty()?new Counts(0,0,null):rows.getFirst();
+                rs.getDate(1).toLocalDate().equals(day(now))?rs.getInt(3):0,instant(rs.getTimestamp(4)),day(now)),owner);
+        return rows.isEmpty()?new Counts(0,0,null,day(now)):rows.getFirst();
     }
     public boolean claim(long owner,String token,Instant now) {
         // Insert separately: a concurrent duplicate must not poison the locking transaction.

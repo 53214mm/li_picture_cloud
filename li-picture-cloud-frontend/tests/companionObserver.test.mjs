@@ -8,6 +8,7 @@ function fixture({ expiresAt } = {}) {
   open:async data=>{calls.open++;return {sessionId:`round-${calls.open}`,textRemaining:data.textLimit,visionRemaining:data.visionLimit,expiresAt}},
   prepare:async()=>{calls.prepare++;return {snapshotId:'snapshot',visualSkip:'VISION_OFF'}},
   observe:async data=>{calls.observe++;return callback?callback(data):{...data,parsed:{action:'SPEAK',text:'我有个小话题'},reason:null,textRemaining:5,visionRemaining:0,nextObservationSeconds:90}},close:async()=>{calls.close++}}
+ api.control=async (_id,data)=>({sequence:data.sequence,suspended:data.suspended,busy:false,textRemaining:500,visionRemaining:0,expiresAt});
  const observer=createCompanionObserver({api,now:()=>now,setTimer:(fn,delay)=>{const id=++number;timers.set(id,{fn,at:now+delay});return id},clearTimer:id=>timers.delete(id),collect:()=>({page:'COMPANION',pictureIds:[],rects:[]})})
  async function advance(ms){now+=ms;for(const [id,timer] of [...timers])if(timer.at<=now){timers.delete(id);timer.fn()}for(let i=0;i<15;i++)await Promise.resolve()}
  return {observer,api,calls,advance,respond:fn=>{callback=fn}}
@@ -40,9 +41,9 @@ test('last authorized SPEAK remains visible after budget exhaustion and clears w
  const f=fixture();f.respond(data=>({...data,parsed:{action:'SPEAK',text:'last accepted'},modelDispatched:true,textRemaining:0,visionRemaining:0,daily:{text:7,vision:0},nextObservationSeconds:90}));f.observer.setOwner(1);await f.observer.start({textLimit:1,visionLimit:0,intensity:'NORMAL',auto:true});await f.advance(90000)
  assert.equal(f.observer.state().enabled,false);assert.equal(f.observer.state().presentation.text,'last accepted');assert.equal(f.observer.state().status.counts.text,7);f.observer.suppress(true);assert.equal(f.observer.state().presentation,null)
 })
-test('opening interrupted by chat is fully revoked and never leaves a stuck opening phase',async()=>{
- let resolve;let reads=0;const api={status:()=>++reads===1?new Promise(done=>{resolve=done}):Promise.resolve({enabled:true,textReceiver:{token:'fixture'}}),open:()=>assert.fail('must not open'),close:async()=>true}
- const observer=createCompanionObserver({api});observer.setOwner(1);const pending=observer.start({textLimit:6,visionLimit:0,intensity:'NORMAL',auto:true});observer.suppress(true);resolve({enabled:true,textReceiver:{token:'fixture'}});await pending;assert.notEqual(observer.state().phase,'opening');assert.equal(observer.state().enabled,false)
+test('temporary chat during explicit opening adopts the same-owner grant already suspended without observing',async()=>{
+ let resolve,opens=0;const api={status:()=>new Promise(done=>{resolve=done}),open:async()=>{opens++;return{sessionId:'late-grant',textRemaining:6,visionRemaining:0}},control:async (_id,data)=>({sequence:data.sequence,suspended:data.suspended,busy:false,textRemaining:6,visionRemaining:0}),close:async()=>true}
+ const observer=createCompanionObserver({api});observer.setOwner(1);const pending=observer.start({textLimit:6,visionLimit:0,intensity:'NORMAL',auto:true});observer.suppress(true);resolve({enabled:true,textReceiver:{token:'fixture'}});await pending;for(let i=0;i<20;i++)await Promise.resolve();assert.notEqual(observer.state().phase,'opening');assert.equal(observer.state().enabled,true);assert.equal(observer.state().suppressed,true);assert.equal(opens,1);observer.dispose()
 })
 test('visible object changes without mutation discard the attempt while keeping authorization',async()=>{
  for(const boundary of ['prepare','observe']){

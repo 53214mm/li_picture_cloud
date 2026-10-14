@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { freezeClock } from './helpers/clock.js'
+import { readFile } from 'node:fs/promises'
 
 const photo = { id: '11', userId: '42', name: '观察测试图片', url: '/favicon.svg', updateTime: '2026-10-09T00:00:00Z' }
 const ok = (route, data) => route.fulfill({ json: { code: 0, data } })
@@ -21,6 +22,7 @@ async function fixture(page) {
       expect(sent.textReceiverToken).toBe('text-fixture-v1'); expect(sent.visionLimit).toBe(0)
       return ok(route, { sessionId: 'observation-fixture', textRemaining: sent.textLimit, visionRemaining: 0, expiresAt: '2026-01-02T01:00:00Z' })
     }
+    if (path.endsWith('/control')) return ok(route, { ...request.postDataJSON(), busy: false, textRemaining: 5, visionRemaining: 0, expiresAt: '2026-01-02T01:00:00Z', daily: { text: 1, vision: 0, usageDate: '2026-01-01' } })
     if (path.startsWith('/api/companion/observation/session/')) return ok(route, true)
     if (path === '/api/companion/observation/prepare') return ok(route, { snapshotId: 'snapshot-fixture', preview: null, visualSkip: 'VISION_OFF' })
     if (path === '/api/companion/observation/observe') {
@@ -51,6 +53,64 @@ async function openDetail(page) {
   await expect(page.getByRole('link', { name: '查看图片：观察测试图片' })).toHaveCount(0)
 }
 
+test('authorized synthetic PNG is previewed and confirmed by actual browser pixel digest before observation', async ({ page }) => {
+  await freezeClock(page); const state = await fixture(page)
+  const png = 'data:image/png;base64,' + (await readFile(new URL('./fixtures/authorized-region.png', import.meta.url))).toString('base64')
+  const expected = JSON.parse(await readFile(new URL('./fixtures/authorized-region.json', import.meta.url), 'utf8'))
+  let previews = 0, grants = 0, paidObservations = 0
+  await page.route('**/api/companion/observation/status', route => ok(route, { enabled: true, realVisualReady: true, textReceiver: { provider: 'TEXT_FIXTURE', token: 'text-fixture-v1' }, visionReceiver: { provider: 'VISION_FIXTURE', token: 'vision-fixture-v1' }, counts: { text: 0, vision: 0, usageDate: '2026-01-01' } }))
+  await page.route('**/api/companion/observation/preview', route => { previews++; expect(route.request().postDataJSON().rects).toHaveLength(1); return ok(route, { preview: png }) })
+  await page.route('**/api/companion/observation/session', route => {
+    grants++
+    const input = route.request().postDataJSON(); expect(input.visionLimit).toBe(1); expect(input.visionReceiverToken).toBe('vision-fixture-v1')
+    return ok(route, { sessionId: 'pixel-fixture', textRemaining: 6, visionRemaining: 1, expiresAt: '2026-01-02T01:00:00Z' })
+  })
+  await page.route('**/api/companion/observation/prepare', route => { expect(route.request().postDataJSON().page.rects).toHaveLength(1); return ok(route, { snapshotId: 'pixel-snapshot', preview: png }) })
+  await page.route('**/api/companion/observation/observe', route => {
+    paidObservations++; const input = route.request().postDataJSON(); expect(input.capturePixelDigest).toBe(expected.pixelDigest)
+    return ok(route, { ...input, modelDispatched: true, visionDispatched: true, textRemaining: 5, visionRemaining: 0, parsed: { action: 'SPEAK', text: '合成红蓝图片的假服务回执' } })
+  })
+  await page.goto('/gallery'); await widget(page).locator(':scope > summary').click()
+  await widget(page).getByRole('checkbox').check(); await widget(page).getByLabel('本轮视觉次数（1–100）', { exact: true }).fill('1')
+  await widget(page).getByRole('button', { name: '仅预览真实观察区域（无模型调用）', exact: true }).click()
+  const image = widget(page).getByTestId('real-observation-region').getByRole('img')
+  await expect(image).toBeVisible()
+  expect(await image.evaluate(img => [img.naturalWidth, img.naturalHeight])).toEqual([640, 360])
+  expect(previews).toBe(1); expect(grants).toBe(0); expect(paidObservations).toBe(0); expect(observationWrites(state)).toHaveLength(0)
+  await widget(page).getByRole('button', { name: '明确授权开启本轮自动观察', exact: true }).click()
+  await expect(widget(page).locator(':scope > summary')).toContainText('已开启')
+  await page.clock.fastForward(89999); expect(paidObservations).toBe(0)
+  await page.clock.fastForward(1); await expect.poll(() => paidObservations).toBe(1)
+  await expect(widget(page).getByTestId('observation-speech-body')).toContainText('合成红蓝图片的假服务回执')
+  await page.clock.fastForward(900000); expect(paidObservations).toBe(1); expect(grants).toBe(1)
+})
+
+test('missing visual receiver explains the disabled visual checkbox without any model write', async ({ page }) => {
+  await freezeClock(page); const state = await fixture(page); await page.goto('/gallery')
+  await widget(page).locator(':scope > summary').click()
+  await expect(widget(page).getByRole('checkbox')).toBeDisabled()
+  await expect(widget(page).getByTestId('observer-visual-reasons')).toContainText('文本聊天连接不会自动提供视觉能力')
+  await expect(widget(page).getByRole('link', { name: '前往模型设置配置视觉代理 →' })).toHaveAttribute('href', '/model-gateway')
+  expect(observationWrites(state)).toHaveLength(0)
+})
+
+test('retained unsent chat draft does not trap observation after leaving the companion page', async ({ page }) => {
+  await freezeClock(page); const state = await fixture(page); await page.goto('/gallery'); await enable(page)
+  await page.locator('.sidebar').getByRole('button', { name: '和绫页互动' }).click()
+  const dialog = page.getByRole('dialog', { name: '和绫页互动' })
+  await dialog.getByLabel('对伙伴说的话').fill('不发送的合成草稿')
+  await dialog.getByRole('button', { name: /打开完整对话/ }).click()
+  await expect(page).toHaveURL(/\/companion$/)
+  await expect(page.locator('#companion-chat-input')).toHaveValue('不发送的合成草稿')
+  await expect(widget(page).locator(':scope > summary')).toContainText('暂时让出观察')
+  await page.locator('.sidebar').getByRole('link', { name: '图库', exact: true }).click()
+  await expect(page).toHaveURL(/\/gallery$/); await expect(widget(page).locator(':scope > summary')).toContainText('已开启')
+  await page.clock.fastForward(89999); expect(observes(state)).toHaveLength(0)
+  await page.clock.fastForward(1); await expect.poll(() => observes(state).length).toBe(1)
+  expect(state.calls.filter(call => call.path.includes('/chat/') && call.method === 'POST')).toHaveLength(0)
+  expect(state.calls.filter(call => call.path.endsWith('/observation/session') && call.method === 'POST')).toHaveLength(1)
+})
+
 test('independent observation defaults off across gallery and actual detail navigation', async ({ page }) => {
   await freezeClock(page); const state = await fixture(page); await page.goto('/gallery')
   await expect(widget(page)).toBeVisible(); await openDetail(page); await page.clock.fastForward(90000)
@@ -73,6 +133,29 @@ test('explicit observation uses one snapshot on cadence; clicks do not dispatch 
   await expect(page.getByRole('dialog', { name: '和绫页互动' })).toBeVisible()
   expect(state.calls.filter(call => call.path.includes('/chat/') && call.method === 'POST')).toEqual([])
   expect(state.calls.filter(call => call.path.includes('/presence/') && call.method !== 'GET')).toEqual([])
+  await expect(page.getByRole('dialog', { name: '和绫页互动' }).getByRole('status')).toContainText('原授权和余额保留')
+  await expect.poll(() => state.calls.filter(call => call.path.endsWith('/control')).map(call => call.body)).toEqual([{ sequence: 1, suspended: true }])
+  await page.getByRole('dialog', { name: '和绫页互动' }).getByRole('button', { name: '关闭菜单', exact: true }).click()
+  await expect(widget(page).locator(':scope > summary')).toContainText('已开启')
+  await page.clock.fastForward(89999); expect(observes(state)).toHaveLength(1)
+  await page.clock.fastForward(1); await expect.poll(() => observes(state).length).toBe(2)
+  expect(state.calls.filter(call => call.path.endsWith('/observation/session') && call.method === 'POST')).toHaveLength(1)
+  expect(state.calls.filter(call => call.path.includes('/observation/session/') && call.method === 'DELETE')).toHaveLength(0)
+})
+
+test('hidden-tab boundary retains grant and resumes on a fresh cadence with no background prepare', async ({ page }) => {
+  await freezeClock(page); const state = await fixture(page); await page.goto('/gallery'); await enable(page)
+  // Browser visibility is an external boundary; dispatch its actual DOM event without touching app state.
+  await page.evaluate(() => { Object.defineProperty(globalThis.document, 'hidden', { configurable: true, value: true }); globalThis.document.dispatchEvent(new Event('visibilitychange')) })
+  await expect(widget(page).locator(':scope > summary')).toContainText('暂时让出观察')
+  await page.clock.fastForward(900000)
+  expect(state.calls.filter(call => call.path.endsWith('/observation/prepare'))).toHaveLength(0)
+  await page.evaluate(() => { Object.defineProperty(globalThis.document, 'hidden', { configurable: true, value: false }); globalThis.document.dispatchEvent(new Event('visibilitychange')) })
+  await expect(widget(page).locator(':scope > summary')).toContainText('已开启')
+  await page.clock.fastForward(89999); expect(observes(state)).toHaveLength(0)
+  await page.clock.fastForward(1); await expect.poll(() => observes(state).length).toBe(1)
+  expect(state.calls.filter(call => call.path.endsWith('/observation/session') && call.method === 'POST')).toHaveLength(1)
+  expect(state.calls.filter(call => call.method === 'DELETE')).toHaveLength(0)
 })
 
 test('manual pause prevents detail and timer dispatch while keeping the page readable', async ({ page }) => {

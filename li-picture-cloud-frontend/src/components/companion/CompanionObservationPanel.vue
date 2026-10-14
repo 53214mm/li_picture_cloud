@@ -1,6 +1,6 @@
 <template>
   <details class="observer" :class="{ floating: compact }" :open="!compact" data-testid="companion-observation" @toggle="$emit('expanded', $event.target.open)">
-    <summary>绫页 · 独立观察 <span>{{ state?.enabled ? state.page === 'UNKNOWN' || state.held ? '授权保留 · 本页暂不观察' : '已开启' : '默认关闭 / 已暂停' }}</span></summary>
+    <summary>绫页 · 独立观察 <span>{{ state?.enabled ? state.suppressed ? '授权保留 · 暂时让出观察' : state.page === 'UNKNOWN' || state.held ? '授权保留 · 本页暂不观察' : '已开启' : '默认关闭 / 已暂停' }}</span></summary>
     <div class="observer-body" v-if="state">
       <CompanionObservationSpeech @reply="$emit('reply')" />
       <p>操作只更新素材。明确开启后，前台约每 90 秒观察一次，可自己开启话题，也可沉默或做表情；沉默时退避至最多 600 秒。普通聊天优先。</p>
@@ -15,7 +15,7 @@
         <div v-if="visualBlocks.length" :id="visualReasonId" class="disabled-notice" data-testid="observer-visual-reasons"><p v-for="notice in visualBlocks" :key="notice">{{ notice }}</p><router-link v-if="state.status && !state.status.visionReceiver" to="/model-gateway">前往模型设置配置视觉代理 →</router-link></div>
         <label v-if="vision">本轮视觉次数（1–100）<input type="number" min="1" max="100" v-model.number="visionLimit" :disabled="state.enabled" /></label>
       </div>
-      <p>本轮预计 {{ duration }}，按 90–600 秒计算；站内切页只更新素材，不支持页面暂不观察，返回后按原间隔继续。主动暂停、普通聊天、窗口隐藏、额度耗尽或 24 小时授权到期会结束本轮。6/2 只是建议，没有开启或收费。</p>
+      <p>本轮预计 {{ duration }}，按 90–600 秒计算；普通聊天、窗口隐藏或不支持的页面暂不观察，返回后在原授权有效且有余额时按节奏继续，不补发旧结果。手动结束、注销、换号、额度耗尽或 24 小时授权到期会结束本轮。已经派发的请求可能继续计费，暂停不会退款。6/2 只是建议，没有开启或收费。</p>
       <p>服务端独立日硬限：文本 {{ state.status?.textDayMax ?? 1000 }} / 视觉 {{ state.status?.visionDayMax ?? 200 }}；当前已用 {{ state.status?.counts?.text ?? '待读取' }} / {{ state.status?.counts?.vision ?? '待读取' }}（UTC）。原手动试演 100 次不授权自动观察。</p>
       <p v-if="vision">观察区域截图包含最多 6 张当前可见、已授权图片的完整原图及标题/分类/标签，重新排版，不是原网页或桌面截图。不会采集页面表单、账号、支付区域、头像或其他 DOM 文字。图片自身文字也会发送，请只授权愿意发送的图片；过滤标签中的已知 Key 不等于对图片文字自动脱敏。仅支持本站 COS 的 JPEG/PNG 原图，原图不超过 2 MiB / 20 MP；WebP 展示图可使用同一图片的 JPEG/PNG 原图，WebP-only、跨域未知来源、读取失败及未知/敏感页面会明确跳过视觉，仍可文本观察。描述最多缓存 180 秒，不写长期记忆。</p>
       <div class="buttons">
@@ -27,7 +27,7 @@
       <p v-if="startBlock" :id="startReasonId" class="disabled-notice" data-testid="observer-start-reason">{{ startBlock }}</p>
       <p v-if="error" role="alert">{{ error }}</p>
       <p role="status">{{ activity }} · 本轮文本剩余 {{ state.textRemaining }} / 视觉剩余 {{ state.visionRemaining }}<span v-if="state.reason"> · {{ state.reason }}</span></p>
-      <p v-if="state.visualSkip">视觉未发送：{{ state.visualSkip }}</p>
+      <p v-if="state.visualSkip">视觉状态：{{ state.visualSkip }}</p>
       <figure v-if="state.preview" data-testid="real-observation-region"><img class="preview" :src="state.preview" alt="独立观察区域：已授权图片真实像素及允许标签，非原页面截图" /><figcaption>真实素材观察区域 · 完整图片重新排版，非网页/桌面截图</figcaption></figure>
       <p v-if="state.presentation?.action === 'EMOTE'" class="emote-state">模型表情：{{ state.presentation.emote }}</p>
       <details><summary>本账号观察记录 {{ state.records.length }} / 50</summary>

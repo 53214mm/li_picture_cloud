@@ -28,6 +28,7 @@ class ObservationQuotaTest {
         quota.release(1,"a",at.plusSeconds(48),at.plusSeconds(48));
         assertThat(quota.claim(1,"c",at.plusSeconds(49))).isFalse();
         assertThat(quota.status(1,at.plusSeconds(49)).text()).isZero();
+        assertThat(quota.status(1,at.plusSeconds(49)).usageDate()).isEqualTo(java.time.LocalDate.parse("2026-10-12"));
     }
     @Test void separateCountsPersistAndReopenDoesNotRefundDispatchedCalls() {
         var at=Instant.parse("2026-10-11T12:00:00Z");
@@ -36,8 +37,10 @@ class ObservationQuotaTest {
         assertThat(quota.claim(1,"b",at.plusSeconds(89))).isFalse();
         assertThat(quota.claim(1,"b",at.plusSeconds(90))).isTrue();
         assertThat(quota.status(1,at).text()).isEqualTo(1);assertThat(quota.status(1,at).vision()).isEqualTo(1);
+        assertThat(quota.status(1,at).usageDate()).isEqualTo(java.time.LocalDate.parse("2026-10-11"));
         assertThat(quota.reserve(1,"wrong",false,at)).isFalse();
         assertThat(quota.status(2,at).text()).isZero();
+        assertThat(quota.status(2,at).usageDate()).isEqualTo(java.time.LocalDate.parse("2026-10-11"));
     }
     @Test void explicitBudgetRejectsInsteadOfClamping() {
         for(int limit:new int[]{0,501,1000}) assertThatThrownBy(()->new ObservationContracts.OpenInput(limit,0,"NORMAL",true)).isInstanceOf(IllegalArgumentException.class);

@@ -19,6 +19,7 @@ public class CompanionObservationController {
  @AuthCheck @PostMapping("/preview") public BaseResponse<?> preview(@RequestBody ObservationContracts.PageInput body,HttpServletRequest request){return ResultUtils.success(service.preview(owner(request),body));}
  @AuthCheck @PostMapping("/observe") public BaseResponse<?> observe(@RequestBody CompanionObservationService.ObserveInput body,HttpServletRequest request){return ResultUtils.success(service.observe(owner(request),body));}
  @AuthCheck @DeleteMapping("/session/{id}") public BaseResponse<?> close(@PathVariable String id,HttpServletRequest request){return ResultUtils.success(service.close(owner(request),id));}
+ @AuthCheck @PostMapping("/session/{id}/control") public BaseResponse<?> control(@PathVariable String id,@RequestBody CompanionObservationService.ControlInput body,HttpServletRequest request){return ResultUtils.success(service.control(owner(request),id,body));}
  @ExceptionHandler({IllegalArgumentException.class,org.springframework.http.converter.HttpMessageNotReadableException.class})
  public org.springframework.http.ResponseEntity<BaseResponse<?>> invalid(Exception error){
   // No echo of arbitrary request fields, Jackson diagnostics, or credential-bearing exceptions.

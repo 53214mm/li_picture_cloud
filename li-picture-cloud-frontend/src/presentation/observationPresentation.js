@@ -8,6 +8,8 @@ const failures = {
 }
 export function observationActivity(state) {
   if (!state) return '正在读取观察状态，尚未派发模型。'
+  if (state.enabled && state.suppressed) return '后台或普通聊天期间暂停观察，原授权和余额保留；返回后核对在途请求，再按节奏继续。'
+  if (state.reason === 'CONTROL_FAILED') return '暂时无法核对观察授权，本轮已安全停止；不会自动重新开启或重试模型。'
   if (state.enabled && state.page === 'UNKNOWN') return '本页暂不观察，原授权和余额保留；返回支持页面后按原间隔继续，不立即补发。'
   if (state.enabled && state.held) return '菜单、遮挡或页面未就绪时暂不观察；原授权保留，关闭后按原间隔继续。'
   if (state.phase === 'draining') return '正在结束旧素材的本次请求；旧正文不展示，本轮授权保留，不并发补发。'

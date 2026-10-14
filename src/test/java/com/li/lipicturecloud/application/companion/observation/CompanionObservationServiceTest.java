@@ -14,6 +14,89 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class CompanionObservationServiceTest {
+ @Test void finalRouteReadCannotReturnOldSpeechOrTraceAfterSuspensionAcknowledgementOrAba() {
+  for(boolean aba:List.of(false,true)){
+   var open=service.open(1,grant(2,0,"NORMAL",true));
+   var prepared=service.prepare(1,new CompanionObservationService.PrepareInput(open.sessionId(),new ObservationContracts.PageInput("COMPANION",List.of(),List.of())));
+   when(invoker.streamBounded(any(),anyList(),eq(160))).thenReturn(Flux.just("{\"action\":\"SPEAK\",\"emote\":null,\"text\":\"stale-final\"}"));
+   var changed=new java.util.concurrent.atomic.AtomicBoolean();
+   doAnswer(call->{when(language.inspectCurrentByok(1)).thenAnswer(route->{if(changed.compareAndSet(false,true)){service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(1,true));if(aba)service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(2,false));}return Optional.of(connection);});return null;}).when(quota).release(eq(1L),eq(open.sessionId()),any(),any());
+   var result=service.observe(1,new CompanionObservationService.ObserveInput(open.sessionId(),prepared.snapshotId(),1));
+   assertThat(result.parsed()).isNull();assertThat(result.trace()).isNull();assertThat(result.reason()).isEqualTo("OBSERVATION_SUSPENDED");assertThat(result.modelDispatched()).isTrue();assertThat(result.textRemaining()).isEqualTo(1);
+   when(language.inspectCurrentByok(1)).thenReturn(Optional.of(connection));
+  }
+ }
+ @Test void suspensionPreservesGrantAndRejectsOldSnapshotsAndDelayedControls() {
+  var open=service.open(1,grant(6,0,"NORMAL",true));
+  var prepared=service.prepare(1,new CompanionObservationService.PrepareInput(open.sessionId(),new ObservationContracts.PageInput("COMPANION",List.of(),List.of())));
+  var paused=service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(1,true));
+  assertThat(paused.suspended()).isTrue();assertThat(paused.textRemaining()).isEqualTo(6);
+  assertThatThrownBy(()->service.prepare(1,new CompanionObservationService.PrepareInput(open.sessionId(),new ObservationContracts.PageInput("COMPANION",List.of(),List.of())))).hasMessage("OBSERVATION_SUSPENDED");
+  var resumed=service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(2,false));
+  assertThat(resumed.suspended()).isFalse();assertThat(resumed.expiresAt()).isEqualTo(open.expiresAt());
+  assertThat(service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(1,true)).suspended()).isFalse();
+  assertThatThrownBy(()->service.observe(1,new CompanionObservationService.ObserveInput(open.sessionId(),prepared.snapshotId(),1))).hasMessage("SNAPSHOT_EXPIRED_OR_REPLAYED");
+  verifyNoInteractions(invoker,visual);verify(quota,never()).release(anyLong(),anyString(),any(),any());
+ }
+ @Test void pauseResumeAbaDuringPreparationCannotCommitOldMaterial() {
+  var open=service.open(1,grant(6,0,"NORMAL",true));
+  when(context.prepare(eq(1L),any(),any())).thenAnswer(call->{
+   service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(1,true));
+   service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(2,false));
+   return new ObservationContracts.Snapshot("COMPANION",List.of(),List.of(),List.of(),0,at);
+  });
+  assertThatThrownBy(()->service.prepare(1,new CompanionObservationService.PrepareInput(open.sessionId(),new ObservationContracts.PageInput("COMPANION",List.of(),List.of())))).hasMessage("OBSERVATION_SUSPENDED");
+  verifyNoInteractions(invoker,visual);
+ }
+ @Test void suspensionDuringDispatchCoverageStopsNewModelAndNeverRefundsReservation() {
+  var open=service.open(1,grant(2,0,"NORMAL",true));
+  var prepared=service.prepare(1,new CompanionObservationService.PrepareInput(open.sessionId(),new ObservationContracts.PageInput("COMPANION",List.of(),List.of())));
+  doAnswer(call->{var ack=service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(1,true));assertThat(ack.busy()).isTrue();return null;}).when(quota).coverDispatch(eq(1L),eq(open.sessionId()),any());
+  var result=service.observe(1,new CompanionObservationService.ObserveInput(open.sessionId(),prepared.snapshotId(),1));
+  assertThat(result.reason()).isEqualTo("OBSERVATION_SUSPENDED");assertThat(result.modelDispatched()).isFalse();assertThat(result.textRemaining()).isEqualTo(1);assertThat(result.trace()).isNull();
+  verifyNoInteractions(invoker,visual);assertThat(service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(2,false)).textRemaining()).isEqualTo(1);
+ }
+ @Test void alreadyCommittedTurnDrainsAfterPauseResumeButCannotShowOldSpeechOrTrace() {
+  var open=service.open(1,grant(2,0,"NORMAL",true));
+  var prepared=service.prepare(1,new CompanionObservationService.PrepareInput(open.sessionId(),new ObservationContracts.PageInput("COMPANION",List.of(),List.of())));
+  when(invoker.streamBounded(any(),anyList(),eq(160))).thenAnswer(call->{
+   assertThat(service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(1,true)).busy()).isTrue();
+   verify(quota,never()).release(anyLong(),anyString(),any(),any());
+   service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(2,false));
+   assertThatThrownBy(()->service.prepare(1,new CompanionObservationService.PrepareInput(open.sessionId(),new ObservationContracts.PageInput("COMPANION",List.of(),List.of())))).hasMessage("IN_FLIGHT");
+   return Flux.just("{\"action\":\"SPEAK\",\"emote\":null,\"text\":\"stale\"}");
+  });
+  var result=service.observe(1,new CompanionObservationService.ObserveInput(open.sessionId(),prepared.snapshotId(),1));
+  assertThat(result.modelDispatched()).isTrue();assertThat(result.reason()).isEqualTo("OBSERVATION_SUSPENDED");assertThat(result.trace()).isNull();assertThat(result.parsed()).isNull();assertThat(result.textRemaining()).isEqualTo(1);
+  assertThat(service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(3,false)).busy()).isFalse();
+  verify(quota,times(1)).release(anyLong(),anyString(),any(),any());
+ }
+ @Test void chatEpochInvalidatesOnlyTurnWhilePermissionLossRemainsTerminal() {
+  for(boolean resourcesValid:List.of(true,false)){
+   var open=service.open(1,grant(2,0,"NORMAL",true));
+   var prepared=service.prepare(1,new CompanionObservationService.PrepareInput(open.sessionId(),new ObservationContracts.PageInput("COMPANION",List.of(),List.of())));
+   when(invoker.streamBounded(any(),anyList(),eq(160))).thenAnswer(call->{when(context.current(eq(1L),any())).thenReturn(false);when(context.chatInvalidation(eq(1L),any())).thenReturn("CHAT_CHANGED");when(context.resourcesCurrent(eq(1L),any())).thenReturn(resourcesValid);return Flux.just("{\"action\":\"SPEAK\",\"emote\":null,\"text\":\"stale\"}");});
+   var result=service.observe(1,new CompanionObservationService.ObserveInput(open.sessionId(),prepared.snapshotId(),1));
+   assertThat(result.reason()).isEqualTo(resourcesValid?"CHAT_CHANGED":"REVOKED");assertThat(result.trace()).isNull();assertThat(result.parsed()).isNull();
+   when(context.current(eq(1L),any())).thenReturn(true);when(context.chatInvalidation(eq(1L),any())).thenReturn(null);
+  }
+ }
+ @Test void closedGrantAndOwnerMismatchCannotBeResumed() {
+  var open=service.open(1,grant(2,0,"NORMAL",true));
+  assertThatThrownBy(()->service.control(2,open.sessionId(),new CompanionObservationService.ControlInput(1,false))).hasMessage("SESSION_UNAVAILABLE");
+  service.close(1,open.sessionId());
+  assertThatThrownBy(()->service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(1,false))).hasMessage("SESSION_CLOSED_OR_EXPIRED");
+  verifyNoInteractions(invoker,visual);
+ }
+ @Test void suspendedGrantExpiresAtOriginalDeadlineAndControlCannotExtendOrReviveIt() {
+  final Instant[] now={at};Clock mutable=new Clock(){public ZoneId getZone(){return ZoneOffset.UTC;}public Clock withZone(ZoneId zone){return this;}public Instant instant(){return now[0];}};
+  service=new CompanionObservationService(language,vision,invoker,visual,context,quota,manual,usage,new ObjectMapper().findAndRegisterModules(),mutable,true,region);
+  var open=service.open(1,grant(2,0,"NORMAL",true));
+  var paused=service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(1,true));
+  assertThat(paused.expiresAt()).isEqualTo(open.expiresAt());now[0]=open.expiresAt();
+  assertThatThrownBy(()->service.control(1,open.sessionId(),new CompanionObservationService.ControlInput(2,false))).hasMessage("SESSION_CLOSED_OR_EXPIRED");
+  verifyNoInteractions(invoker,visual);verify(quota,never()).release(anyLong(),anyString(),any(),any());
+ }
  RealObservationRegion region=mock(RealObservationRegion.class);
  LanguageRouter language=mock(LanguageRouter.class);VisionRouter vision=mock(VisionRouter.class);
  LanguageModelInvoker invoker=mock(LanguageModelInvoker.class);ObservationContext context=mock(ObservationContext.class);

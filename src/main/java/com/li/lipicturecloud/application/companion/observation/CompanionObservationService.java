@@ -61,6 +61,30 @@ public class CompanionObservationService {
         return true; // Do not release a dispatch still draining or refund any attempt.
     }
     public record PrepareInput(String sessionId,PageInput page) {}
+    public record ControlInput(long sequence,boolean suspended) {
+        public ControlInput { if(sequence<1)throw invalid("CONTROL_SEQUENCE_INVALID"); }
+    }
+    public record ControlView(long sequence,boolean suspended,boolean busy,long inFlightSequence,int textRemaining,int visionRemaining,
+                              Instant expiresAt,Instant nextAt,ObservationQuota.Counts daily) {}
+    /** Same grant only; never opens, refills, refunds or releases a draining dispatch. */
+    public ControlView control(long owner,String id,ControlInput input) {
+        Grant grant=find(owner,id);
+        boolean latest;synchronized(grant){requireOpen(grant);latest=input.sequence()>grant.controlSequence;}
+        if(latest && !input.suspended())routesCurrent(owner,grant);
+        synchronized(grant){
+            requireOpen(grant);
+            if(input.sequence()>grant.controlSequence){
+                if(!input.suspended() && (grant.textRemaining<=0 || grant.input.visionLimit()>0 && grant.visionRemaining<=0))throw invalid("BUDGET_EXHAUSTED");
+                grant.controlSequence=input.sequence();
+                if(input.suspended() && !grant.suspended){grant.turnVersion++;grant.prepared=null;}
+                grant.suspended=input.suspended();
+            }
+        }
+        var daily=quota.status(owner,clock.instant());
+        synchronized(grant){requireOpen(grant);return controlView(grant,daily);}
+    }
+    private ControlView controlView(Grant grant,ObservationQuota.Counts daily){return new ControlView(grant.controlSequence,grant.suspended,grant.busy,grant.sequence,
+        grant.textRemaining,grant.visionRemaining,grant.expires,grant.nextAt,daily);}
     public record PreparedView(String snapshotId,Instant capturedAt,Instant expiresAt,String preview,String digest,String visualSkip) {}
     /** Explicit local preview; no grant, quota reservation, model route or provider call. */
     public PreparedView preview(long owner,PageInput input) {
@@ -75,6 +99,7 @@ public class CompanionObservationService {
     }
     public PreparedView prepare(long owner,PrepareInput input) {
         Grant grant=find(owner,input.sessionId());routesCurrent(owner,grant);
+        long turnVersion;synchronized(grant){requireActive(grant);if(grant.busy)throw invalid("IN_FLIGHT");turnVersion=grant.turnVersion;}
         Snapshot snapshot=context.prepare(owner,input.page(),clock.instant());
         RealObservationRegion.Preview preview=null;String skip="VISION_OFF";
         if(grant.input.visionLimit()>0){
@@ -83,8 +108,8 @@ public class CompanionObservationService {
             else if(!realVisualReady())skip="REAL_VISUAL_CAPTURE_UNAVAILABLE";
             else{try{preview=region.capture(owner,snapshot,previewRedaction(owner));skip=null;}catch(RuntimeException failed){skip=captureFailure(failed);}}
         }
-        Prepared prepared=new Prepared(UUID.randomUUID().toString(),snapshot,preview,skip,clock.instant().plusSeconds(30));
-        synchronized(grant){requireOpen(grant);grant.prepared=prepared;}
+        Prepared prepared=new Prepared(UUID.randomUUID().toString(),snapshot,preview,skip,clock.instant().plusSeconds(30),turnVersion);
+        synchronized(grant){requireActive(grant);if(turnVersion!=grant.turnVersion)throw invalid("OBSERVATION_SUSPENDED");grant.prepared=prepared;}
         return new PreparedView(prepared.id,snapshot.capturedAt(),prepared.expires,
                 preview==null?null:"data:image/png;base64,"+Base64.getEncoder().encodeToString(preview.bytes()),preview==null?null:preview.digest(),skip);
     }
@@ -106,13 +131,15 @@ public class CompanionObservationService {
         Grant grant=find(owner,input.sessionId());Prepared prepared;
         synchronized(grant){
             requireOpen(grant);prepared=grant.prepared;
+            if(grant.suspended)return gate(owner,grant,input,"OBSERVATION_SUSPENDED");
             if(input.sequence()<1 || input.sequence()<=grant.sequence || prepared==null || !prepared.id.equals(input.snapshotId())
                     || clock.instant().isAfter(prepared.expires))throw invalid("SNAPSHOT_EXPIRED_OR_REPLAYED");
             if(grant.busy)return gate(owner,grant,input,"IN_FLIGHT");
             if(grant.textRemaining<=0)return gate(owner,grant,input,"BUDGET_EXHAUSTED");
             if(prepared.preview!=null && !prepared.preview.pixelDigest().equals(input.capturePixelDigest()))return gate(owner,grant,input,"CAPTURE_PIXELS_UNCONFIRMED");
             grant.sequence=input.sequence();grant.prepared=null;
-            if(!context.current(owner,prepared.snapshot))return gate(owner,grant,input,"CONTEXT_CHANGED");
+            if(!context.current(owner,prepared.snapshot)){String chat=context.chatInvalidation(owner,prepared.snapshot);return gate(owner,grant,input,
+                chat!=null && context.resourcesCurrent(owner,prepared.snapshot)?chat:"CONTEXT_CHANGED");}
             try{routesCurrent(owner,grant);}catch(RuntimeException changed){grant.closed=true;return gate(owner,grant,input,"ROUTE_CHANGED");}
             if(!quota.claim(owner,grant.id,clock.instant()))return gate(owner,grant,input,"OWNER_BUSY_OR_INTERVAL");
             grant.busy=true;
@@ -140,13 +167,15 @@ public class CompanionObservationService {
                     synchronized(grant){grant.visionRemaining--;}
                     // Reservation may wait on the DB: revocation during that wait must prevent pixel dispatch.
                     if(!current(owner,grant,prepared))throw invalid("CONTEXT_CHANGED");
-                    quota.coverDispatch(owner,grant.id,clock);requireOpen(grant);
+                    quota.coverDispatch(owner,grant.id,clock);commitDispatch(owner,grant,prepared);
                     imageDispatched=true;
                     ObservationVisionClient.Caption result;
-                    try{result=visual.caption(imageRoute,prepared.preview);record(owner,imageRoute,ModelTask.VISION_UNDERSTANDING,null);}
-                    catch(RuntimeException failed){record(owner,imageRoute,ModelTask.VISION_UNDERSTANDING,"VISION_FAILED");throw invalid("VISION_FAILED");}
+                    try{result=visual.caption(imageRoute,prepared.preview);record(owner,imageRoute,ModelTask.VISION_UNDERSTANDING,result.reason());}
+                    catch(RuntimeException failed){record(owner,imageRoute,ModelTask.VISION_UNDERSTANDING,"VISION_FAILED");imageTrace=new VisionTrace("REAL_OBSERVATION_REGION",prepared.preview.digest(),clock.instant(),false,null,null,null,null,"VISION_FAILED",null);throw invalid("VISION_FAILED");}
                     caption=scrub.safe(result.text());
                     imageTrace=new VisionTrace("REAL_OBSERVATION_REGION",prepared.preview.digest(),clock.instant(),false,caption,scrub.safe(result.rawBody()),result.httpStatus(),result.finishReason(),result.reason(),scrub.safe(result.requestBody()));
+                    // Preserve the previous hard-failure boundary: no extra text dispatch after a rejected/failed visual request.
+                    if(Set.of("VISION_HTTP_ERROR","VISION_RESPONSE_INVALID","VISION_TIMEOUT","VISION_CANCELLED","VISION_RESPONSE_TOO_LARGE","VISION_TRANSPORT_FAILED").contains(Objects.toString(result.reason(),"")))throw invalid("VISION_FAILED");
                     if(!current(owner,grant,prepared))throw invalid("CONTEXT_CHANGED");
                     if(caption!=null)grant.caption=new Cached(prepared.preview.digest(),caption,clock.instant(),prepared.snapshot.pictures());
                 }
@@ -162,7 +191,7 @@ public class CompanionObservationService {
             if(!quota.reserve(owner,grant.id,false,clock.instant()))throw invalid("TEXT_DAY_LIMIT");
             reserved=true;synchronized(grant){grant.textRemaining--;}
             if(!current(owner,grant,prepared))throw invalid("CONTEXT_CHANGED");
-            quota.coverDispatch(owner,grant.id,clock);requireOpen(grant);
+            quota.coverDispatch(owner,grant.id,clock);commitDispatch(owner,grant,prepared);
             var stream=invoker instanceof LanguageModelInvoker.Observed observed?
                     observed.streamBoundedObserved(textRoute,turns,160,diagnostics):invoker.streamBounded(textRoute,turns,160);
             dispatched=true;
@@ -192,23 +221,46 @@ public class CompanionObservationService {
         }catch(Exception failure){reason=safeFailure(failure);}
         finally{
             quota.release(owner,grant.id,clock.instant(),clock.instant().plusSeconds(next));
-            synchronized(grant){grant.busy=false;}
+            synchronized(grant){grant.nextAt=clock.instant().plusSeconds(next);grant.busy=false;}
         }
         // Revocation does not return the old context/raw trace; counters still describe incurred dispatches.
+        var finalCounts=quota.status(owner,clock.instant());
         boolean revoked=!current(owner,grant,prepared);
+        String invalidReason=revoked?invalidationReason(owner,grant,prepared):null;
+        synchronized(grant){
+        if(grant.closed || !clock.instant().isBefore(grant.expires)){revoked=true;invalidReason="REVOKED";}
+        else if(grant.suspended || grant.turnVersion!=prepared.turnVersion){revoked=true;if(!"REVOKED".equals(invalidReason))invalidReason="OBSERVATION_SUSPENDED";}
         Trace trace=revoked?null:new Trace(safeSnapshot,turns,grant.text==null?null:new Parameters(grant.text.provider().name(),grant.text.modelCode(),true,
                 generation.thinkingMode(),generation.tokenLimitParameter(),generation.nonThinking()?null:160,generation.nonThinking()?160:null,generation.collectionTimeoutSeconds(),1024),
                 dispatched?scrub.safe(collected.toString()):null,complete[0],truncated[0],diagnostics.snapshot(),imageTrace);
-        return new Result(grant.id,input.snapshotId(),input.sequence(),revoked?null:decision,revoked?"REVOKED":reason,dispatched,imageDispatched,reserved,
-                grant.textRemaining,grant.visionRemaining,next,quota.status(owner,clock.instant()),trace);
+        return new Result(grant.id,input.snapshotId(),input.sequence(),revoked?null:decision,revoked?invalidReason:reason,dispatched,imageDispatched,reserved,
+                grant.textRemaining,grant.visionRemaining,next,finalCounts,trace);
+        }
     }
     private Result gate(long owner,Grant grant,ObserveInput input,String reason){return new Result(grant.id,input.snapshotId(),input.sequence(),null,reason,false,false,false,grant.textRemaining,grant.visionRemaining,90,quota.status(owner,clock.instant()),null);}
     private Grant find(long owner,String id){var grant=grants.get(owner);if(grant==null || !grant.id.equals(id))throw invalid("SESSION_UNAVAILABLE");requireOpen(grant);return grant;}
     private void requireOpen(Grant grant){if(grant.closed || !clock.instant().isBefore(grant.expires))throw invalid("SESSION_CLOSED_OR_EXPIRED");}
+    private void requireActive(Grant grant){requireOpen(grant);if(grant.suspended)throw invalid("OBSERVATION_SUSPENDED");}
+    private void commitDispatch(long owner,Grant grant,Prepared prepared){
+        if(!current(owner,grant,prepared))throw invalid("CONTEXT_CHANGED");
+        // Logical dispatch commit is serialized with suspension acknowledgement; no blocking I/O under this lock.
+        synchronized(grant){requireActive(grant);if(grant.turnVersion!=prepared.turnVersion)throw invalid("OBSERVATION_SUSPENDED");grant.dispatches++;}
+    }
+    private String invalidationReason(long owner,Grant grant,Prepared prepared){
+        if(grant.closed || !clock.instant().isBefore(grant.expires))return "REVOKED";
+        String chat=context.chatInvalidation(owner,prepared.snapshot);
+        if(!context.current(owner,prepared.snapshot) && (chat==null || !context.resourcesCurrent(owner,prepared.snapshot)))return "REVOKED";
+        try{routesCurrent(owner,grant);}catch(RuntimeException changed){return "REVOKED";}
+        synchronized(grant){
+            if(grant.closed || !clock.instant().isBefore(grant.expires))return "REVOKED";
+            if(grant.suspended || grant.turnVersion!=prepared.turnVersion)return "OBSERVATION_SUSPENDED";
+            return chat==null?"REVOKED":chat;
+        }
+    }
     private boolean current(long owner,Grant grant,Prepared prepared){
-        if(grant.closed || !clock.instant().isBefore(grant.expires) || !context.current(owner,prepared.snapshot))return false;
+        if(grant.closed || grant.suspended || grant.turnVersion!=prepared.turnVersion || !clock.instant().isBefore(grant.expires) || !context.current(owner,prepared.snapshot))return false;
         if(prepared.preview!=null && (!realVisualReady() || !region.current(owner,prepared.preview)))return false;
-        try{routesCurrent(owner,grant);return !grant.closed && clock.instant().isBefore(grant.expires);}catch(RuntimeException changed){return false;}
+        try{routesCurrent(owner,grant);synchronized(grant){return !grant.closed && !grant.suspended && grant.turnVersion==prepared.turnVersion && clock.instant().isBefore(grant.expires);}}catch(RuntimeException changed){return false;}
     }
     private void routesCurrent(long owner,Grant grant){
         if(!language.inspectCurrentByok(owner).filter(grant.text::equals).isPresent()
@@ -236,11 +288,11 @@ public class CompanionObservationService {
         return new ObservationRedaction(text,image);
     }
     private static String captureFailure(RuntimeException failed){var code=failed.getMessage();return Set.of("CAPTURE_FORMAT_UNSUPPORTED","CAPTURE_IMAGE_TOO_LARGE","CAPTURE_BUSY","NO_SAFE_CARD_REGION","REAL_VISUAL_CAPTURE_UNAVAILABLE").contains(Objects.toString(code,""))?code:"CAPTURE_IMAGE_UNAVAILABLE";}
-    private record Prepared(String id,Snapshot snapshot,RealObservationRegion.Preview preview,String visualSkip,Instant expires){}
+    private record Prepared(String id,Snapshot snapshot,RealObservationRegion.Preview preview,String visualSkip,Instant expires,long turnVersion){}
     private record Cached(String digest,String text,Instant at,List<PictureRef> pictures){}
     private static class Grant{
         final String id=UUID.randomUUID().toString();final OpenInput input;final ModelConnection text,image;final Instant expires;
-        volatile boolean closed;boolean busy;int textRemaining,visionRemaining,silences;long sequence;Prepared prepared;
+        volatile boolean closed,suspended;volatile long turnVersion;boolean busy;int textRemaining,visionRemaining,silences;long sequence,controlSequence,dispatches;Prepared prepared;Instant nextAt;
         volatile Cached caption;String focus,topic;Instant focusAt,lastSpeech;
         Grant(OpenInput input,ModelConnection text,ModelConnection image,Instant expires){this.input=input;this.text=text;this.image=image;this.expires=expires;textRemaining=input.textLimit();visionRemaining=input.visionLimit();}
     }

@@ -15,6 +15,15 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class RealObservationRegionTest {
+ @Test void blankLegacyOriginalUrlUsesKnownCosImageBytesWithoutRelaxingOriginOrFormat() throws Exception {
+  var pictures=mock(PictureService.class);var auth=mock(SpaceAuthorizationAccessService.class);var source=mock(CosObservationImageSource.class);var config=new CosClientConfig();config.setHost("https://images.fixture.invalid");
+  for(String original:List.of("","   ")){
+   var p=picture();p.setOriginalUrl(original);p.setUrl("https://images.fixture.invalid/p/101.png");when(pictures.getById(101L)).thenReturn(p);when(source.read("p/101.png")).thenReturn(photo());
+   try(var region=new RealObservationRegion(pictures,auth,source,config,true)){assertThat(region.capture(1,snapshot(),new ObservationRedaction()).bytes()).isNotEmpty();}
+  }
+  var p=picture();p.setOriginalUrl("https://evil.invalid/image.png");when(pictures.getById(101L)).thenReturn(p);
+  try(var region=new RealObservationRegion(pictures,auth,source,config,true)){assertThatThrownBy(()->region.capture(1,snapshot(),new ObservationRedaction())).hasMessage("CAPTURE_IMAGE_UNAVAILABLE");}
+ }
  static final Instant AT=Instant.parse("2026-10-11T00:00:00Z");
  static byte[] photo() throws Exception {var img=new BufferedImage(100,50,BufferedImage.TYPE_INT_RGB);var g=img.createGraphics();g.setColor(Color.RED);g.fillRect(0,0,50,50);g.setColor(Color.BLUE);g.fillRect(50,0,50,50);g.setColor(Color.YELLOW);g.fillRect(0,0,100,1);g.setColor(Color.BLACK);g.fillOval(40,20,20,20);g.fillPolygon(new int[]{40,43,48},new int[]{24,15,21},3);g.fillPolygon(new int[]{53,57,60},new int[]{21,15,24},3);g.setColor(Color.WHITE);g.fillOval(45,25,3,3);g.fillOval(52,25,3,3);g.dispose();var out=new ByteArrayOutputStream();ImageIO.write(img,"png",out);return out.toByteArray();}
  static ObservationContracts.Snapshot snapshot(){return new ObservationContracts.Snapshot("GALLERY",List.of(new ObservationContracts.PictureRef(101L,"Allowed title SECRET_MODEL_KEY","nature","blue",AT)),List.of(),List.of(),0,AT);}

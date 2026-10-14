@@ -61,7 +61,7 @@ function button(root, label) {
 async function flush() { for (let i = 0; i < 8; i++) await nextTick() }
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done }); return { promise, resolve } }
 async function fixture({ enabled = true, vision = false } = {}) {
-  const boundaryUrl = moduleUrl(`export const fixture = ${++fixtureSequence}; export const shared = {}; export const useUserStore = () => shared.user; export const useCompanionRehearsalStore = () => shared.rehearsal; export const useCompanionChatStore = () => shared.chat; export const useCompanionInteractionStore = () => shared.interaction; export const useLegacyOverlayIsolation = () => shared.overlay; export const COMPANION_UI_ENABLED = ${enabled}; export const observationApi = { status: (...a) => shared.status(...a), open: (...a) => shared.open(...a), prepare: (...a) => shared.prepare(...a), observe: (...a) => shared.observe(...a), preview: (...a) => shared.preview(...a), close: (...a) => shared.close(...a) };`)
+  const boundaryUrl = moduleUrl(`export const fixture = ${++fixtureSequence}; export const shared = {}; export const useUserStore = () => shared.user; export const useCompanionRehearsalStore = () => shared.rehearsal; export const useCompanionChatStore = () => shared.chat; export const useCompanionInteractionStore = () => shared.interaction; export const useLegacyOverlayIsolation = () => shared.overlay; export const COMPANION_UI_ENABLED = ${enabled}; export const observationApi = { status: (...a) => shared.status(...a), open: (...a) => shared.open(...a), prepare: (...a) => shared.prepare(...a), observe: (...a) => shared.observe(...a), preview: (...a) => shared.preview(...a), close: (...a) => shared.close(...a), control: (...a) => shared.control(...a) };`)
   const { shared } = await import(boundaryUrl); const calls = []; const listeners = new Map(); const timers = new Map(); let clock=0, timerId=0
   shared.rehearsal = { journal: createRehearsalHistory() }
   shared.user = reactive({ currentUser: { id: '1' }, logout: async () => { calls.push('logout') } })
@@ -73,6 +73,7 @@ async function fixture({ enabled = true, vision = false } = {}) {
   shared.observe=async data=>{calls.push(['observe',data]);return {...data,modelDispatched:true,visionDispatched:false,parsed:{action:'SPEAK',text:'no-click-topic'},textRemaining:5,visionRemaining:0,nextObservationSeconds:90}}
   shared.preview=async data=>{calls.push(['preview',data]);return {visualSkip:'UNCONFIRMED_VISIBLE_REGION'}}
   shared.close=async id=>{calls.push(['close',id])}
+  shared.control=async (id,data)=>{calls.push(['control',id,data]);return {sequence:data.sequence,suspended:data.suspended,busy:false,textRemaining:6,visionRemaining:vision?2:0}}
   shared.now=()=>clock;shared.setTimer=(fn,delay)=>{const id=++timerId;timers.set(id,{fn,at:clock+delay});return id};shared.clearTimer=id=>timers.delete(id)
   const empty=moduleUrl('export default { render() { return null } }')
   const shell=moduleUrl(`export default { inheritAttrs: false, props: ['open'], emits: ['close'], render() { return this.open ? this.$slots.default?.() : null } }`)
@@ -94,7 +95,7 @@ async function fixture({ enabled = true, vision = false } = {}) {
   const router=createRouter({history:createMemoryHistory(),routes:[{path:'/gallery',name:'gallery',component:{}},{path:'/companion',name:'companion',component:{}},{path:'/space/my',name:'my-space',component:{}},{path:'/picture/:id',name:'picture-detail',component:{}},{path:'/admin',name:'admin-users',component:{}},{path:'/companion/rehearsal',name:'companion-rehearsal',component:{}},{path:'/model-gateway',name:'model-gateway',component:{}}]})
   await router.push('/companion');await router.isReady()
   const originals={document:globalThis.document,window:globalThis.window,MutationObserver:globalThis.MutationObserver}
-  globalThis.document={hidden:false,body:{},addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),querySelector:()=>null,querySelectorAll:()=>[]}
+  globalThis.document={hidden:false,body:{},addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),querySelector:selector=>selector==='.chat-card'?{getClientRects:()=>[{}]}:null,querySelectorAll:()=>[]}
   globalThis.window={innerWidth:1024,innerHeight:768,addEventListener:(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn)},removeEventListener:(name,fn)=>listeners.get(name)?.delete(fn),matchMedia:()=>({addEventListener(){},removeEventListener(){}})}
   globalThis.MutationObserver=class{observe(){}disconnect(){}}
   const {createPinia}=await import('pinia');const root=hostNode('root');const app=renderer.createApp(component);app.use(createPinia());app.use(router);app.mount(root);await flush()

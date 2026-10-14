@@ -50,6 +50,13 @@ public class ObservationContext {
     }
     public boolean current(long owner,Snapshot snapshot) {
         if(activity.busy(owner) || boundaries.chatEpoch(owner)!=snapshot.chatEpoch()) return false;
+        return resourcesCurrent(owner,snapshot) && chatInvalidation(owner,snapshot)==null;
+    }
+    public String chatInvalidation(long owner,Snapshot snapshot) {
+        if(activity.busy(owner))return "CHAT_BUSY";
+        return boundaries.chatEpoch(owner)!=snapshot.chatEpoch()?"CHAT_CHANGED":null;
+    }
+    public boolean resourcesCurrent(long owner,Snapshot snapshot) {
         try {
             for(var ref:snapshot.pictures()) if(!Objects.equals(picture(owner,ref.id()),ref)) return false;
             var companion=companions.findByOwnerId(owner).orElseThrow();
@@ -57,7 +64,7 @@ public class ObservationContext {
             for(var ref:snapshot.memories()) if(usable.stream().noneMatch(m->Objects.equals(m.id(),ref.id())
                     && Objects.equals(m.pictureId(),ref.pictureId()) && Objects.equals(m.content(),ref.content())
                     && Objects.equals(m.updatedTime(),ref.at()))) return false;
-            return !activity.busy(owner) && boundaries.chatEpoch(owner)==snapshot.chatEpoch();
+            return true;
         } catch(RuntimeException unavailable){return false;}
     }
     private PictureRef picture(long owner,long id) {

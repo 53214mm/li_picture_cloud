@@ -12,6 +12,13 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.*;
 class ObservationVisionClientTest {
+ @Test void rejectedHttpStatusIsSafeMetadataWithoutEchoingProviderErrorBodyOrKey(){
+  server.createContext("/chat/completions",exchange->{byte[] bytes="PRIVATE_PROVIDER_ERROR vision-fixture-key".getBytes(StandardCharsets.UTF_8);exchange.sendResponseHeaders(401,bytes.length);exchange.getResponseBody().write(bytes);exchange.close();});
+  var result=client.caption(route,preview());assertThat(result.reason()).isEqualTo("VISION_HTTP_ERROR");assertThat(result.httpStatus()).isEqualTo(401);assertThat(result.text()).isNull();assertThat(result.rawBody()).isNull();assertThat(result.toString()).doesNotContain("PRIVATE_PROVIDER_ERROR","vision-fixture-key");
+ }
+ @Test void malformedProtocolIsNotTheSameAsValidEmptyContent(){
+  respond("{}");var result=client.caption(route,preview());assertThat(result.reason()).isEqualTo("VISION_RESPONSE_INVALID");assertThat(result.text()).isNull();assertThat(result.rawBody()).isNull();
+ }
  HttpServer server;TestClient client;AtomicReference<String> body=new AtomicReference<>();AtomicReference<String> auth=new AtomicReference<>();
  ModelRouteDecision route=ModelRouteDecision.byok(ModelConnection.restore(7L,1,ModelProvider.OPENAI,"fixture",URI.create("https://fixture.invalid/v1"),"fixture",8L,true,0),"vision-fixture-key");
  static class TestClient extends ObservationVisionClient {
@@ -37,6 +44,6 @@ class ObservationVisionClientTest {
  }
  @Test void platformAndOversizeFailClosed(){
   assertThatThrownBy(()->client.caption(ModelRouteDecision.platform(),preview())).isInstanceOf(IllegalArgumentException.class);
-  respond("x".repeat(17000));assertThatThrownBy(()->client.caption(route,preview())).hasMessage("VISION_FAILED");
+  respond("x".repeat(17000));var result=client.caption(route,preview());assertThat(result.reason()).isEqualTo("VISION_RESPONSE_TOO_LARGE");assertThat(result.rawBody()).isNull();assertThat(result.text()).isNull();
  }
 }

@@ -6,6 +6,7 @@ const dependency = page => JSON.stringify([page?.page, page?.pictureIds || [], p
 export function createCompanionObserver({ api, onChange = () => {}, collect = () => ({ page: 'COMPANION', pictureIds: [], rects: [] }), capture = captureObservationRegion, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout }) {
   let owner = null, generation = 0, timer = null, previewTimer = null, controller = null, previewController = null, blocked = false, sequence = 0, previewSequence = 0, session = null, disposed = false
   let material = collect(false), materialEpoch = 0, held = false, cadence = 90, attempt = 0, singlePending = false
+  let controlSequence = 0, controlPending = false, controlQueue = Promise.resolve(), serverBusy = false, requestStage = null, completedSequence = 0
   let value = { enabled: false, phase: 'off', page: material.page, held: false, status: null, statusPhase: 'idle', suppressed: false, reason: null, presentation: null, records: [], speeches: [], speechVisible: true, preview: null, visualSkip: 'VISION_OFF', textRemaining: 0, visionRemaining: 0, nextAt: null, options: null }
   const emit = patch => { value = { ...value, ...patch }; onChange(value); return value }
   const cancelTimer = () => { if (timer != null) clearTimer(timer); timer = null }
@@ -17,6 +18,7 @@ export function createCompanionObserver({ api, onChange = () => {}, collect = ()
   }
   function revoke(reason, clear = false, preservePresentation = false) {
     singlePending = false
+    controlPending = false; serverBusy = false; controlQueue = Promise.resolve(); requestStage = null
     generation++; cancelTimer(); controller?.abort(); controller = null
     previewController?.abort(); previewController = null
     if (previewTimer != null) clearTimer(previewTimer); previewTimer = null
@@ -24,26 +26,62 @@ export function createCompanionObserver({ api, onChange = () => {}, collect = ()
     session = null
     emit({ enabled: false, phase: reason === 'OFF' ? 'off' : 'paused', reason, statusPhase: value.status ? 'ready' : 'idle', presentation: preservePresentation ? value.presentation : null, preview: null, nextAt: null, ...(clear ? { records: [], speeches: [], speechVisible: true, status: null, statusPhase: 'idle', options: null, textRemaining: 0, visionRemaining: 0 } : {}) })
   }
-  const alive = cycle => !disposed && owner != null && cycle === generation && !blocked
+  const sameOwner = cycle => !disposed && owner != null && cycle === generation
+  const alive = cycle => sameOwner(cycle) && !blocked
   function currentRound(cycle, round) {
-    if (!alive(cycle) || round !== session) return false
+    if (disposed || owner == null || cycle !== generation || round !== session) return false
     const expiry = Date.parse(round.expiresAt)
     if (Number.isFinite(expiry) && now() >= expiry) { revoke('SESSION_EXPIRED'); return false }
     return true
   }
   const waitingPhase = () => held ? 'held' : value.page === 'UNKNOWN' ? 'page-skipped' : 'waiting'
   function schedule(seconds = cadence) {
-    cancelTimer(); if (!value.enabled || blocked || !session || !value.options.auto && !singlePending) return
     cadence = Math.max(90, Math.min(600, Number(seconds) || 90))
+    cancelTimer(); if (!value.enabled || !session || !value.options.auto && !singlePending) return
     const delay = cadence * 1000
-    emit({ phase: waitingPhase(), nextAt: now() + delay })
+    emit({ phase: blocked ? 'suspended' : controlPending || controller ? 'draining' : waitingPhase(), nextAt: now() + delay })
+    if (blocked || controlPending || controller) return
     timer = setTimer(() => { timer = null; void observeNow() }, delay)
+  }
+  function resumeSchedule() {
+    if (blocked || controlPending || controller || !session || !value.enabled) return
+    if (!currentRound(generation, session)) return
+    if (!value.options.auto && !singlePending) return
+    const deadline = value.nextAt > now() ? value.nextAt : now() + cadence * 1000
+    cancelTimer(); emit({ phase: waitingPhase(), nextAt: deadline })
+    timer = setTimer(() => { timer = null; void observeNow() }, deadline - now())
+  }
+  function syncControl(suspended) {
+    const round = session, cycle = generation, sequence = ++controlSequence
+    if (!round) return
+    controlPending = true
+    controlQueue = controlQueue.catch(() => {}).then(async () => {
+      if (!currentRound(cycle, round)) return
+      try {
+        const response = await api.control(round.sessionId, { sequence, suspended })
+        if (!currentRound(cycle, round) || sequence !== controlSequence) return
+        if (response?.sequence !== sequence || response?.suspended !== suspended || typeof response.busy !== 'boolean') throw new Error('CONTROL_BINDING_FAILED')
+        if (response.expiresAt && Date.parse(response.expiresAt) !== Date.parse(round.expiresAt)) throw new Error('CONTROL_BINDING_FAILED')
+        const completedAck = response.busy && Number.isInteger(response.inFlightSequence) && response.inFlightSequence <= completedSequence
+        reconcile({ response }, completedAck); serverBusy = response.busy && !completedAck; controlPending = false
+        const exhausted = value.textRemaining <= 0 || value.options.visionLimit > 0 && value.visionRemaining <= 0
+        if (exhausted) { revoke('BUDGET_EXHAUSTED'); return }
+        emit({ phase: blocked ? 'suspended' : serverBusy || controller ? 'draining' : waitingPhase(), reason: blocked ? 'OBSERVATION_SUSPENDED' : null })
+        if (!blocked) {
+          const serverDeadline = Date.parse(response.nextAt)
+          if (Number.isFinite(serverDeadline) && serverDeadline > (value.nextAt || 0)) emit({ nextAt: serverDeadline })
+          resumeSchedule()
+        }
+      } catch (error) {
+        if (currentRound(cycle, round) && sequence === controlSequence) { const reason = safeFailure(error, 'control'); revoke(reason === 'OBSERVATION_FAILED' ? 'CONTROL_FAILED' : reason) }
+      }
+    })
   }
   async function refreshStatus() {
     if (owner == null || disposed) return
     const cycle = generation
     emit({ statusPhase: 'loading' })
-    try { const status = await api.status(); if (cycle === generation && !disposed) emit({ status, statusPhase: 'ready' }) }
+    try { const status = await api.status(); if (cycle === generation && !disposed) emit({ status: { ...status, counts: mergeCounts(status.counts) }, statusPhase: 'ready' }) }
     catch { if (cycle === generation && !disposed) emit({ statusPhase: 'error', reason: 'STATUS_UNAVAILABLE' }) }
   }
   async function start(options) {
@@ -55,56 +93,71 @@ export function createCompanionObserver({ api, onChange = () => {}, collect = ()
     revoke('OFF'); const cycle = generation
     emit({ phase: 'opening', reason: null, options: { ...options } }); controller = new AbortController()
     try {
-      const status = await api.status({ signal: controller.signal }); if (!alive(cycle)) return
-      emit({ status, statusPhase: 'ready' }); if (!status.enabled || !status.textReceiver || options.visionLimit > 0 && !status.visionReceiver) throw new Error('BYOK_ROUTE_UNAVAILABLE')
+      const status = await api.status({ signal: controller.signal }); if (!sameOwner(cycle)) return
+      emit({ status: { ...status, counts: mergeCounts(status.counts) }, statusPhase: 'ready' }); if (!status.enabled || !status.textReceiver || options.visionLimit > 0 && !status.visionReceiver) throw new Error('BYOK_ROUTE_UNAVAILABLE')
       if (disclosed && (disclosed.textReceiver?.token !== status.textReceiver.token || options.visionLimit > 0 && disclosed.visionReceiver?.token !== status.visionReceiver.token)) throw new Error('RECEIVER_CHANGED')
       // Receive the created id even after cancellation so a late grant can be closed.
       const opened = await api.open({ ...options, textReceiverToken: status.textReceiver.token, visionReceiverToken: options.visionLimit > 0 ? status.visionReceiver.token : null })
-      if (!alive(cycle)) { await api.close(opened.sessionId); return }
-      session = opened; sequence = 0; controller = null; cadence = 90; material = collect(options.visionLimit > 0)
-      emit({ enabled: true, page: material.page, phase: held ? 'held' : material.page === 'UNKNOWN' ? 'page-skipped' : 'ready', reason: null, textRemaining: opened.textRemaining, visionRemaining: opened.visionRemaining })
-      if (options.auto) schedule()
+      if (!sameOwner(cycle)) { await api.close(opened.sessionId); return }
+      session = opened; sequence = 0; controlSequence = 0; completedSequence = 0; controller = null; cadence = 90; material = collect(options.visionLimit > 0)
+      if (!currentRound(cycle, opened)) return
+      singlePending = blocked && !options.auto
+      emit({ enabled: true, page: material.page, phase: blocked ? 'suspended' : held ? 'held' : material.page === 'UNKNOWN' ? 'page-skipped' : 'ready', reason: null, textRemaining: opened.textRemaining, visionRemaining: opened.visionRemaining })
+      if (blocked) syncControl(true)
+      else if (options.auto) schedule()
     } catch (error) { if (cycle === generation) { revoke('OPEN_FAILED'); throw error } }
   }
   function addAttempt(round, request, stage, reason, sent = false, outcome = null, visualSkip = null) {
     const row = observationAttempt({ id: `${round.sessionId}-attempt-${++attempt}`, request: request || { sessionId: round.sessionId }, at: now(), stage, reason, sent, outcome, visualSkip })
     emit({ records: [row, ...value.records].slice(0, 50), reason })
   }
-  function reconcile(record) {
+  function mergeCounts(daily, completedAck = false) {
+    let counts = value.status?.counts
+    if (Number.isInteger(daily?.text) && Number.isInteger(daily.vision)) {
+      const validDay = date => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
+      const dated = validDay(daily.usageDate) && validDay(counts?.usageDate)
+      if (dated && daily.usageDate > counts.usageDate) counts = daily
+      else if (dated && daily.usageDate === counts.usageDate) counts = { ...daily, text: Math.max(counts.text, daily.text), vision: Math.max(counts.vision, daily.vision) }
+      else if (!dated && !completedAck) counts = daily
+    }
+    return counts
+  }
+  function reconcile(record, completedAck = false) {
     const response = record.response
     const remaining = key => Number.isInteger(response[key]) && response[key] >= 0 ? Math.min(value[key], response[key]) : value[key]
-    emit({ textRemaining: remaining('textRemaining'), visionRemaining: remaining('visionRemaining'), status: { ...value.status, counts: Number.isInteger(response.daily?.text) ? response.daily : value.status?.counts } })
+    emit({ textRemaining: remaining('textRemaining'), visionRemaining: remaining('visionRemaining'), status: { ...value.status, counts: mergeCounts(response.daily, completedAck) } })
   }
   function terminal(reason) {
-    return ['REVOKED', 'CONTEXT_CHANGED', 'CHAT_BUSY', 'CHAT_CHANGED', 'ROUTE_CHANGED', 'SESSION_UNAVAILABLE', 'SESSION_CLOSED_OR_EXPIRED', 'ACCESS_DENIED', 'AUTHENTICATION_REQUIRED', 'TEXT_DAY_LIMIT', 'VISION_DAY_LIMIT', 'BUDGET_EXHAUSTED', 'VISION_BUDGET_EXHAUSTED', 'EMPTY_OUTPUT', 'MODEL_FAILED', 'INVALID_OUTPUT', 'OBSERVATION_FAILED', 'PREPARE_FAILED', 'VISION_FAILED', 'OUTPUT_LIMIT', 'CAPTURE_PIXELS_UNCONFIRMED', 'RESPONSE_BINDING_FAILED'].includes(reason)
+    return ['REVOKED', 'CONTEXT_CHANGED', 'ROUTE_CHANGED', 'SESSION_UNAVAILABLE', 'SESSION_CLOSED_OR_EXPIRED', 'ACCESS_DENIED', 'AUTHENTICATION_REQUIRED', 'TEXT_DAY_LIMIT', 'VISION_DAY_LIMIT', 'BUDGET_EXHAUSTED', 'VISION_BUDGET_EXHAUSTED', 'EMPTY_OUTPUT', 'MODEL_FAILED', 'INVALID_OUTPUT', 'OBSERVATION_FAILED', 'PREPARE_FAILED', 'VISION_FAILED', 'OUTPUT_LIMIT', 'CAPTURE_PIXELS_UNCONFIRMED', 'RESPONSE_BINDING_FAILED'].includes(reason)
   }
   function safeFailure(error, stage) {
     if (error?.status === 401) return 'AUTHENTICATION_REQUIRED'
     if (error?.status === 403) return 'ACCESS_DENIED'
     const code = error?.message
-    if (['REVOKED', 'SESSION_UNAVAILABLE', 'SESSION_CLOSED_OR_EXPIRED', 'ROUTE_CHANGED', 'CONTEXT_CHANGED', 'CHAT_BUSY', 'CHAT_CHANGED', 'SNAPSHOT_EXPIRED_OR_REPLAYED', 'CAPTURE_CANCELLED', 'CAPTURE_TIMEOUT', 'CAPTURE_IMAGE_UNAVAILABLE', 'INVALID_CAPTURE_SOURCE', 'INVALID_CAPTURE_DIMENSIONS', 'CAPTURE_UNAVAILABLE', 'CAPTURE_TOO_LARGE'].includes(code)) return code
+    if (['REVOKED', 'SESSION_UNAVAILABLE', 'SESSION_CLOSED_OR_EXPIRED', 'ROUTE_CHANGED', 'CONTEXT_CHANGED', 'CHAT_BUSY', 'CHAT_CHANGED', 'OBSERVATION_SUSPENDED', 'SNAPSHOT_EXPIRED_OR_REPLAYED', 'CAPTURE_CANCELLED', 'CAPTURE_TIMEOUT', 'CAPTURE_IMAGE_UNAVAILABLE', 'INVALID_CAPTURE_SOURCE', 'INVALID_CAPTURE_DIMENSIONS', 'CAPTURE_UNAVAILABLE', 'CAPTURE_TOO_LARGE'].includes(code)) return code
     return stage === 'prepare' ? 'PREPARE_FAILED' : stage === 'capture' ? 'CAPTURE_UNAVAILABLE' : 'OBSERVATION_FAILED'
   }
   async function observeNow() {
-    if (!value.enabled || blocked || !session || controller || disposed) return
+    if (!value.enabled || blocked || controlPending || !session || controller || disposed) return
+    if (serverBusy) { syncControl(false); return }
     cancelTimer(); const cycle = generation; const round = session; const options = value.options
     if (!currentRound(cycle, round)) return
     if (held || collect(false).page === 'UNKNOWN') { if (!options.auto) singlePending = true; emit({ phase: held ? 'held' : 'page-skipped', reason: held ? 'UI_OCCUPIED' : 'PAGE_UNSUPPORTED' }); schedule(); return }
     singlePending = false
     const pending = new AbortController(); controller = pending; const signal = pending.signal, epoch = materialEpoch
     let expected, stage = 'prepare', next = cadence
-    const materialCurrent = latest => epoch === materialEpoch && !held && dependency(latest) === dependency(collect(options.visionLimit > 0))
+    const materialCurrent = latest => !blocked && epoch === materialEpoch && !held && dependency(latest) === dependency(collect(options.visionLimit > 0))
     try {
       const latest = collect(options.visionLimit > 0)
       material = latest
       const page = { page: latest.page, pictureIds: latest.pictureIds || [], rects: options.visionLimit > 0 ? latest.rects || [] : [] }
-      emit({ phase: 'preparing' })
+      emit({ phase: 'preparing' }); requestStage = 'prepare'
       const prepared = await api.prepare({ sessionId: round.sessionId, page }, { signal })
       if (!currentRound(cycle, round)) return
       if (!materialCurrent(latest)) { addAttempt(round, null, stage, 'MATERIAL_CHANGED'); return }
       let capturePixelDigest = null, captured = options.visionLimit > 0 ? prepared : { ...prepared, preview: null, visualSkip: 'VISION_OFF' }
       if (options.visionLimit > 0 && prepared.preview) {
-        stage = 'capture'
+        stage = 'capture'; requestStage = stage
         const pixels = await capture(prepared.preview, { signal })
         if (!currentRound(cycle, round)) return
         if (!materialCurrent(latest)) { addAttempt(round, null, stage, 'MATERIAL_CHANGED'); return }
@@ -112,10 +165,12 @@ export function createCompanionObserver({ api, onChange = () => {}, collect = ()
       }
       emit({ phase: 'observing' }); showPreview(captured)
       expected = { sessionId: round.sessionId, snapshotId: prepared.snapshotId, sequence: ++sequence, ...(capturePixelDigest ? { capturePixelDigest } : {}) }
-      stage = 'observe'
+      stage = 'observe'; requestStage = stage
       const response = await api.observe(expected, { signal })
       if (!currentRound(cycle, round)) return
       const record = observationRecord(expected, response, now())
+      completedSequence = Math.max(completedSequence, expected.sequence)
+      serverBusy = false
       reconcile(record); next = response.nextObservationSeconds || cadence
       if (!materialCurrent(latest)) {
         addAttempt(round, expected, stage, 'MATERIAL_CHANGED', true, record.response)
@@ -123,6 +178,8 @@ export function createCompanionObserver({ api, onChange = () => {}, collect = ()
         return
       }
       const parsed = record.response.parsed
+      const visual = record.response.trace?.vision
+      if (visual?.skip) emit({ visualSkip: `${visual.skip}${Number.isInteger(visual.httpStatus) && visual.httpStatus > 0 ? ` · HTTP ${visual.httpStatus}` : ''}` })
       const presentation = record.response.reason || record.response.modelDispatched === false || !parsed || parsed.action === 'SILENT' ? null : parsed
       const spoken = presentation?.action === 'SPEAK' && typeof presentation.text === 'string' && presentation.text.trim() ? Object.freeze({ id: `${round.sessionId}-${expected.sequence}`, at: record.at, text: presentation.text }) : null
       emit({ records: [record, ...value.records].slice(0, 50), speeches: spoken ? [spoken, ...value.speeches].slice(0, 50) : value.speeches, ...(spoken ? { speechVisible: true } : {}), reason: response.reason || null, presentation,
@@ -131,13 +188,13 @@ export function createCompanionObserver({ api, onChange = () => {}, collect = ()
       if (stop) { revoke(response.reason || 'BUDGET_EXHAUSTED', false, !!presentation); return }
     } catch (error) {
       if (currentRound(cycle, round)) {
-        const reason = safeFailure(error, stage)
+        const reason = signal.aborted && epoch !== materialEpoch ? 'OBSERVATION_SUSPENDED' : safeFailure(error, stage)
         addAttempt(round, expected, stage, reason, stage === 'observe', null, stage === 'capture' ? reason : null)
         if (stage === 'capture') emit({ preview: null, visualSkip: reason })
         if (terminal(reason)) revoke(reason, false, true)
       }
     } finally {
-      if (controller === pending) controller = null
+      if (controller === pending) { controller = null; requestStage = null }
       if (currentRound(cycle, round) && value.enabled) schedule(next)
     }
   }
@@ -170,7 +227,18 @@ export function createCompanionObserver({ api, onChange = () => {}, collect = ()
       material = page
     },
     hold(active) { if (!!active === held) return; held = !!active; materialEpoch++; previewSequence++; previewController?.abort(); emit({ held, preview: null, ...(value.enabled ? { phase: controller ? 'draining' : waitingPhase(), reason: held ? 'UI_OCCUPIED' : value.page === 'UNKNOWN' ? 'PAGE_UNSUPPORTED' : null } : {}) }) },
-    suppress(active) { if (!!active === blocked) return; blocked = !!active; emit({ suppressed: blocked }); if (blocked && (value.enabled || controller || previewController || value.presentation || value.preview)) { revoke('CHAT_HIDDEN_OR_BLOCKED'); void refreshStatus() } },
+    suppress(active) {
+      if (!!active === blocked) return
+      blocked = !!active; emit({ suppressed: blocked })
+      if (blocked) {
+        materialEpoch++; previewSequence++; cancelTimer(); previewController?.abort(); previewController = null
+        if (previewTimer != null) clearTimer(previewTimer); previewTimer = null
+        if (requestStage && requestStage !== 'observe') controller?.abort()
+        emit({ presentation: null, preview: null, ...(value.enabled ? { phase: 'suspended', reason: 'OBSERVATION_SUSPENDED' } : {}) })
+        // Keep same-owner explicit opening intent; adopt its late grant already suspended.
+      }
+      if (session && value.enabled) syncControl(blocked)
+    },
     dismissSpeech() { emit({ speechVisible: false }) },
     pause() { revoke('PAUSED') }, clear() { revoke('CLEARED', true) },
     dispose() { revoke('OFF', true); disposed = true }

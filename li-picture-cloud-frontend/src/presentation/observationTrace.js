@@ -5,7 +5,7 @@ export function observationRecord(request, response, at) {
   if (response.sessionId !== request.sessionId || response.snapshotId !== request.snapshotId || Number(response.sequence) !== request.sequence) throw new Error('RESPONSE_BINDING_FAILED')
   const safe = pick(response, ['sessionId', 'snapshotId', 'sequence', 'reason', 'modelDispatched', 'visionDispatched', 'attemptReserved', 'textRemaining', 'visionRemaining', 'nextObservationSeconds'])
   safe.parsed = response.parsed ? pick(response.parsed, ['action', 'emote', 'text', 'nextObservationSeconds', 'focus', 'topic']) : null
-  safe.daily = pick(response.daily, ['text', 'vision', 'nextAt'])
+  safe.daily = pick(response.daily, ['text', 'vision', 'nextAt', 'usageDate'])
   const trace = response.trace
   if (trace) {
     const snapshot = trace.snapshot

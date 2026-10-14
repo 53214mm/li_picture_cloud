@@ -37,15 +37,24 @@ public class ObservationVisionClient {
         var future=client.sendAsync(request,response->new BoundedBody());
         try {
             var response=future.get(timeout.toMillis(),TimeUnit.MILLISECONDS);
-            if(response.statusCode()<200 || response.statusCode()>=300)throw new IllegalStateException();
-            var choice=mapper.readTree(response.body()).path("choices").path(0);
-            var value=choice.path("message").path("content");String raw=value.isTextual()?value.textValue():"";
+            if(response.statusCode()<200 || response.statusCode()>=300)return failure("VISION_HTTP_ERROR",response.statusCode(),body);
+            com.fasterxml.jackson.databind.JsonNode root;
+            try{root=mapper.readTree(response.body());}catch(Exception invalid){return failure("VISION_RESPONSE_INVALID",response.statusCode(),body);}
+            if(root==null || !root.path("choices").isArray() || root.path("choices").isEmpty())return failure("VISION_RESPONSE_INVALID",response.statusCode(),body);
+            var choice=root.path("choices").path(0);var message=choice.path("message");var value=message.path("content");
+            if(!message.isObject() || value.isMissingNode() || !value.isTextual() && !value.isNull())return failure("VISION_RESPONSE_INVALID",response.statusCode(),body);
+            String raw=value.isTextual()?value.textValue():"";
             String finish=choice.path("finish_reason").asText("");if(!Set.of("stop","length","content_filter").contains(finish))finish="OTHER";
             String reason=raw.isBlank()?"VISION_EMPTY_OUTPUT":raw.length()>300?"VISION_OUTPUT_LIMIT":null;
             return new Caption(reason==null?raw:null,raw.substring(0,Math.min(raw.length(),1024)),true,response.statusCode(),finish,body,reason);
-        }catch(InterruptedException interrupted){future.cancel(true);Thread.currentThread().interrupt();throw new IllegalStateException("VISION_FAILED");}
-        catch(Exception failed){future.cancel(true);throw new IllegalStateException("VISION_FAILED");}
+        }catch(InterruptedException interrupted){future.cancel(true);Thread.currentThread().interrupt();return failure("VISION_CANCELLED",0,body);}
+        catch(Exception failed){future.cancel(true);Throwable cause=failed;while(cause.getCause()!=null)cause=cause.getCause();
+            String reason=failed instanceof TimeoutException || cause instanceof HttpTimeoutException?"VISION_TIMEOUT":
+                "VISION_OUTPUT_LIMIT".equals(cause.getMessage())?"VISION_RESPONSE_TOO_LARGE":"VISION_TRANSPORT_FAILED";
+            return failure(reason,0,body);
+        }
     }
+    private static Caption failure(String reason,int status,String requestBody){return new Caption(null,null,false,status,null,requestBody,reason);}
     private static class BoundedBody implements HttpResponse.BodySubscriber<byte[]> {
         private final CompletableFuture<byte[]> complete=new CompletableFuture<>();private final ByteArrayOutputStream bytes=new ByteArrayOutputStream();
         private Flow.Subscription subscription;

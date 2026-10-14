@@ -7,11 +7,11 @@ import { collectSafeLayout } from '@/presentation/safeVisualLayout'
 export const useCompanionObserverStore = defineStore('companionObserver', () => {
   const user = useUserStore(); let routeName = null
   const state = shallowRef(null)
-  const collect = visual => routeName ? collectSafeLayout(routeName, visual) : { page: 'UNKNOWN', pictureIds: [], rects: [] }
+  const collect = visual => routeName && !document.hidden && !state.value?.suppressed ? collectSafeLayout(routeName, visual) : { page: 'UNKNOWN', pictureIds: [], rects: [] }
   const coordinator = createCompanionObserver({ api: observationApi, collect, onChange: value => { state.value = value } })
   state.value = coordinator.state()
   watch(() => user.currentUser?.id, id => coordinator.setOwner(id), { immediate: true, flush: 'sync' })
-  const update = () => coordinator.update(collect(!!state.value.options?.visionLimit))
+  const update = () => { if (!document.hidden && !state.value?.suppressed) coordinator.update(collect(!!state.value.options?.visionLimit)) }
   function page(name) { routeName = name; update() }
   return { state, coordinator, page, update }
 })

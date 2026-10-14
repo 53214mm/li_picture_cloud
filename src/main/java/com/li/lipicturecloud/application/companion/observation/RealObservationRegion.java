@@ -47,7 +47,7 @@ public class RealObservationRegion implements AutoCloseable {
         var refs=snapshot.pictures();var images=new ArrayList<BufferedImage>();var versions=new LinkedHashMap<Long,String>();var texts=new ArrayList<String>();
         for(var ref:refs){
             if(Thread.currentThread().isInterrupted())throw invalid("CAPTURE_IMAGE_UNAVAILABLE");
-            var p=authorized(owner,ref);String key=storageKey(p.getOriginalUrl()==null?p.getUrl():p.getOriginalUrl(),config.getHost());
+            var p=authorized(owner,ref);String key=storageKey(p.getOriginalUrl()==null || p.getOriginalUrl().isBlank()?p.getUrl():p.getOriginalUrl(),config.getHost());
             images.add(decode(source.read(key)));versions.put(ref.id(),version(p));
             texts.add(text(redaction.safe(ref.name()),80)+" | "+text(redaction.safe(ref.category()),40)+" | "+text(redaction.safe(ref.tags()),100));
         }

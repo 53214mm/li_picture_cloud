@@ -34,10 +34,11 @@ public class CosObservationImageSource {
             var object=client().getObject(request);
             try(var stream=object.getObjectContent()){
                 var bytes=stream.readNBytes(MAX_BYTES+1);
-                if(bytes.length==0 || bytes.length>MAX_BYTES)throw new IllegalArgumentException("CAPTURE_IMAGE_TOO_LARGE");
+                if(bytes.length==0)throw new IllegalArgumentException("CAPTURE_IMAGE_UNAVAILABLE");
+                if(bytes.length>MAX_BYTES)throw new IllegalArgumentException("CAPTURE_IMAGE_TOO_LARGE");
                 return bytes;
             }
-        }catch(Exception failed){throw new IllegalArgumentException("CAPTURE_IMAGE_UNAVAILABLE");}
+        }catch(Exception failed){throw new IllegalArgumentException("CAPTURE_IMAGE_TOO_LARGE".equals(failed.getMessage())?"CAPTURE_IMAGE_TOO_LARGE":"CAPTURE_IMAGE_UNAVAILABLE");}
     }
     @PreDestroy public synchronized void close(){if(client!=null){client.shutdown();client=null;}}
 }
