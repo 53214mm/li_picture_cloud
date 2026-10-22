@@ -32,10 +32,10 @@ function fixture() {
 }
 
 test('animation consumes all R06 conflict combinations without reordering its winner', () => {
-  for (const phase of ['idle', 'waiting', 'streaming']) for (const pending of [false, true]) for (const busy of [false, true]) {
-    const p = mapCompanionPresentation({ homeStatus: 'ready', home: { companion: { id: '7', lifeStage: 'LIGHT' } }, chat: { phase }, feed: { pending }, proposal: { status: 'PENDING', busy } })
+  for (const phase of ['idle', 'waiting', 'streaming']) for (const pending of [false, true]) {
+    const p = mapCompanionPresentation({ homeStatus: 'ready', home: { companion: { id: '7', lifeStage: 'LIGHT' } }, chat: { phase }, feed: { pending } })
     const intent = mapCompanionAnimation(legacyMotion(p))
-    assert.equal(intent.state, p.activity === 'idle' ? 'attention' : 'focus')
+    assert.equal(intent.state, p.activity === 'idle' ? 'idle' : 'focus')
     assert.equal(intent.companionId, '7')
     assert.ok(Object.isFrozen(intent))
   }
@@ -67,38 +67,26 @@ test('idle cadence is unchanged, repeated snapshots do not restart or add timers
   assert.equal(f.current.frame, 0)
 })
 
-test('focus interrupts attention immediately and request handoffs keep one cycle', () => {
+test('focus interrupts idle immediately and request handoffs keep one cycle', () => {
   const f = fixture()
-  f.update(presentation({ attention: 'proposal' }))
+  f.update(presentation())
   const late = [...f.pending.values()][0].callback
-  f.update(presentation({ activity: 'thinking', attention: 'proposal' }))
+  f.update(presentation({ activity: 'thinking' }))
   assert.equal(f.current.state, 'focus')
   const first = [...f.pending.values()][0]
-  for (const activity of ['responding', 'feeding', 'acknowledging']) f.update(presentation({ activity, attention: 'proposal' }))
+  for (const activity of ['responding', 'feeding']) f.update(presentation({ activity }))
   late()
   assert.equal([...f.pending.values()][0], first)
   assert.equal(f.pending.size, 1)
-  f.update(presentation({ attention: 'proposal' }))
+  f.update(presentation())
   assert.equal(f.current.state, 'idle')
-})
-
-test('attention completes once and refreshes cannot replay it without an instance change', () => {
-  const f = fixture()
-  f.update(presentation({ attention: 'proposal' }))
-  for (let i = 0; i < 4; i++) f.tick()
-  assert.equal(f.current.state, 'idle')
-  f.update()
-  f.update(presentation({ attention: 'proposal' }))
-  assert.equal(f.current.state, 'idle')
-  f.update(presentation({ companionId: '8', attention: 'proposal' }))
-  assert.equal(f.current.state, 'attention')
 })
 
 test('suspension discards in-flight hints and resumes the current loop from neutral', () => {
   const f = fixture()
-  f.update(presentation({ attention: 'proposal' }))
+  f.update(presentation())
   f.tick()
-  f.update(presentation({ attention: 'proposal' }), false)
+  f.update(presentation(), false)
   assert.deepEqual(f.current, { state: 'static', frame: 0, offsetY: 0, playing: false })
   assert.equal(f.pending.size, 0)
   f.update(presentation({ activity: 'feeding' }))
@@ -107,23 +95,8 @@ test('suspension discards in-flight hints and resumes the current loop from neut
   assert.equal(f.current.offsetY, 0)
   f.tick()
   assert.equal(f.current.offsetY, 2)
-  f.update(presentation({ attention: 'proposal' }))
+  f.update(presentation())
   assert.equal(f.current.state, 'idle')
-})
-
-test('unseen attention is deferred only while still current, with no background catch-up', () => {
-  const f = fixture()
-  f.update(presentation({ attention: 'proposal' }), false)
-  assert.equal(f.pending.size, 0)
-  f.update(presentation({ activity: 'thinking', attention: 'proposal' }))
-  assert.equal(f.current.state, 'focus')
-  f.update(presentation({ attention: 'proposal' }))
-  assert.equal(f.current.state, 'attention')
-  const g = fixture()
-  g.update(presentation({ attention: 'proposal' }), false)
-  g.update(presentation(), false)
-  g.update()
-  assert.equal(g.current.state, 'idle')
 })
 
 test('unavailability, identity change, pause and destroy invalidate late callbacks', () => {
@@ -166,8 +139,6 @@ test('direct interaction is a finite R07 cue, subordinate to facts and never que
   f.animator.update(presentation(), false, 3)
   f.animator.update(presentation(), true, 3)
   assert.equal(f.current.state, 'idle')
-  f.animator.update(presentation({ attention: 'proposal' }), true, 4)
-  assert.equal(f.current.state, 'attention')
   f.animator.update(presentation(), true, 5)
   assert.equal(f.current.state, 'greeting')
   f.animator.update(presentation({ activity: 'thinking' }), true, 5)

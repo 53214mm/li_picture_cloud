@@ -26,8 +26,6 @@ async function fixture(page, chatMode, { streamGate = null } = {}) {
       if (streamGate) await streamGate.promise
       return route.fulfill({ contentType: 'text/event-stream', body: 'data:你好呀。\n\nevent:done\ndata:\n\n' })
     }
-    if (path === '/api/companion/proposals/active') return ok(route, null)
-    if (path === '/api/companion/contract') return ok(route, { active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 1 })
     if (path.includes('tag_category')) return ok(route, { tagList: [], categoryList: [] })
     return ok(route, { records: [], total: 0 })
   })

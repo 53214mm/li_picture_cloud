@@ -54,7 +54,6 @@
         v-for="pic in pictures"
         :key="pic.id"
         class="gallery-card"
-        :data-observation-picture="pic.id" :data-observation-version="pic.updateTime || ''"
         role="link"
         tabindex="0"
         :aria-label="`查看图片：${pic.name || '未命名'}`"

@@ -6,7 +6,7 @@ import { mapCompanionPresentation } from '../src/presentation/companionPresentat
 import { createCompanionAnimator } from '../src/presentation/companionAnimation.js'
 
 // Synthetic motion-capable fixture preserves controller downgrade coverage.
-const observed = mapCompanionPresentation({ homeStatus: 'ready', home: { companion: { id: '7', lifeStage: 'LIGHT' } }, proposal: { status: 'PENDING' } })
+const observed = mapCompanionPresentation({ homeStatus: 'ready', home: { companion: { id: '7', lifeStage: 'LIGHT' } } })
 const presentation = { ...observed, appearance: { ...observed.appearance, allowIdle: true } }
 function clock() {
   const pending = new Map()
@@ -22,13 +22,13 @@ function clock() {
   } }
 }
 
-test('R13 downgrade stops the same clock and never renews a consumed proposal quota', () => {
+test('R13 downgrade stops the same clock and resumes the idle loop from neutral', () => {
   const c = clock()
   const update = viewportWidth => c.animator.update(presentation, mapCompanionRenderPolicy({ viewportWidth }).allowMotion)
   update(390)
   assert.equal(c.pending.size, 0)
   update(1024)
-  assert.equal(c.current.state, 'attention')
+  assert.equal(c.current.state, 'idle')
   const late = [...c.pending.values()][0].callback
   update(767)
   assert.equal(c.current.state, 'static')
@@ -50,7 +50,7 @@ test('R13 never overrides user pause or an existing visibility gate', () => {
       assert.equal(c.pending.size, 0)
     }
   }
-  c.animator.update({ ...presentation, attention: 'none' }, true)
+  c.animator.update(presentation, true)
   assert.equal(c.current.state, 'idle')
   c.animator.destroy()
 })

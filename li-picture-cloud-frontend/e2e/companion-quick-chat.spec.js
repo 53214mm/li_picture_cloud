@@ -7,7 +7,7 @@ const dialog = page => page.getByRole('dialog', { name: '和绫页互动' })
 function gate() { let release; const promise = new Promise(resolve => { release = resolve }); return { promise, release } }
 const shell = page => page.locator('.sidebar').getByRole('button', { name: '和绫页互动' })
 async function fixture(page, overrides = {}) {
-  const state = { calls: [], messages: [], errors: [], companion, proposal: null, user: { id: '42', userName: 'R12', userRole: 'user' }, ...overrides }
+  const state = { calls: [], messages: [], errors: [], companion, user: { id: '42', userName: 'R12', userRole: 'user' }, ...overrides }
   page.on('pageerror', error => state.errors.push(error.message))
   await page.route(url => url.pathname.startsWith('/api/'), async route => {
     const path = new URL(route.request().url()).pathname
@@ -22,8 +22,6 @@ async function fixture(page, overrides = {}) {
       state.messages.push({ role: 'USER', content: message }, { role: 'COMPANION', content: '听见了。' })
       return route.fulfill({ contentType: 'text/event-stream', body: 'data:听见了。\n\nevent:done\ndata:\n\n' })
     }
-    if (path === '/api/companion/proposals/active') return ok(route, state.proposal)
-    if (path === '/api/companion/contract') return ok(route, { active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 1 })
     if (path.includes('tag_category')) return ok(route, { tagList: [], categoryList: [] })
     return ok(route, { records: [], total: 0 })
   })
@@ -33,7 +31,7 @@ async function fixture(page, overrides = {}) {
 test('R12 avatar opens chat in place, lazy reads only, and retains a draft across close/reopen', async ({ page }) => {
   const state = await fixture(page)
   await page.goto('/gallery')
-  expect(state.calls.filter(call => call.path.startsWith('/api/companion/')).every(call => call.path === '/api/companion/observation/status' && call.method === 'GET')).toBe(true)
+  expect(state.calls.filter(call => call.path.startsWith('/api/companion/'))).toEqual([])
   await shell(page).click()
   const input = dialog(page).getByLabel('对伙伴说的话')
   await expect(input).toBeEnabled()
@@ -45,7 +43,7 @@ test('R12 avatar opens chat in place, lazy reads only, and retains a draft acros
   await expect(input).toBeEnabled()
   await expect(input).toHaveValue('还没发送的草稿')
   expect(state.calls.filter(isBusinessWrite)).toEqual([])
-  expect(state.calls.filter(call => call.path.startsWith('/api/companion/')).every(call => ['/api/companion/me', '/api/companion/chat/history', '/api/companion/observation/status'].includes(call.path) && call.method === 'GET')).toBe(true)
+  expect(state.calls.filter(call => call.path.startsWith('/api/companion/')).every(call => ['/api/companion/me', '/api/companion/chat/history'].includes(call.path) && call.method === 'GET')).toBe(true)
   expect(state.errors).toEqual([])
 })
 
@@ -158,26 +156,6 @@ test('R12 uncertain chat is not retried and requires explicit history refresh be
   await expect(input).toBeEnabled()
   await expect(dialog(page).getByText('确认是否已经发出', { exact: true })).toHaveCount(1)
   expect(state.calls.filter(call => call.path.endsWith('/chat/stream'))).toHaveLength(1)
-})
-
-test('R12 pending proposal is a passive avatar hint and previews only the existing observed proposal', async ({ page }) => {
-  const state = await fixture(page, { proposal: { id: '91', status: 'PENDING', content: '一起看看最近的图片？', opportunityType: 'WEEKLY_REVIEW', impulseScore: 2 } })
-  await page.goto('/companion')
-  await expect(page.getByTestId('proposal-hint')).toBeVisible()
-  await expect(dialog(page)).not.toBeVisible()
-  // On Home the hint goes straight to the existing proposal panel.
-  await page.getByTestId('proposal-hint').click()
-  await expect(dialog(page)).not.toBeVisible()
-  await expect(page.locator('#proposal-title')).toBeFocused()
-  // Other entries still preview the observed proposal in the drawer.
-  await shell(page).click()
-  await expect(dialog(page).getByText('一起看看最近的图片？', { exact: true })).toBeVisible()
-  expect(state.calls.filter(call => call.path.endsWith('/proposals/active'))).toHaveLength(1)
-  expect(state.calls.filter(call => call.path.endsWith('/contract'))).toHaveLength(1)
-  expect(state.calls.filter(isBusinessWrite)).toEqual([])
-  await dialog(page).getByRole('button', { name: '前往回应这条提议' }).click()
-  await expect(page.locator('#proposal-title')).toBeFocused()
-  expect(state.errors).toEqual([])
 })
 
 test('R12 320px reduced-motion entry supports keyboard disclosure and does not overflow', async ({ page }, testInfo) => {

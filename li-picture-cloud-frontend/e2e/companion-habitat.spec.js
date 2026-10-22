@@ -15,8 +15,6 @@ async function fixture(page, companion = specimen) {
     calls.push({ path, method: route.request().method() })
     const data = path === '/api/user/current' ? member
       : path === '/api/companion/me' ? home
-        : path === '/api/companion/proposals/active' ? null
-          : path === '/api/companion/contract' ? { active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 24 }
             : path === '/api/space/list/page/vo' ? { records: [space] }
               : path === '/api/picture/list/page/vo' ? { records: [photo] }
                 : path === '/api/picture/get/vo' ? photo
@@ -68,7 +66,6 @@ test('keyboard room navigation preserves the static body, chat draft and request
   await expect(page.locator('.companion-body')).toHaveAttribute('data-animation-intent', 'static')
   await expect(input).toHaveValue('仍在编辑的草稿')
   expect(state.calls.filter(call => call.path === '/api/companion/me')).toHaveLength(1)
-  expect(state.calls.filter(call => call.path === '/api/companion/proposals/active')).toHaveLength(1)
   noWrites(state)
   expect(state.errors).toEqual([])
 })
@@ -179,7 +176,7 @@ test('room, resident and every existing area fit tablet and narrow phones', asyn
     expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth)).toBe(true)
     await page.screenshot({ path: testInfo.outputPath(`narrow-${area}.png`) })
   }
-  await expect(page.locator('.chat-card, .proposal-card, .memory-card, .story-card, .emoji-card, .fusion-card, .mood-card, .relationship-card, .stats-card, .timeline-card')).toHaveCount(10)
+  await expect(page.locator('.chat-card, .memory-card, .mood-card, .relationship-card, .stats-card, .timeline-card')).toHaveCount(6)
   noWrites(state)
   expect(state.errors).toEqual([])
 })

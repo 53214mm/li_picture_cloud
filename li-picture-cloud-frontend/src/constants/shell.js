@@ -36,11 +36,7 @@ export const shellMeta = {
   'space-detail': workspace('空间详情', 'spaces', 'fluid'),
   'space-analyze': workspace('空间分析', 'spaces'),
   companion: workspace('伙伴', 'companion', 'text'),
-  'companion-rehearsal': workspace('绫页试演台', 'companion'),
   'model-gateway': workspace('模型连接', 'tools'),
-  'recipe-workshop': workspace('配方', 'tools'),
   'admin-pictures': workspace('图片管理', 'admin', 'wide', true),
-  'admin-users': workspace('用户管理', 'admin', 'wide', true),
-  'admin-companion-feed-runs': workspace('喂养日志', 'admin', 'wide', true),
-  'admin-companion-feed-run-detail': workspace('喂养日志详情', 'admin', 'wide', true)
+  'admin-users': workspace('用户管理', 'admin', 'wide', true)
 }

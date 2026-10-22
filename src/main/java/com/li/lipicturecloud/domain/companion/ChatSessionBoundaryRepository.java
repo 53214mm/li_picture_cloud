@@ -11,7 +11,4 @@ public interface ChatSessionBoundaryRepository {
     Optional<Instant> lastLogin(long subjectId);
 
     void recordLogin(long subjectId, Instant loginTime);
-
-    default long chatEpoch(long subjectId) { return 0; }
-    default void advanceChatEpoch(long subjectId) { }
 }

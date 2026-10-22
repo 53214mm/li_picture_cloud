@@ -12,7 +12,6 @@ import { createRenderer, h, nextTick } from 'vue'
 const moduleUrl = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 const sourceUrl = path => new URL(`../src/${path}`, import.meta.url).href
 const detailPath = 'views/SpaceDetailView.vue'
-const adminPath = 'views/AdminCompanionFeedRunsView.vue'
 const spaceId = '9223372036854775806'
 const otherSpaceId = '9223372036854775805'
 const pictureId = '9223372036854775804'
@@ -204,12 +203,6 @@ function invoke(node, event, extra = {}) {
 }
 async function click(node) { await invoke(node, 'onClick'); await flush() }
 async function fill(node, value) { node.value = value; node.dispatch('input'); await flush() }
-async function submit(root) {
-  const form = descendants(root).find(node => node.tag === 'form')
-  assert.ok(form)
-  await invoke(form, 'onSubmit')
-  await flush()
-}
 async function mount(t, path = detailPath, overrides = {}, routeId = spaceId) {
   const fixture = await compileFixture(path, overrides, routeId)
   const root = hostNode('root')
@@ -284,26 +277,6 @@ test('R14 invalid space routes cannot trigger detail, permission, picture reads 
       assertNoWrites(fixture)
     })
   }
-})
-
-test('R14 admin picture filter transports a large decimal ID exactly and rejects invalid queries', async t => {
-  const fixture = await mount(t, adminPath)
-  await flush()
-  assert.equal(calls(fixture, 'listCompanionFeedRuns').length, 1)
-  await fill(input(fixture.root, '图片 ID'), pictureId)
-  await submit(fixture.root)
-  assert.equal(calls(fixture, 'listCompanionFeedRuns').length, 2)
-  assert.equal(calls(fixture, 'listCompanionFeedRuns')[1].args[0].pictureId, pictureId)
-  for (const invalidId of ['3e4', '1.5', '-1', 'not-a-number']) {
-    await fill(input(fixture.root, '图片 ID'), invalidId)
-    await submit(fixture.root)
-    assert.equal(calls(fixture, 'listCompanionFeedRuns').length, 2, 'invalid filter must not broaden to an unfiltered request')
-    assert.match(text(fixture.root), /ID|标识|编号/)
-  }
-  await fill(input(fixture.root, '图片 ID'), otherPictureId)
-  await submit(fixture.root)
-  assert.equal(calls(fixture, 'listCompanionFeedRuns').at(-1).args[0].pictureId, otherPictureId)
-  assertNoWrites(fixture)
 })
 
 test('R14 delayed detail reads show loading, and failures offer a read-only explicit retry rather than absence', async t => {
@@ -638,60 +611,6 @@ test('R14 individual picture toggles preserve exact distinct neighboring long ID
   assert.deepEqual(calls(fixture, 'editPictureByBatch')[0].args[0].pictureIdList, [otherPictureId])
 })
 
-test('R14 admin invalid filters retain known rows and cannot claim a successful empty result', async t => {
-  const run = { runId: 'run-1', userName: '原有用户', pictureId, pictureName: '原有日志图片', status: 'COMPLETED' }
-  const fixture = await mount(t, adminPath, {
-    listCompanionFeedRuns: async () => ({ records: [run], total: 1 })
-  })
-  await flush()
-  const table = findClass(fixture.root, 'observation-table')
-  for (const invalidId of ['9223372036854775808', '0', '01', '+1']) {
-    await fill(input(fixture.root, '图片 ID'), invalidId)
-    await submit(fixture.root)
-    assert.equal(calls(fixture, 'listCompanionFeedRuns').length, 1)
-    assert.equal(findClass(fixture.root, 'observation-table') === table, true)
-    assert.match(text(fixture.root), /原有日志图片/)
-    assert.doesNotMatch(text(fixture.root), /还没有匹配的喂养记录/)
-  }
-  await fill(input(fixture.root, '图片 ID'), `  ${pictureId}  `)
-  await submit(fixture.root)
-  assert.equal(calls(fixture, 'listCompanionFeedRuns').at(-1).args[0].pictureId, pictureId)
-  assertNoWrites(fixture)
-})
-
-test('R14 the latest admin reload ignores older success and error responses', async t => {
-  for (const lateOutcome of ['resolve', 'reject']) {
-    await t.test(lateOutcome, async t => {
-      const oldRuns = deferred(), newRuns = deferred()
-      const fixture = await mount(t, adminPath, { listCompanionFeedRuns: () => oldRuns.promise })
-      await flush()
-      fixture.handlers.listCompanionFeedRuns = () => newRuns.promise
-      await click(button(fixture.root, '重置'))
-      newRuns.resolve({ records: [{ runId: 'new', pictureName: '最新喂养记录', status: 'COMPLETED' }], total: 1 })
-      await flush()
-      if (lateOutcome === 'resolve') oldRuns.resolve({ records: [{ runId: 'old', pictureName: '过期喂养记录' }], total: 1 })
-      else oldRuns.reject(new Error('过期喂养读取错误'))
-      await flush()
-      assert.match(text(fixture.root), /最新喂养记录/)
-      assert.doesNotMatch(text(fixture.root), /过期喂养|加载中|还没有匹配的喂养记录/)
-      assertNoWrites(fixture)
-    })
-  }
-})
-
-test('R14 admin unmount ignores a pending read response', async t => {
-  const runs = deferred()
-  const fixture = await mount(t, adminPath, { listCompanionFeedRuns: () => runs.promise })
-  await flush()
-  const before = fixture.calls.length
-  fixture.unmount()
-  runs.resolve({ records: [{ runId: 'late', pictureName: '卸载后回调' }], total: 1 })
-  await flush()
-  assert.equal(fixture.root.children.length, 0)
-  assert.equal(fixture.calls.length, before)
-  assertNoWrites(fixture)
-})
-
 test('R14 a pending or failed page change retains the last successful page and retries the requested page', async t => {
   const fixture = await mount(t, detailPath, {
     listPictureVOByPage: async () => ({ records: [savedPicture], total: 25 })
@@ -871,20 +790,3 @@ test('R14 route and account changes clear upload, batch, edit and share drafts b
   }
 })
 
-test('R14 admin initialization cannot start a read or redirect after unmount', async () => {
-  for (const isAdmin of [true, false]) {
-    const fixture = await compileFixture(adminPath)
-    const auth = deferred()
-    fixture.userStore.ensureCurrentUser = () => auth.promise
-    fixture.userStore.isAdmin = isAdmin
-    const root = hostNode('root')
-    const app = renderer.createApp(fixture.component)
-    app.component('RouterLink', { props: ['to'], setup: (props, { slots }) => () => h('a', { href: props.to }, slots.default?.()) })
-    app.mount(root)
-    app.unmount()
-    auth.resolve({ id: '42' })
-    await flush()
-    assert.equal(calls(fixture, 'listCompanionFeedRuns').length, 0)
-    assert.equal(calls(fixture, 'replace').length, 0)
-  }
-})

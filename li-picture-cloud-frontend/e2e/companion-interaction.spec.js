@@ -21,8 +21,6 @@ async function fixture(page) {
     if (url.pathname.includes('/picture/list/page')) return ok(route, { records: [state.photo, { ...photo, id: '12', name: '另一张图片' }], total: 2 })
     if (url.pathname === '/api/space/list/page/vo') return ok(route, { records: [space], total: 1 })
     if (url.pathname === '/api/companion/me') return ok(route, { companion: specimen, recentGrowth: [], nutrition: {}, mood: null, relationship: null, chatPolicy: 'DEMO' })
-    if (url.pathname === '/api/companion/proposals/active') return ok(route, null)
-    if (url.pathname === '/api/companion/contract') return ok(route, { active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 1 })
     return ok(route, { records: [], total: 0 })
   })
   return state
@@ -56,7 +54,7 @@ test('Shell keyboard interaction traps focus, restores it and does not manufactu
   await page.keyboard.press('Escape')
   await expect(shell(page)).toBeFocused()
   await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden')
-  expect(state.calls.filter(call => call.path.startsWith('/api/companion/')).every(call => ['/api/companion/me', '/api/companion/chat/history', '/api/companion/observation/status'].includes(call.path) && call.method === 'GET')).toBe(true)
+  expect(state.calls.filter(call => call.path.startsWith('/api/companion/')).every(call => ['/api/companion/me', '/api/companion/chat/history'].includes(call.path) && call.method === 'GET')).toBe(true)
   await shell(page).click()
   await expect(panel(page).getByLabel('对伙伴说的话')).toBeVisible()
   await expect(page).toHaveURL(/\/gallery$/)

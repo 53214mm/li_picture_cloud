@@ -7,7 +7,7 @@ import { setImmediate } from 'node:timers/promises'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { createRenderer, h, nextTick, ref } from 'vue'
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
-import { siteNavigationIntent } from '../src/presentation/sitePresenceNavigation.js'
+import { siteNavigationIntent } from '../src/presentation/navigationIntent.js'
 
 // Compile and mount the production SFC through a real RouterView. Substitute
 // only API/store/modal boundaries; retain setup state to detect abandoned writes.
@@ -41,7 +41,6 @@ async function compileFixture(overrides) {
     export const handlers = {};
     export const calls = [];
     export const editorInstances = [];
-    export const SITE_PRESENCE_KEY = Symbol('site-presence');
     export const COMPANION_UI_ENABLED = true;
     export const userStore = reactive({ currentUser: { id: '${accountId}', userRole: 'admin' },
       get isLoggedIn() { return !!this.currentUser; }, get isAdmin() { return this.currentUser?.userRole === 'admin'; } });
@@ -70,7 +69,7 @@ async function compileFixture(overrides) {
   const aliases = {
     vue: import.meta.resolve('vue'), 'vue-router': import.meta.resolve('vue-router'),
     '@/components/ShareModal.vue': stub, '@/components/AddToSpaceButton.vue': stub, '@/components/ImageEditModal.vue': editorStub,
-    '@/presentation/sitePresence': boundaryUrl, '@/config/features': boundaryUrl
+    '@/config/features': boundaryUrl
   }
   const filename = new URL('../src/views/PictureDetailView.vue', import.meta.url)
   const { descriptor, errors } = parse(await readFile(filename, 'utf8'), { filename: filename.pathname })
@@ -153,17 +152,15 @@ async function mount(t, overrides = {}, initial = `/picture/${pictureId}`, early
   })
   router.beforeEach(to => siteNavigationIntent(to))
   if (earlyGuard) router.beforeEach(earlyGuard)
-  const events = []
   const app = renderer.createApp({ render: () => h(RouterView, {}, {
     default: ({ Component }) => Component ? h(Component, { ref: activeView }) : null
   }) })
   app.use(router)
-  app.provide(fixture.SITE_PRESENCE_KEY, { pictureOpened: (...args) => events.push(args) })
   await router.push(initial); await router.isReady(); app.mount(root); await flush()
   let mounted = true
   const unmount = () => { if (mounted) { mounted = false; app.unmount() } }
   t.after(unmount)
-  return { ...fixture, root, router, events, unmount,
+  return { ...fixture, root, router, unmount,
     get instance() { return activeView.value?.$ }, get state() { return activeView.value?.$?.setupState }
   }
 }
@@ -173,12 +170,10 @@ test('detail loads before optional metadata/permissions and emits only a zero-pa
   const f = await mount(t, { getPictureTagCategory: () => meta.promise, getMyPicturePermissions: () => access.promise })
   assert.match(text(f.root), /当前获准图片/)
   assert.equal(f.state.loading, false)
-  assert.deepEqual(f.events, [[]])
   assert.deepEqual(calls(f, 'getPictureVOById').map(call => call.args), [[pictureId]])
   meta.resolve({ categoryList: ['建筑'] }); access.resolve(['picture:view']); await flush()
   assert.deepEqual(f.state.categoryList, ['建筑'])
   assert.deepEqual(f.state.permissions, ['picture:view'])
-  assert.equal(f.events.length, 1)
 })
 
 for (const outcome of ['success', 'failure']) {
@@ -196,7 +191,6 @@ for (const outcome of ['success', 'failure']) {
     assert.equal(f.state.picture.id, otherId)
     assert.match(text(f.root), /新图片/)
     assert.doesNotMatch(text(f.root), /旧错误|当前获准图片/)
-    assert.equal(f.events.length, 1)
   })
 
   test(`account replacement discards stale ${outcome} before any picture/event/permission write`, async t => {
@@ -209,11 +203,9 @@ for (const outcome of ['success', 'failure']) {
     await flush()
     assert.equal(f.state.picture, null)
     assert.equal(f.state.loading, true)
-    assert.deepEqual(f.events, [])
     assert.equal(calls(f, 'getMyPicturePermissions').length, 0)
     current.resolve({ ...savedPicture, name: '新账号获准图片' }); await flush()
     assert.match(text(f.root), /新账号获准图片/)
-    assert.equal(f.events.length, 1)
   })
 
   test(`unmount rejects late ${outcome} and metadata without changing retained setup state`, async t => {
@@ -229,7 +221,6 @@ for (const outcome of ['success', 'failure']) {
     assert.equal(state.loading, loadingAfterUnmount)
     assert.equal(state.detailError, '')
     assert.deepEqual(state.categoryList, [])
-    assert.deepEqual(f.events, [])
     assert.equal(calls(f, 'getMyPicturePermissions').length, 0)
   })
 }
@@ -241,13 +232,11 @@ test('failed, missing, mismatched and unsafe detail IDs never signal an opening'
       assert.equal(f.state.picture, null)
       assert.equal(f.state.loading, false)
       assert.ok(f.state.detailError)
-      assert.deepEqual(f.events, [])
       assert.equal(calls(f, 'getMyPicturePermissions').length, 0)
     })
   }
   const f = await mount(t, {}, '/picture/invalid-id')
   assert.deepEqual(calls(f, 'getPictureVOById'), [])
-  assert.deepEqual(f.events, [])
 })
 
 test('stale permission/space and metadata replies cannot restore previous-account controls', async t => {
@@ -279,15 +268,12 @@ for (const destination of ['/gallery', `/picture/${otherId}`, `/picture/${pictur
     const navigation = f.router.push(destination); await flush()
     first.resolve(savedPicture); await flush()
     assert.equal(f.state.picture, null)
-    assert.deepEqual(f.events, [])
     guard.resolve(false); await navigation; await flush()
     assert.equal(f.state.picture.id, pictureId)
-    assert.equal(f.events.length, 1, 'A canceled first opening may emit after its fresh authorized read')
     remove()
     const stop = f.router.beforeEach(() => false)
     await f.router.push(destination); await flush(); stop()
     assert.equal(f.state.picture.id, pictureId)
-    assert.equal(f.events.length, 1, 'Recovery of an already-open picture must not replay the opening')
   })
 }
 
@@ -316,7 +302,6 @@ for (const [name, mutation] of Object.entries(mutations)) {
       assert.equal(calls(f, 'getPictureVOById').length, beforeReads)
       assert.equal(f.state.showEditModal, true)
       assert.equal(f.state.modalError, '')
-      assert.equal(f.events.length, 2, 'Only authorized account loads may signal openings')
     })
   }
 }
@@ -329,15 +314,13 @@ test('mutation refresh is guarded across newer route and does not replay a pictu
   })
   f.state.openEditModal(); const pending = f.state.handleEdit(); await flush()
   assert.equal(reads, 2)
-  assert.equal(f.events.length, 1)
   await navigate(f, `/picture/${otherId}`)
   refresh.resolve({ ...savedPicture, name: '旧刷新结果' }); await pending; await flush()
   assert.equal(f.state.picture.id, otherId)
   assert.doesNotMatch(text(f.root), /旧刷新结果/)
-  assert.equal(f.events.length, 2)
 })
 
-test('current edit and review retain existing refresh behavior without extra presence events', async t => {
+test('current edit and review retain existing refresh behavior', async t => {
   const f = await mount(t, { editPicture: async () => true, reviewPicture: async () => true })
   f.state.openEditModal(); await f.state.handleEdit(); await flush()
   await f.state.handleReview(1); await flush()
@@ -345,7 +328,6 @@ test('current edit and review retain existing refresh behavior without extra pre
   assert.equal(f.state.saving, false)
   assert.equal(f.state.reviewing, false)
   assert.equal(f.state.showEditModal, false)
-  assert.deepEqual(f.events, [[]])
 })
 
 
@@ -357,11 +339,9 @@ test('first router intent invalidates same-component callbacks before an earlier
   const pending = f.router.push(`/picture/${otherId}`); await flush()
   old.resolve(savedPicture); await flush()
   assert.equal(f.state.picture, null)
-  assert.deepEqual(f.events, [])
   assert.equal(reads, 1)
   auth.resolve(true); await pending; await flush()
   assert.equal(f.state.picture.id, otherId)
-  assert.equal(f.events.length, 1)
 })
 
 test('an older canceled navigation cannot settle a newer pending navigation or revive old detail reads', async t => {
@@ -376,11 +356,9 @@ test('an older canceled navigation cannot settle a newer pending navigation or r
   assert.equal(reads, 1, 'An older failure must not reload while the newer navigation is pending')
   old.resolve(savedPicture); await flush()
   assert.equal(f.state.picture, null)
-  assert.deepEqual(f.events, [])
   secondGuard.resolve(false); await second; await flush()
   assert.equal(reads, 2)
   assert.equal(f.state.picture.id, pictureId)
-  assert.deepEqual(f.events, [[]])
 })
 
 for (const [name, mutation] of Object.entries(mutations)) {
@@ -398,7 +376,6 @@ for (const [name, mutation] of Object.entries(mutations)) {
       assert.deepEqual([state.picture, state.loading, state.saving, state.reviewing, state.modalError, state.showImageEditor, state.showEditModal], snapshot)
       assert.equal(calls(f, 'getPictureVOById').length, 1)
       assert.equal(f.router.currentRoute.value.name, undefined, 'Unmounted router must not navigate again')
-      assert.deepEqual(f.events, [[]])
     })
   }
 
@@ -415,7 +392,6 @@ for (const [name, mutation] of Object.entries(mutations)) {
     guard.resolve(false); await navigation; await flush()
     assert.equal(f.state.picture.id, pictureId)
     assert.equal(calls(f, 'getPictureVOById').length, 2)
-    assert.deepEqual(f.events, [[]])
   })
 }
 

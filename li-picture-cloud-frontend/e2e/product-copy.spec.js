@@ -42,49 +42,6 @@ async function openAdvanced(page) {
   await expect(advanced).toHaveAttribute('open', '')
 }
 
-test('recipe delayed, failed, and successful empty reads have distinct copy and explicit recovery', async ({ page }) => {
-  let release
-  const held = new Promise(resolve => { release = resolve })
-  let failed = true
-  const mutations = await fixture(page, {
-    '/api/recipe/templates': async route => {
-      await held
-      return failed ? route.fulfill({ json: { code: 50000, message: '模板暂不可用' } }) : ok(route, [])
-    }
-  })
-  await page.goto('/recipes')
-  await expect(page.getByText('正在加载模板…', { exact: true })).toBeVisible()
-  await expect(page.getByText('暂无可用模板。')).toHaveCount(0)
-  release()
-  await expect(page.getByText('模板暂不可用', { exact: true })).toBeVisible()
-  await expect(page.getByText('正在加载模板…', { exact: true })).toHaveCount(0)
-  await expect(page.getByText('暂无可用模板。')).toHaveCount(0)
-  failed = false
-  await page.getByRole('button', { name: '重新加载模板', exact: true }).click()
-  await expect(page.getByText('暂无可用模板。')).toBeVisible()
-  await expect(page.getByText('模板暂不可用', { exact: true })).toHaveCount(0)
-  expect(mutations).toEqual([])
-})
-
-test('recipe explains confirmation and record versions without sending an execution', async ({ page }) => {
-  const recipe = { id: '91', name: '测试配方', status: 'ENABLED', latestVersion: 2 }
-  const mutations = await fixture(page, {
-    '/api/recipe': route => ok(route, [recipe]),
-    '/api/recipe/capabilities': route => ok(route, [{ capability: 'STORY_DRAFT', open: true }]),
-    '/api/recipe/91': route => ok(route, {
-      recipe, latest: { version: 2, whenJson: '{"type":"WEEKLY_REVIEW"}', ifJson: '[]', thenJson: '{"capability":"STORY_DRAFT"}' }, versions: [{ version: 1 }, { version: 2 }]
-    }),
-    '/api/recipe/91/executions': route => ok(route, [{ id: '92', status: 'PENDING_CONFIRM', recipeVersion: 1, sourcePictureIds: ['100'], opportunityKey: 'weekly-1' }])
-  })
-  await page.goto('/recipes')
-  await page.getByRole('button', { name: '查看', exact: true }).click()
-  await expect(page.getByText('未添加额外条件。触发后仍需确认执行。')).toBeVisible()
-  await expect(page.getByText('发布后，新试运行使用新版本；已有记录仍按记录中的版本确认执行。')).toBeVisible()
-  await expect(page.getByRole('button', { name: /确认执行（使用试运行的 1 张图片）/ })).toBeEnabled()
-  await expect(page.getByText('每次触发都会执行动作', { exact: false })).toHaveCount(0)
-  expect(mutations).toEqual([])
-})
-
 test('space tiers show finite limits without unlimited promises on a narrow screen', async ({ page }, testInfo) => {
   await fixture(page)
   await page.setViewportSize({ width: 320, height: 844 })

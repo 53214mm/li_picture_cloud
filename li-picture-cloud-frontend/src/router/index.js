@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
 import { useUserStore } from '@/stores/user'
 import { COMPANION_UI_ENABLED } from '@/config/features'
-import { siteNavigationIntent } from '@/presentation/sitePresenceNavigation'
+import { siteNavigationIntent } from '@/presentation/navigationIntent'
 import { shellMeta } from '@/constants/shell'
 
 const routes = [
@@ -78,38 +78,15 @@ const routes = [
 // 这是构建期开关：默认生产包没有伙伴路由/chunk，后端开关与它都开启时才形成完整入口。
 if (COMPANION_UI_ENABLED) {
   routes.push({
-    path: '/companion/rehearsal',
-    name: 'companion-rehearsal',
-    component: () => import('@/views/CompanionRehearsalView.vue')
-  })
-  routes.push({
     path: '/companion',
     name: 'companion',
     component: () => import('@/views/CompanionView.vue'),
     meta: { requiresAuth: true }
   })
   routes.push({
-    path: '/admin/companion-feed-runs',
-    name: 'admin-companion-feed-runs',
-    component: () => import('@/views/AdminCompanionFeedRunsView.vue'),
-    meta: { requiresAuth: true }
-  })
-  routes.push({
-    path: '/admin/companion-feed-runs/:runId',
-    name: 'admin-companion-feed-run-detail',
-    component: () => import('@/views/AdminCompanionFeedRunDetailView.vue'),
-    meta: { requiresAuth: true }
-  })
-  routes.push({
     path: '/model-gateway',
     name: 'model-gateway',
     component: () => import('@/views/ModelGatewayView.vue'),
-    meta: { requiresAuth: true }
-  })
-  routes.push({
-    path: '/recipes',
-    name: 'recipe-workshop',
-    component: () => import('@/views/RecipeWorkshopView.vue'),
     meta: { requiresAuth: true }
   })
 }

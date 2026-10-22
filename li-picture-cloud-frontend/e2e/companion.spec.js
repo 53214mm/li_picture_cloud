@@ -91,10 +91,9 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(page.getByTestId('relationship-value-closeness')).toHaveText('1')
   await expect(page.getByTestId('relationship-value-tacit')).toHaveText('1')
   await expect(page.getByTestId('relationship-value-recentFeedback')).toHaveText('5')
-  // 站内对话与主动提案面板：Demo 档聊天不调模型，契约默认关闭所以没有主动提案。
+  // 站内对话：Demo 档聊天不调模型。
   await visitRoomZone(page, '窗边对话')
   await expect(page.getByRole('heading', { name: '和绫页聊聊' })).toBeVisible()
-  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。')).toBeVisible()
   // Demo 档对话：发送一条消息收到确定性回复，用户气泡与伙伴气泡都在。
   await page.getByLabel('对伙伴说的话').fill('你好呀')
   await page.getByRole('button', { name: '发送' }).click()
@@ -189,7 +188,7 @@ test('awakens a companion and recovers one private-picture feed without double g
   await expect(labels.nth(1)).toHaveText('视觉服务暂不可用，本次使用图片元数据营养')
 })
 
-test('rendering Lingye preserves the existing identity, growth, history and contract', async ({ page }) => {
+test('rendering Lingye preserves the existing identity, growth and history', async ({ page }) => {
   await login(page)
   async function read(path) {
     const response = await page.request.get(`/api/companion/${path}`)
@@ -206,8 +205,7 @@ test('rendering Lingye preserves the existing identity, growth, history and cont
         familiarity: home.relationship.familiarity, trust: home.relationship.trust,
         closeness: home.relationship.closeness, tacit: home.relationship.tacit
       },
-      memories: await read('memories'), history: await read('chat/history'),
-      contract: await read('contract'), proposal: await read('proposals/active')
+      memories: await read('memories'), history: await read('chat/history')
     }
   }
   const before = await snapshot()
@@ -231,18 +229,15 @@ test('real quick chat shares one send and persisted history with the full Home v
   await login(page)
   const errors = []
   const calls = []
-  const observationStatusMethods = []
   page.on('pageerror', error => errors.push(error.message))
   page.on('request', request => {
     const path = new URL(request.url()).pathname
     if (path.startsWith('/api/companion/')) calls.push(path)
-    if (path === '/api/companion/observation/status') observationStatusMethods.push(request.method())
   })
   await page.goto('/gallery')
   const entry = page.locator('.sidebar').getByRole('button', { name: '和绫页互动' })
   await expect(entry).toBeVisible()
-  expect(calls.filter(path => path !== '/api/companion/observation/status')).toEqual([])
-  expect(observationStatusMethods.every(method => method === 'GET')).toBe(true)
+  expect(calls).toEqual([])
   await entry.click()
   const drawer = page.getByRole('dialog', { name: '和绫页互动' })
   const input = drawer.getByLabel('对伙伴说的话')
@@ -315,36 +310,3 @@ test('memory lifecycle supports confirm correct ignore and delete', async ({ pag
   await expect(page.getByText('伙伴重新想起：那是安静的清晨。')).toBeHidden()
 })
 
-test('enabling the contract produces a gated weekly review proposal', async ({ page }) => {
-  await login(page)
-  await page.goto('/companion')
-  await expect(page).toHaveURL(/\/companion$/)
-
-  // 默认契约关闭：没有主动提案。
-  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。'))
-    .toBeVisible()
-
-  // 开启契约：全天允许（起止相同 = 不设安静时段），频率保持 72 小时。
-  await page.getByRole('button', { name: '主动设置' }).click()
-  await page.getByRole('checkbox', { name: /允许伙伴主动提议/ }).check()
-  await page.locator('.contract-times input').nth(0).fill('00:00')
-  await page.locator('.contract-times input').nth(1).fill('00:00')
-  await page.getByRole('button', { name: '保存主动设置' }).click()
-
-  // 契约保存后立即重新评估：测试 1 的喂养产生每周回顾提案。
-  await expect(page.getByText('这周你喂了我 1 次。想听我讲一段我们的故事吗？')).toBeVisible()
-  await expect(page.getByText('类型 每周影像回顾')).toBeVisible()
-
-  // 接受提案 → 终态并给出正向反馈，提案消失。
-  await page.getByTestId('proposal-accept').click()
-  await expect(page.getByText('已接受这次提议。')).toBeVisible()
-  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。'))
-    .toBeVisible()
-
-  // 关闭契约后刷新，保持关闭。
-  await page.getByRole('button', { name: '主动设置' }).click()
-  await page.getByRole('checkbox', { name: /允许伙伴主动提议/ }).uncheck()
-  await page.getByRole('button', { name: '保存主动设置' }).click()
-  await expect(page.getByText('目前没有待回应的提议。可在「主动设置」中查看开关、安静时段和最短间隔。'))
-    .toBeVisible()
-})

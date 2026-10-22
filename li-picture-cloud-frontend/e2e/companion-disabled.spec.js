@@ -28,7 +28,7 @@ test('production feature-off has no Companion route, images, player or API reque
   await page.goto('/picture/11')
   await expect(page.getByRole('heading', { name: 'Feature-off picture' })).toBeVisible()
   await expect(page.getByRole('button', { name: '选给绫页' })).toHaveCount(0)
-  for (const path of ['/companion', '/model-gateway', '/recipes', '/admin/companion-feed-runs']) {
+  for (const path of ['/companion', '/model-gateway']) {
     await page.goto(path)
     await expect(page.getByRole('heading', { name: '页面不可用' })).toBeVisible()
     await expect(page.locator('.companion-page, .sprite-player, .companion-presence')).toHaveCount(0)

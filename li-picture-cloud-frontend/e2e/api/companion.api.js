@@ -52,7 +52,6 @@ test('real local fixture API story (HTTP only; not browser acceptance)', { timeo
   let owner = new FixtureSession(base)
   const other = new FixtureSession(base)
   const sessions = [owner, other]
-  let initialContract
   let grownHome
   let firstFeed
 
@@ -113,7 +112,7 @@ test('real local fixture API story (HTTP only; not browser acceptance)', { timeo
     }
   })
 
-  await stage('awaken is idempotent; authoritative Home is neutral and contract starts disabled', async () => {
+  await stage('awaken is idempotent; authoritative Home is neutral', async () => {
     const home = await owner.json('/companion/awaken', { method: 'POST' })
     assertDemoHome(home)
     decimalId(home.companion.id)
@@ -128,11 +127,6 @@ test('real local fixture API story (HTTP only; not browser acceptance)', { timeo
     assert.notEqual(decimalId(otherHome.companion.id), home.companion.id)
     assert.equal((await owner.json('/companion/me?userId=9')).companion.id, home.companion.id)
     assert.equal((await other.json('/companion/me?userId=7')).companion.id, otherHome.companion.id)
-    initialContract = await owner.json('/companion/contract')
-    assert.deepEqual(initialContract, {
-      active: false, quietStart: '23:00:00', quietEnd: '08:00:00', maxFrequencyHours: 72, revision: '0'
-    })
-    assert.equal(await owner.json('/companion/proposals/active'), null)
     assert.deepEqual((await owner.json('/companion/chat/history')).records, [])
     assert.deepEqual((await other.json('/companion/chat/history')).records, [])
   })
@@ -163,7 +157,6 @@ test('real local fixture API story (HTTP only; not browser acceptance)', { timeo
     assert.equal(skills.IMAGE_OBSERVATION, '18')
     assert.equal(skills.STORY_CREATION, '12')
     assert.equal(grownHome.companion.traits.curiosity, 0.6)
-    assert.equal(await owner.json('/companion/proposals/active'), null, 'Feeding must not enable autonomy')
     await other.json('/companion/feed', {
       method: 'POST', body: { pictureId: '102', idempotencyKey: 'r14-api-other-denied-102' },
       status: 403, code: 40101
@@ -226,34 +219,6 @@ test('real local fixture API story (HTTP only; not browser acceptance)', { timeo
     assert.equal(deleted.content, null)
     assert.equal(deleted.originalContent, null)
     assert.deepEqual((await owner.json('/companion/memories')).records, [])
-  })
-
-  await stage('opt-in contract gates a weekly proposal; ownership and terminal acceptance are enforced', async () => {
-    assert.equal((await owner.json('/companion/contract')).active, false)
-    assert.equal(await owner.json('/companion/proposals/active'), null)
-    try {
-      const enabled = await owner.json('/companion/contract', {
-        method: 'PUT', body: { active: true, quietStart: '00:00', quietEnd: '00:00', maxFrequencyHours: 72 }
-      })
-      assert.equal(enabled.active, true)
-      const proposal = await owner.json('/companion/proposals/active')
-      const id = decimalId(proposal.id)
-      assert.equal(proposal.status, 'PENDING')
-      assert.equal(proposal.opportunityType, 'WEEKLY_REVIEW')
-      assert.equal(proposal.content, '这周你喂了我 1 次。想听我讲一段我们的故事吗？')
-      assertPersistedRecord(await owner.json('/companion/proposals/active'), proposal)
-      await other.json(`/companion/proposals/${id}/accept`, { method: 'POST', status: 404, code: 40400 })
-      assert.equal((await owner.json(`/companion/proposals/${id}/accept`, { method: 'POST' })).status, 'DONE')
-      await owner.json(`/companion/proposals/${id}/accept`, { method: 'POST', status: 400, code: 40000 })
-      assert.equal(await owner.json('/companion/proposals/active'), null)
-    } finally {
-      const { active, quietStart, quietEnd, maxFrequencyHours } = initialContract
-      await owner.json('/companion/contract', { method: 'PUT', body: { active, quietStart, quietEnd, maxFrequencyHours } })
-    }
-    assert.equal((await owner.json('/companion/contract')).active, false)
-    assert.equal((await other.json('/companion/contract')).active, false)
-    assert.equal(await owner.json('/companion/proposals/active'), null)
-    assert.equal(await other.json('/companion/proposals/active'), null)
   })
 
   await stage('batch accepts exact fixture string IDs and changes only the selected owned picture (small IDs)', async () => {

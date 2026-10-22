@@ -6,7 +6,6 @@ const specimen = {
 }
 const baseMood = { energy: 0, joy: 8, loneliness: 0, inspiration: 0, irritation: 0, summary: '测试摘要' }
 const baseRelationship = { familiarity: 25, trust: 0, closeness: 0, tacit: 0, recentFeedback: 0 }
-const pendingProposal = { id: '7010', status: 'PENDING', content: '我很生气（仅文本，不是情绪信号）', opportunityType: 'WEEKLY_REVIEW', impulseScore: 2 }
 function gate() {
   let release
   const promise = new Promise(resolve => { release = resolve })
@@ -16,7 +15,7 @@ function ok(route, data) { return route.fulfill({ json: { code: 0, data } }) }
 async function fixture(page) {
   const state = {
     home: { companion: specimen, mood: baseMood, relationship: baseRelationship, recentGrowth: [], nutrition: {}, chatPolicy: 'DEMO' },
-    proposal: pendingProposal, calls: [], errors: []
+    calls: [], errors: []
   }
   page.on('pageerror', error => state.errors.push(error.message))
   await page.route(url => url.pathname.startsWith('/api/'), route => {
@@ -24,8 +23,6 @@ async function fixture(page) {
     state.calls.push(path)
     if (path === '/api/user/current') return ok(route, { id: '42', userAccount: 'r06', userName: 'R06', userRole: 'user' })
     if (path === '/api/companion/me') return ok(route, state.home)
-    if (path === '/api/companion/proposals/active') return ok(route, state.proposal)
-    if (path === '/api/companion/contract') return ok(route, { active: true, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 1 })
     if (path === '/api/space/list/page/vo') return ok(route, { records: [{ id: '51', userId: '42', spaceType: 0, spaceName: '私有空间', createTime: '2026-09-25T00:00:00Z' }] })
     if (path === '/api/picture/list/page/vo') return ok(route, { records: [{ id: '101', name: 'R06 图片', pictureUrl: '/favicon.svg' }] })
     if (path.includes('tag_category')) return ok(route, { tagList: [], categoryList: [] })
@@ -73,9 +70,7 @@ test('three surfaces consume one projection without extra Shell IO and release o
   await allSurfaces(page, 'activity', 'idle')
   await allSurfaces(page, 'affect', 'cheerful')
   await allSurfaces(page, 'rapport', 'familiar')
-  await allSurfaces(page, 'attention', 'proposal')
   expect(state.calls.filter(path => path === '/api/companion/me')).toHaveLength(1)
-  expect(state.calls.filter(path => path === '/api/companion/proposals/active')).toHaveLength(1)
   await page.locator('.sidebar').getByRole('link', { name: '图库', exact: true }).click()
   await expect(page.locator('.sidebar .companion-presence')).toHaveAttribute('data-presentation-availability', 'unobserved')
   await expect(page.locator('.sidebar .companion-presence')).toHaveAttribute('data-presentation-affect', 'neutral')
@@ -178,24 +173,6 @@ test('stream error and network failure stay neutral and reconcile history before
   expect(state.errors).toEqual([])
 })
 
-test('proposal action is bounded by its request and suppressed proposal never implies anger', async ({ page }) => {
-  const state = await fixture(page)
-  const held = gate()
-  await page.route('**/api/companion/proposals/7010/scold', async route => {
-    await held.promise
-    await ok(route, { ...pendingProposal, status: 'SUPPRESSED' })
-  })
-  await page.goto('/companion')
-  await page.getByTestId('proposal-scold').click()
-  await allSurfaces(page, 'activity', 'acknowledging')
-  held.release()
-  await allSurfaces(page, 'activity', 'idle')
-  await allSurfaces(page, 'attention', 'none')
-  await allSurfaces(page, 'affect', 'cheerful')
-  await expect(page.getByText('已停止这次提议。')).toBeVisible()
-  expect(state.errors).toEqual([])
-})
-
 test('leaving chat cancels its reader and late data cannot affect the next page or Shell', async ({ page }) => {
   const state = await fixture(page)
   await page.goto('/companion')
@@ -219,66 +196,3 @@ test('leaving chat cancels its reader and late data cannot affect the next page 
   expect(state.errors).toEqual([])
 })
 
-test('Feed refresh cannot resurrect a proposal after a concurrent scold has completed', async ({ page }) => {
-  const state = await fixture(page)
-  const feedGate = gate()
-  const actionGate = gate()
-  const readGate = gate()
-  let reads = 0
-  let readReturned = false
-  await page.goto('/companion')
-  await allSurfaces(page, 'attention', 'proposal')
-  await page.route('**/api/companion/proposals/active', async route => {
-    reads += 1
-    await readGate.promise
-    await ok(route, pendingProposal)
-    readReturned = true
-  })
-  await page.route('**/api/companion/feed', async route => {
-    await feedGate.promise
-    await ok(route, { outcome: 'FAMILIARITY', companion: specimen, growth: { id: '9001', createdTime: '2026-09-26T00:00:00Z', lifeExperienceDelta: 0, skillExperienceDelta: {}, traitDelta: {} } })
-  })
-  await page.route('**/api/companion/proposals/7010/scold', async route => {
-    await actionGate.promise
-    await ok(route, { ...pendingProposal, status: 'SUPPRESSED' })
-  })
-  await page.getByRole('button', { name: /R06 图片/ }).click()
-  await page.getByRole('button', { name: '喂给伙伴' }).click()
-  await page.getByTestId('proposal-scold').click()
-  feedGate.release()
-  await expect(page.getByRole('button', { name: '再选一张' })).toBeEnabled()
-  actionGate.release()
-  await expect(page.getByText('已停止这次提议。')).toBeVisible()
-  readGate.release()
-  if (reads) await expect.poll(() => readReturned).toBe(true)
-  await allSurfaces(page, 'attention', 'none')
-  await allSurfaces(page, 'activity', 'idle')
-  expect(state.errors).toEqual([])
-})
-
-test('contract settings wait for the server snapshot before accepting edits', async ({ page }) => {
-  const state = await fixture(page)
-  const pending = gate()
-  let saved
-  await page.route('**/api/companion/contract', async route => {
-    if (route.request().method() === 'GET') {
-      await pending.promise
-      return ok(route, { active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 72 })
-    }
-    saved = route.request().postDataJSON()
-    return ok(route, saved)
-  })
-
-  await page.goto('/companion')
-  await page.getByRole('button', { name: '主动设置' }).click()
-  await expect(page.getByText('正在加载主动设置')).toBeVisible()
-  await expect(page.getByRole('checkbox', { name: /允许伙伴主动提议/ })).toHaveCount(0)
-  pending.release()
-
-  await page.getByRole('checkbox', { name: /允许伙伴主动提议/ }).check()
-  await page.locator('.contract-times input').nth(0).fill('00:00')
-  await page.locator('.contract-times input').nth(1).fill('00:00')
-  await page.getByRole('button', { name: '保存主动设置' }).click()
-  await expect.poll(() => saved).toMatchObject({ active: true, quietStart: '00:00', quietEnd: '00:00' })
-  expect(state.errors).toEqual([])
-})

@@ -14,20 +14,18 @@ test('null or malformed optional signals degrade safely instead of throwing', ()
     assert.equal(mapCompanionPresentation(input).availability, 'unobserved')
   }
   for (const value of [null, undefined, false, 'unknown']) {
-    const state = map({ feed: value, chat: value, proposal: value })
+    const state = map({ feed: value, chat: value })
     assert.equal(state.activity, 'idle')
-    assert.equal(state.attention, 'none')
   }
 })
 
-test('availability gates identity and all activity, emotion and attention', () => {
+test('availability gates identity and all activity and emotion', () => {
   for (const [homeStatus, availability] of [['unobserved', 'unobserved'], ['loading', 'loading'], ['error', 'error'], ['unavailable', 'unavailable']]) {
-    const state = map({ homeStatus, feed: { pending: true }, chat: { phase: 'streaming' }, proposal: { status: 'PENDING' } })
+    const state = map({ homeStatus, feed: { pending: true }, chat: { phase: 'streaming' } })
     assert.equal(state.availability, availability)
     assert.equal(state.companionId, null)
     assert.equal(state.activity, 'idle')
     assert.equal(state.affect, 'neutral')
-    assert.equal(state.attention, 'none')
     assert.equal(state.appearance.allowIdle, false)
   }
   assert.equal(map({ enabled: false }).availability, 'disabled')
@@ -49,12 +47,11 @@ test('R05 keeps exact business stage and identity, adult visual and static unkno
   }
 })
 
-test('activity priority is deterministic across every combination, independent from affect and attention', () => {
-  for (const phase of ['idle', 'waiting', 'streaming']) for (const pending of [true, false]) for (const busy of [true, false]) {
-    const state = map({ chat: { phase }, feed: { pending }, proposal: { status: 'PENDING', busy } })
-    const expected = phase === 'streaming' ? 'responding' : phase === 'waiting' ? 'thinking' : pending ? 'feeding' : busy ? 'acknowledging' : 'idle'
+test('activity priority is deterministic across every combination, independent from affect', () => {
+  for (const phase of ['idle', 'waiting', 'streaming']) for (const pending of [true, false]) {
+    const state = map({ chat: { phase }, feed: { pending } })
+    const expected = phase === 'streaming' ? 'responding' : phase === 'waiting' ? 'thinking' : pending ? 'feeding' : 'idle'
     assert.equal(state.activity, expected)
-    assert.equal(state.attention, 'proposal')
     assert.equal(state.affect, 'neutral')
   }
 })
@@ -84,17 +81,11 @@ test('relationship is a separate presentation band, never an emotion or business
   assert.equal(map({ home: { ...home, relationship: null } }).rapport, 'neutral')
 })
 
-test('proposal must be currently observed PENDING, not loading, failed, terminal, unknown or inferred from text', () => {
-  for (const status of [null, 'DONE', 'IGNORED', 'SUPPRESSED', 'EXPIRED', 'FUTURE']) assert.equal(map({ proposal: { status } }).attention, 'none')
-  for (const flags of [{ loading: true }, { error: true }]) assert.equal(map({ proposal: { status: 'PENDING', ...flags } }).attention, 'none')
-  assert.equal(map({ proposal: { status: 'PENDING' } }).attention, 'proposal')
-})
-
 test('operation failures do not become anger or mask another pending operation', () => {
-  const state = map({ feed: { error: true }, chat: { phase: 'waiting', error: true }, proposal: { error: true } })
+  const state = map({ feed: { error: true }, chat: { phase: 'waiting', error: true } })
   assert.equal(state.activity, 'thinking')
   assert.equal(state.affect, 'neutral')
-  assert.deepEqual(state.issues, ['feed-failed', 'chat-failed', 'proposal-failed'])
+  assert.deepEqual(state.issues, ['feed-failed', 'chat-failed'])
   assert.equal(map({ feed: { outcome: 'GROWN' } }).activity, 'idle')
 })
 

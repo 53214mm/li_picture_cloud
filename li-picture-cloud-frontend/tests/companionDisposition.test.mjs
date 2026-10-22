@@ -78,7 +78,6 @@ test('R11 high-mood idle choices use existing affect ordering and never infer sl
       const p = map({ mood: { ...mood, [axis]: value, summary: '睡觉、庆祝、发起聊天' } })
       assert.equal(p.disposition.mood.idleTone, value >= 60 ? tone : 'neutral')
       assert.equal(mapCompanionAnimation(p).state, 'static')
-      assert.equal(p.attention, 'none')
     }
   }
   assert.equal(map({ mood: { energy: 70, joy: 70, loneliness: 70, inspiration: 70, irritation: 70 } }).disposition.mood.idleTone, 'energetic')
@@ -142,18 +141,17 @@ test('R11 idle changes keep one timer, invalidate old callbacks and neutralize i
   assert.equal(c.pending.size, 0)
 })
 
-test('R11 mood updates cannot reset focus or replay proposal and direct-interaction cues', () => {
+test('R11 mood updates cannot reset focus or replay direct-interaction cues', () => {
   const c = clock()
   const current = (axis, flags = {}) => map({ mood: { ...mood, [axis]: 90 } }, flags)
   c.animator.update(current('joy', { chat: { phase: 'waiting' } }), true)
   const timer = c.timer
   c.animator.update(current('energy', { chat: { phase: 'streaming' } }), true)
   assert.equal(c.timer, timer)
-  c.animator.update(current('energy', { proposal: { status: 'PENDING' } }), true)
-  for (let i = 0; i < 4; i++) c.tick()
+  c.animator.update(current('energy'), true)
   assert.equal(c.value.state, 'idle')
   assert.equal(c.timer.duration, 2800)
-  c.animator.update(current('joy', { proposal: { status: 'PENDING' } }), true)
+  c.animator.update(current('joy'), true)
   assert.equal(c.value.state, 'idle')
   assert.equal(c.timer.duration, 3600)
   c.animator.update(current('energy'), true, 1)

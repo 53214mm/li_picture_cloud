@@ -2,11 +2,10 @@ import { test, expect } from '@playwright/test'
 import { freezeClock } from './helpers/clock.js'
 
 const specimen = { id: '7001', lifeStage: 'LIGHT', lifeExperience: '42', level: 1, levelStartExperience: '0', nextLevelExperience: '100', revision: '9', traits: {}, skills: [] }
-const proposal = { id: '7010', status: 'PENDING', content: '生气、庆祝、说话都不是动作信号', opportunityType: 'WEEKLY_REVIEW', impulseScore: 2 }
 const ok = (route, data) => route.fulfill({ json: { code: 0, data } })
 function gate() { let release; const promise = new Promise(resolve => { release = resolve }); return { promise, release } }
 
-async function fixture(page, attention = false) {
+async function fixture(page) {
   const errors = []
   const images = []
   const calls = []
@@ -19,8 +18,6 @@ async function fixture(page, attention = false) {
     const path = new URL(route.request().url()).pathname
     if (path === '/api/user/current') return ok(route, { id: '42', userName: 'R07', userRole: 'user' })
     if (path === '/api/companion/me') return ok(route, { companion: specimen, mood: null, relationship: null, recentGrowth: [], nutrition: {}, chatPolicy: 'DEMO' })
-    if (path === '/api/companion/proposals/active') return ok(route, attention ? proposal : null)
-    if (path === '/api/companion/contract') return ok(route, { active: true, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 1 })
     if (path === '/api/space/list/page/vo') return ok(route, { records: [{ id: '51', userId: '42', spaceType: 0, spaceName: '私有空间' }] })
     if (path === '/api/picture/list/page/vo') return ok(route, { records: [{ id: '101', name: 'R07 图片', pictureUrl: '/favicon.svg' }] })
     if (path.includes('tag_category')) return ok(route, { tagList: [], categoryList: [] })
@@ -68,32 +65,6 @@ async function hidden(page, value) {
   }, value)
 }
 
-test('proposal attention stays static on all surfaces without requesting blink frames', async ({ page }, testInfo) => {
-  const state = await fixture(page, true)
-  await freezeClock(page)
-  const player = await loaded(page)
-  await intent(page, 'static')
-  await expect(player).toHaveAttribute('data-animation-intent', 'static')
-  await page.clock.runFor(600)
-  await expect(page.locator('.sprite-player')).toHaveCount(0)
-  await expect(player.locator('.sprite-atlas')).toHaveCount(0)
-  await page.screenshot({ path: testInfo.outputPath('attention-desktop.png') })
-  await page.clock.runFor(140)
-  await expect(page.locator('.sprite-player')).toHaveCount(0)
-  await page.clock.runFor(180)
-  await expect(page.locator('.sprite-player')).toHaveCount(0)
-  await page.clock.runFor(140)
-  await expect(player).toHaveAttribute('data-animation-intent', 'static')
-  await expect(page.getByRole('button', { name: /暂停动作|恢复动作/ })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /暂停动作|恢复动作/ })).toHaveCount(0)
-  await expect(player).toHaveAttribute('data-animation-intent', 'static')
-  await page.clock.runFor(4200)
-  await expect(page.locator('.sprite-player')).toHaveCount(0)
-  expect(state.calls.filter(url => url.endsWith('/companion/me'))).toHaveLength(1)
-  expect(state.calls.filter(url => url.endsWith('/proposals/active'))).toHaveLength(1)
-  expect(state.errors).toEqual([])
-})
-
 test('thinking and streaming preserve activity facts while artwork stays static', async ({ page }, testInfo) => {
   const state = await fixture(page)
   await freezeClock(page)
@@ -123,20 +94,17 @@ test('thinking and streaming preserve activity facts while artwork stays static'
   expect(state.errors).toEqual([])
 })
 
-test('Chat, Feed and Proposal retain R06 precedence while artwork stays static', async ({ page }) => {
-  const state = await fixture(page, true)
+test('Chat and Feed retain R06 precedence while artwork stays static', async ({ page }) => {
+  const state = await fixture(page)
   const feed = gate()
-  const action = gate()
   await page.route('**/api/companion/feed', async route => {
     await feed.promise
     await ok(route, { outcome: 'FAMILIARITY', companion: specimen, growth: { id: '9001', createdTime: '2026-09-27T00:00:00Z', lifeExperienceDelta: 0, skillExperienceDelta: {}, traitDelta: {} } })
   })
-  await page.route('**/api/companion/proposals/7010/scold', async route => { await action.promise; await ok(route, { ...proposal, status: 'SUPPRESSED' }) })
   const player = await loaded(page)
   await expect(player).toHaveAttribute('data-animation-intent', 'static')
   await page.getByRole('button', { name: /R07 图片/ }).click()
   await page.getByRole('button', { name: '喂给伙伴' }).click()
-  await page.getByTestId('proposal-scold').click()
   await expect(page.locator('.companion-body')).toHaveAttribute('data-presentation-activity', 'feeding')
   await intent(page, 'static')
   await chat(page)
@@ -147,16 +115,14 @@ test('Chat, Feed and Proposal retain R06 precedence while artwork stays static',
   await chunk(page, 'event:done\ndata:\n\n')
   await expect(page.locator('.companion-body')).toHaveAttribute('data-presentation-activity', 'feeding')
   feed.release()
-  await expect(page.locator('.companion-body')).toHaveAttribute('data-presentation-activity', 'acknowledging')
-  await expect(player).toHaveAttribute('data-animation-intent', 'static')
-  action.release()
+  await expect(page.locator('.companion-body')).toHaveAttribute('data-presentation-activity', 'idle')
   await intent(page, 'static')
   await expect(player).toHaveAttribute('data-animation-intent', 'static')
   expect(state.errors).toEqual([])
 })
 
 test('hidden renderers retain current activity on return without animation catch-up', async ({ page }) => {
-  const state = await fixture(page, true)
+  const state = await fixture(page)
   await freezeClock(page)
   const player = await loaded(page)
   await expect(player).toHaveAttribute('data-animation-intent', 'static')
@@ -180,7 +146,7 @@ test('hidden renderers retain current activity on return without animation catch
 })
 
 test('reduced-motion changes never request the disabled blink atlas', async ({ page }) => {
-  const state = await fixture(page, true)
+  const state = await fixture(page)
   await page.emulateMedia({ reducedMotion: 'reduce' })
   const player = await loaded(page)
   await chat(page)

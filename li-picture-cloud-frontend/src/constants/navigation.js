@@ -17,13 +17,11 @@ export function buildAppNavigation({ isAdmin, companionEnabled }) {
     ] },
     { id: 'gallery', label: '图库', to: '/gallery' },
     ...(companionEnabled ? [{ id: 'tools', label: '工具', items: [
-      { label: '配方', to: '/recipes' },
       { label: '模型连接', to: '/model-gateway' }
     ] }] : []),
     ...(isAdmin ? [{ id: 'admin', label: '管理', items: [
       { label: '图片管理', to: '/admin/pictures' },
-      { label: '用户管理', to: '/admin/users' },
-      ...(companionEnabled ? [{ label: '喂养日志', to: '/admin/companion-feed-runs' }] : [])
+      { label: '用户管理', to: '/admin/users' }
     ] }] : [])
   ]
 }
@@ -50,7 +48,6 @@ export function buildNavigationGroups({ isLoggedIn, isAdmin, companionEnabled = 
         { label: '我的空间', to: '/space/my' },
         ...(companionEnabled ? [{ label: '我的伙伴', to: '/companion' }] : []),
         ...(companionEnabled ? [{ label: '模型控制中心', to: '/model-gateway' }] : []),
-        ...(companionEnabled ? [{ label: '配方工坊', to: '/recipes' }] : []),
         { label: '空间管理', to: '/spaces' },
         { label: '图库分析', to: '/space/analyze' }
       ]
@@ -63,8 +60,7 @@ export function buildNavigationGroups({ isLoggedIn, isAdmin, companionEnabled = 
       label: '管理',
       items: [
         { label: '图片审核', to: '/admin/pictures' },
-        { label: '用户管理', to: '/admin/users' },
-        ...(companionEnabled ? [{ label: '喂养日志', to: '/admin/companion-feed-runs' }] : [])
+        { label: '用户管理', to: '/admin/users' }
       ]
     })
   }

@@ -44,12 +44,17 @@
       <figure class="landing-canvas__photo landing-canvas__photo--city">
         <img src="/images/mosaic/city.jpg" alt="城市建筑，本地展示图片" width="800" height="600">
       </figure>
-      <router-link to="/companion" class="landing-habitat">
+      <router-link v-if="companionEnabled" to="/companion" class="landing-habitat">
         <img class="landing-habitat__portrait" :src="lingyeAssets.home.src" alt="绫页，住在图库里的伙伴"
              :width="lingyeAssets.home.width" :height="lingyeAssets.home.height" decoding="async">
         <strong>绫页</strong>
         <span>住在图库里的伙伴 · 喂她图片，或者找她聊聊</span>
       </router-link>
+      <!-- 关闭伙伴功能的版本不加载立绘，也不给入口。 -->
+      <div v-else class="landing-habitat">
+        <strong>伙伴空间</strong>
+        <span>此版本暂未开放</span>
+      </div>
     </div>
     <p class="landing-canvas__caption">
       展示图片为本地示例，不代表你的空间
@@ -59,6 +64,9 @@
 
 <script setup>
 import { lingyeAssets } from '@/components/companion/body/lingyeAssets'
+import { COMPANION_UI_ENABLED } from '@/config/features'
+
+const companionEnabled = COMPANION_UI_ENABLED
 
 defineProps({
   presentation: {

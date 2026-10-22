@@ -28,8 +28,6 @@ async function fixture(page, { stage = 'LIGHT', companion = true } = {}) {
     let data = { records: [], total: 0 }
     if (path === '/api/user/current') data = member
     else if (path === '/api/companion/me') data = snapshot
-    else if (path === '/api/companion/proposals/active') data = null
-    else if (path === '/api/companion/contract') data = { active: false, quietStart: '22:00', quietEnd: '08:00', maxFrequencyHours: 12 }
     else if (path.includes('tag_category')) data = { tagList: [], categoryList: [] }
     return route.fulfill({ json: { code: 0, data } })
   })
@@ -209,9 +207,6 @@ test('loading, failed and absent companion never manufacture a body or request a
   await expect(page.getByRole('button', { name: '唤醒我的伙伴' })).toBeVisible()
   await expect(page.locator('.companion-body')).toHaveCount(0)
   await expect(page.locator('main .companion-portrait')).toHaveCount(0)
-  // The shell's opt-in observation widget remains off;
-  // it does not create an owned companion, Home body or idle animation.
-  await expect(page.getByTestId('companion-observation')).toContainText('默认关闭')
   expect(state.assetRequests.some(url => /adult-(home|idle)/.test(url))).toBe(false)
   expect(state.writes).toEqual([])
 })

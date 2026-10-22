@@ -1,7 +1,7 @@
 <template>
   <figure class="companion-body" :class="{ 'companion-body--habitat': habitat }" :data-render-mode="renderPolicy.compact ? 'compact' : 'full'" :data-motion-policy="renderPolicy.reason" :data-visual-stage="visual.visualStage" :data-animation-intent="animationIntent.state"
           :data-presentation-availability="presentation.availability" :data-presentation-activity="presentation.activity"
-          :data-presentation-affect="presentation.affect" :data-presentation-attention="presentation.attention"
+          :data-presentation-affect="presentation.affect"
           :data-presentation-rapport="presentation.rapport" :data-presentation-freshness="presentation.freshness">
     <button type="button" class="body-ground" :class="{ 'is-drop-target': interaction.dragging }"
             aria-label="和绫页互动" aria-haspopup="dialog" title="和绫页互动"
@@ -19,7 +19,6 @@
                         accessible-label="绫页，当前静态全身像" />
     </button>
     <p v-if="showDisposition" class="body-disposition">{{ presentation.disposition.mood.label }}</p>
-    <CompanionProposalHint :presentation="presentation" />
     <figcaption>
       <span><strong>绫页</strong></span>
       <button v-if="animate && renderPolicy.allowMotion && animationIntent.state !== 'static' && !availability.reducedMotion && !availability.failed"
@@ -33,7 +32,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import CompanionArtwork from './CompanionArtwork.vue'
-import CompanionProposalHint from '../CompanionProposalHint.vue'
 import SpritePlayer from './SpritePlayer.vue'
 import { lingyeAssets } from './lingyeAssets'
 import { mapCompanionAnimation } from '@/presentation/companionAnimation'
@@ -63,7 +61,6 @@ const availability = ref({ reducedMotion: true, failed: false })
 </script>
 <style scoped>
 .companion-body { position: relative; width: 100%; margin: 0; align-self: center; padding: 1rem 1rem .75rem; color: var(--lp-text-primary); background: radial-gradient(ellipse at 50% 38%, #faf8ef 0, #ece5d5 70%, #e1d7c4 100%); }
-.companion-body > :deep(.proposal-hint) { position: absolute; top: 5%; right: 0; z-index: 1; }
 .companion-body--habitat { padding: 0; background: transparent; }
 .companion-body--habitat figcaption { gap: 4px; padding-inline: 12px; }
 .companion-body--habitat .body-motion { background: #f7f5e5b3; }
@@ -90,7 +87,6 @@ figcaption strong { font-size: .95rem; }
 @media (width < 768px) {
   .body-ground { width: 96px; max-width: 100%; }
   .companion-body--habitat figcaption { justify-content: center; padding-inline: 0; gap: 2px 6px; }
-  .companion-body > :deep(.proposal-hint) { position: static; width: 100%; margin-top: 4px; padding-inline: 4px; }
   .body-disposition { padding-inline: 0; font-size: .7rem; }
   .body-static-label { font-size: .65rem; }
 }

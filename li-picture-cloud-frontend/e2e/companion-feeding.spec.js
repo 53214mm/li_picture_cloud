@@ -21,8 +21,6 @@ async function fixture(page) {
     const path = new URL(route.request().url()).pathname
     const data = path === '/api/user/current' ? member
       : path === '/api/companion/me' ? state.home
-        : path === '/api/companion/proposals/active' ? null
-          : path === '/api/companion/contract' ? { active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 24 }
             : path === '/api/space/list/page/vo' ? { records: [space] }
               : path === '/api/picture/list/page/vo' ? { records: state.photos }
                 : path === '/api/picture/get/vo' ? photo

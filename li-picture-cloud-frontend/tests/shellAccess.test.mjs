@@ -28,11 +28,11 @@ test('route metadata separates public, adaptive, protected and admin legacy work
   assert.equal(shellMeta.home.layout, 'public')
   assert.equal(shellMeta.gallery.layout, 'adaptive')
   assert.equal(shellMeta.gallery.workspace, 'fluid')
-  for (const name of ['my-space', 'space-create', 'space-detail', 'spaces', 'space-analyze', 'picture-upload', 'model-gateway', 'recipe-workshop', 'companion']) {
+  for (const name of ['my-space', 'space-create', 'space-detail', 'spaces', 'space-analyze', 'picture-upload', 'model-gateway', 'companion']) {
     assert.equal(shellMeta[name].requiresAuth, true, name)
     assert.equal(shellMeta[name].frame, 'legacy', name)
   }
-  for (const name of ['admin-pictures', 'admin-users', 'admin-companion-feed-runs', 'admin-companion-feed-run-detail']) assert.equal(shellMeta[name].requiresAdmin, true)
+  for (const name of ['admin-pictures', 'admin-users']) assert.equal(shellMeta[name].requiresAdmin, true)
 })
 
 test('app navigation groups tools and management, public navigation does not expose admin directory', () => {
@@ -40,8 +40,8 @@ test('app navigation groups tools and management, public navigation does not exp
   assert.deepEqual(regular.map(group => group.id), ['spaces', 'gallery'])
   const admin = buildAppNavigation({ isAdmin: true, companionEnabled: true })
   assert.deepEqual(admin.map(group => group.id), ['spaces', 'gallery', 'tools', 'admin'])
-  assert.equal(admin.find(group => group.id === 'tools').items.length, 2)
-  assert.equal(admin.find(group => group.id === 'admin').items.length, 3)
+  assert.equal(admin.find(group => group.id === 'tools').items.length, 1)
+  assert.equal(admin.find(group => group.id === 'admin').items.length, 2)
   assert.equal(admin.find(group => group.id === 'spaces').to, undefined)
   assert.deepEqual(buildPublicNavigation(true).map(item => item.to), ['/', '/gallery', '/space/my'])
 })

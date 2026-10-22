@@ -29,10 +29,7 @@
               :aria-expanded="panel === 'companion'" @click="interaction.open()"><ShellIcon name="companion" /><span>伙伴</span></button>
       <button type="button" aria-haspopup="dialog" :aria-expanded="panel === 'navigation'" @click="panel = 'navigation'"><ShellIcon name="more" /><span>更多</span></button>
     </nav>
-    <CompanionObservationSpeech v-if="companionEnabled && user.currentUser?.id && !panel && !legacyOverlay && !loggingOut && !observationExpanded && route.name !== 'companion-rehearsal'" floating @reply="interaction.open()" />
-    <CompanionObservationPanel v-if="companionEnabled && !panel && !legacyOverlay && !loggingOut && route.name !== 'companion-rehearsal'" compact @reply="interaction.open()" @expanded="observationExpanded = $event" />
     <ShellDialog :open="panel === 'navigation'" title="导航" :return-focus="focusNavigation" @close="panel = null">
-      <CompanionObservationSpeech v-if="companionEnabled && panel === 'navigation'" @reply="interaction.open()" />
       <div @click="closeOnLink"><AppNavigation /></div>
       <div class="drawer-links" @click="closeOnLink">
         <CompanionPresenceSlot v-if="companionEnabled && panel === 'navigation'" :active="route.meta.section === 'companion'" />
@@ -40,7 +37,6 @@
       </div>
     </ShellDialog>
     <ShellDialog :open="panel === 'account'" title="账户" side="right" @close="panel = null">
-      <CompanionObservationSpeech v-if="companionEnabled && panel === 'account'" @reply="interaction.open()" />
       <div class="account-summary">
         <span class="account-avatar" aria-hidden="true">{{ accountInitial }}</span>
         <div>
@@ -55,7 +51,6 @@
     </ShellDialog>
     <ShellDialog v-if="companionEnabled" :open="panel === 'companion'" title="和绫页互动" side="right"
                  :return-focus="focusCompanion" @close="panel = null">
-      <CompanionObservationSpeech v-if="panel === 'companion'" @reply="interaction.open()" />
       <CompanionInteractionPanel v-if="panel === 'companion'" @close="panel = null" />
     </ShellDialog>
   </div>
@@ -64,7 +59,6 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { useCompanionRehearsalStore } from '@/stores/companionRehearsal'
 import { COMPANION_UI_ENABLED } from '@/config/features'
 import AppNavigation from '@/components/shell/AppNavigation.vue'
 import AppToolbar from '@/components/shell/AppToolbar.vue'
@@ -74,9 +68,6 @@ import CompanionPresenceSlot from '@/components/shell/CompanionPresenceSlot.vue'
 import SiteFooter from '@/components/shell/SiteFooter.vue'
 import ShellIcon from '@/components/shell/ShellIcon.vue'
 import LpButton from '@/components/ui/LpButton.vue'
-import CompanionObservationPanel from '@/components/companion/CompanionObservationPanel.vue'
-import CompanionObservationSpeech from '@/components/companion/CompanionObservationSpeech.vue'
-import { useCompanionObserver } from '@/composables/useCompanionObserver'
 import { useLegacyOverlayIsolation } from '@/composables/useLegacyOverlayIsolation'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
 import CompanionInteractionPanel from '@/components/companion/CompanionInteractionPanel.vue'
@@ -86,11 +77,9 @@ const route = useRoute()
 const router = useRouter()
 const companionEnabled = COMPANION_UI_ENABLED
 const panel = ref(null)
-const observationExpanded = ref(false)
 const legacyOverlay = useLegacyOverlayIsolation()
 const loggingOut = ref(false)
 const logoutError = ref('')
-useCompanionObserver({ enabled: companionEnabled, route, panel, legacyOverlay, loggingOut })
 const accountName = computed(() => user.currentUser?.userName || user.currentUser?.userAccount || '已登录')
 const accountIdentifier = computed(() => {
   const account = user.currentUser?.userAccount
@@ -98,7 +87,6 @@ const accountIdentifier = computed(() => {
 })
 const accountInitial = computed(() => Array.from(accountName.value)[0]?.toUpperCase() || '用')
 watch(() => route.fullPath, () => {
-  observationExpanded.value = false
   panel.value = null
   interaction.close()
   if (route.path !== '/companion') interaction.takeDestination()
@@ -125,7 +113,6 @@ function onHidden() {
   if (document.hidden && panel.value === 'companion') panel.value = null
 }
 async function logout() {
-  useCompanionRehearsalStore().journal.clear()
   loggingOut.value = true
   logoutError.value = ''
   try {

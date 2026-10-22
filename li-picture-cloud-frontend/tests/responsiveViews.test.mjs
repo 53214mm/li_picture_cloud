@@ -56,8 +56,7 @@ test('space and AI surfaces define phone layouts', () => {
     'components/companion/CompanionMoodPanel.vue',
     'components/companion/CompanionRelationshipPanel.vue',
     'components/companion/CompanionMemoryPanel.vue',
-    'components/companion/CompanionChatPanel.vue',
-    'components/companion/CompanionProposalPanel.vue'
+    'components/companion/CompanionChatPanel.vue'
   ]) {
     assert.match(read(`src/${file}`), /@media \(max-width: 767px\)/, file)
   }
@@ -69,14 +68,10 @@ test('admin tables and analytics have phone contracts', () => {
   const users = read('src/views/AdminUserView.vue')
   const pictures = read('src/views/PictureManageView.vue')
   const analyze = read('src/views/SpaceAnalyzeView.vue')
-  const feedRuns = read('src/views/AdminCompanionFeedRunsView.vue')
   assert.match(users, /data-label="账号"/)
   assert.match(pictures, /data-label="审核状态"/)
   assert.match(users, /@media \(max-width: 767px\)/)
   assert.match(pictures, /@media \(max-width: 767px\)/)
   assert.match(analyze, /@media \(max-width: 767px\)/)
   assert.match(analyze, /grid-template-columns:\s*1fr/)
-  assert.match(feedRuns, /data-label="停留阶段"/)
-  assert.match(feedRuns, /v-model="query\.correlationId"/)
-  assert.match(feedRuns, /@media \(max-width: 760px\)/)
 })

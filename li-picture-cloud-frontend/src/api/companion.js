@@ -20,9 +20,3 @@ export const clearCompanionChatHistory = () => request.delete('/companion/chat/h
 export const getCompanionChatMode = () => request.get('/companion/chat/mode')
 export const setCompanionChatMode = mode => request.put('/companion/chat/mode', { mode })
 
-export const getCompanionContract = () => request.get('/companion/contract')
-export const updateCompanionContract = data => request.put('/companion/contract', data)
-export const getActiveCompanionProposal = () => request.get('/companion/proposals/active')
-export const acceptCompanionProposal = id => request.post(`/companion/proposals/${id}/accept`)
-export const ignoreCompanionProposal = id => request.post(`/companion/proposals/${id}/ignore`)
-export const scoldCompanionProposal = id => request.post(`/companion/proposals/${id}/scold`)

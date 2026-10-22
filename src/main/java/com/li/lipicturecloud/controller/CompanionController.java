@@ -5,10 +5,8 @@ import com.li.lipicturecloud.annotation.RateLimit;
 import com.li.lipicturecloud.application.companion.CompanionChatService;
 import com.li.lipicturecloud.application.companion.CompanionLife;
 import com.li.lipicturecloud.application.companion.CompanionMemoryService;
-import com.li.lipicturecloud.application.companion.CompanionProposalService;
 import com.li.lipicturecloud.application.companion.FeedPictureCommand;
 import com.li.lipicturecloud.application.companion.view.ChatHistoryView;
-import com.li.lipicturecloud.application.companion.view.CompanionContractView;
 import com.li.lipicturecloud.application.companion.CompanionChatModeService;
 import com.li.lipicturecloud.application.companion.view.CompanionChatModeView;
 import com.li.lipicturecloud.application.companion.view.CompanionHomeView;
@@ -16,7 +14,6 @@ import com.li.lipicturecloud.domain.companion.CompanionChatMode;
 import com.li.lipicturecloud.model.dto.companion.CompanionChatModeRequest;
 import com.li.lipicturecloud.application.companion.view.CompanionMemoryListView;
 import com.li.lipicturecloud.application.companion.view.CompanionMemoryView;
-import com.li.lipicturecloud.application.companion.view.CompanionProposalView;
 import com.li.lipicturecloud.application.companion.view.FeedPictureResult;
 import com.li.lipicturecloud.common.BaseResponse;
 import com.li.lipicturecloud.common.ResultUtils;
@@ -25,7 +22,6 @@ import com.li.lipicturecloud.exception.ErrorCode;
 import com.li.lipicturecloud.exception.ThrowUtils;
 import com.li.lipicturecloud.manager.auth.model.AuthorizationSubject;
 import com.li.lipicturecloud.model.dto.companion.CompanionChatRequest;
-import com.li.lipicturecloud.model.dto.companion.CompanionContractUpdateRequest;
 import com.li.lipicturecloud.model.dto.companion.CompanionFeedRequest;
 import com.li.lipicturecloud.model.dto.companion.CompanionMemoryCorrectRequest;
 import com.li.lipicturecloud.model.entity.User;
@@ -50,7 +46,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
 
 import java.io.IOException;
-import java.time.LocalTime;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -69,17 +64,15 @@ public class CompanionController {
     private final CompanionLife companionLife;
     private final CompanionMemoryService memoryService;
     private final CompanionChatService chatService;
-    private final CompanionProposalService proposalService;
     private final UserService userService;
     private final CompanionChatModeService chatModeService;
 
     public CompanionController(CompanionLife companionLife, CompanionMemoryService memoryService,
-                               CompanionChatService chatService, CompanionProposalService proposalService,
+                               CompanionChatService chatService,
                                UserService userService, CompanionChatModeService chatModeService) {
         this.companionLife = companionLife;
         this.memoryService = memoryService;
         this.chatService = chatService;
-        this.proposalService = proposalService;
         this.userService = userService;
         this.chatModeService = chatModeService;
     }
@@ -261,63 +254,6 @@ public class CompanionController {
             terminal.set(true);
             emitter.complete();
         });
-    }
-
-    @GetMapping("/contract")
-    @AuthCheck
-    public BaseResponse<CompanionContractView> contract(HttpServletRequest request) {
-        return ResultUtils.success(proposalService.contract(subject(request)));
-    }
-
-    @PutMapping("/contract")
-    @AuthCheck
-    public BaseResponse<CompanionContractView> updateContract(
-            @RequestBody CompanionContractUpdateRequest body, HttpServletRequest request) {
-        ThrowUtils.throwIf(body == null || body.getActive() == null
-                        || body.getQuietStart() == null || body.getQuietEnd() == null
-                        || body.getMaxFrequencyHours() == null,
-                ErrorCode.PARAMS_ERROR, "请完整填写主动设置");
-        LocalTime quietStart = parseTime(body.getQuietStart());
-        LocalTime quietEnd = parseTime(body.getQuietEnd());
-        ThrowUtils.throwIf(body.getMaxFrequencyHours() < 0 || body.getMaxFrequencyHours() > 720,
-                ErrorCode.PARAMS_ERROR, "频率上限需为 0-720 小时");
-        return ResultUtils.success(proposalService.updateContract(subject(request),
-                body.getActive(), quietStart, quietEnd, body.getMaxFrequencyHours()));
-    }
-
-    @GetMapping("/proposals/active")
-    @AuthCheck
-    public BaseResponse<CompanionProposalView> activeProposal(HttpServletRequest request) {
-        return ResultUtils.success(proposalService.active(subject(request)));
-    }
-
-    @PostMapping("/proposals/{id}/accept")
-    @AuthCheck
-    public BaseResponse<CompanionProposalView> acceptProposal(@PathVariable("id") long proposalId,
-                                                              HttpServletRequest request) {
-        return ResultUtils.success(proposalService.accept(subject(request), proposalId));
-    }
-
-    @PostMapping("/proposals/{id}/ignore")
-    @AuthCheck
-    public BaseResponse<CompanionProposalView> ignoreProposal(@PathVariable("id") long proposalId,
-                                                              HttpServletRequest request) {
-        return ResultUtils.success(proposalService.ignore(subject(request), proposalId));
-    }
-
-    @PostMapping("/proposals/{id}/scold")
-    @AuthCheck
-    public BaseResponse<CompanionProposalView> scoldProposal(@PathVariable("id") long proposalId,
-                                                             HttpServletRequest request) {
-        return ResultUtils.success(proposalService.scold(subject(request), proposalId));
-    }
-
-    private static LocalTime parseTime(String value) {
-        try {
-            return LocalTime.parse(value);
-        } catch (RuntimeException invalid) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "安静时段需为 HH:mm 格式");
-        }
     }
 
     private AuthorizationSubject subject(HttpServletRequest request) {

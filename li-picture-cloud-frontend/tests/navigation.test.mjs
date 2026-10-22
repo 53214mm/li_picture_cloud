@@ -18,19 +18,15 @@ test('builds user and admin navigation from one model', async () => {
   assert.deepEqual(admin.map(group => group.id), ['browse', 'workspace', 'admin', 'account'])
   assert.equal(user.flatMap(group => group.items).some(item => item.to === '/admin/users'), false)
   assert.equal(admin.flatMap(group => group.items).some(item => item.to === '/admin/users'), true)
-  assert.equal(user.flatMap(group => group.items).some(item => item.to === '/admin/companion-feed-runs'), false)
-  assert.equal(admin.flatMap(group => group.items).some(item => item.to === '/admin/companion-feed-runs'), true)
-  assert.match(routerSource, /path: '\/admin\/companion-feed-runs'/)
-  assert.match(routerSource, /path: '\/admin\/companion-feed-runs\/:runId'/)
+  // 喂养日志后台已删除：导航和路由里都不再出现。
+  assert.equal(admin.flatMap(group => group.items).some(item => item.to === '/admin/companion-feed-runs'), false)
+  assert.doesNotMatch(routerSource, /companion-feed-runs|\/recipes|\/companion\/rehearsal/)
   assert.equal(user.flatMap(group => group.items).some(item => item.to === '/companion'), true)
   assert.equal(buildNavigationGroups({ isLoggedIn: false, isAdmin: false })
     .flatMap(group => group.items).some(item => item.to === '/companion'), false)
   assert.equal(buildNavigationGroups({
     isLoggedIn: true, isAdmin: false, companionEnabled: false
   }).flatMap(group => group.items).some(item => item.to === '/companion'), false)
-  assert.equal(buildNavigationGroups({
-    isLoggedIn: true, isAdmin: true, companionEnabled: false
-  }).flatMap(group => group.items).some(item => item.to === '/admin/companion-feed-runs'), false)
 })
 
 test('public navbar uses the public model; app drawer behavior is covered by shell browser tests', () => {

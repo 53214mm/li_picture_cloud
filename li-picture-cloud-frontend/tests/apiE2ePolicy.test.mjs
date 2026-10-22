@@ -48,15 +48,14 @@ test('API fixture rejects database names that can inject H2 connection options',
 
 test('API suite inventory is deterministic and includes each real business story', () => {
   assert.deepEqual(apiE2eFiles([
-    'story.api.js', 'http-fixture.js', 'recipe.api.js', 'protocol.api.js', 'gateway.api.js', 'presence.api.js', 'companion.api.js'
+    'http-fixture.js', 'protocol.api.js', 'gateway.api.js', 'companion.api.js'
   ]), [
-    'e2e/api/companion.api.js', 'e2e/api/gateway.api.js', 'e2e/api/presence.api.js', 'e2e/api/protocol.api.js',
-    'e2e/api/recipe.api.js', 'e2e/api/story.api.js'
+    'e2e/api/companion.api.js', 'e2e/api/gateway.api.js', 'e2e/api/protocol.api.js'
   ])
 })
 
 test('API suite rejects every missing required story rather than reporting a partial green', () => {
-  const names = ['companion.api.js', 'gateway.api.js', 'presence.api.js', 'protocol.api.js', 'recipe.api.js', 'story.api.js']
+  const names = ['companion.api.js', 'gateway.api.js', 'protocol.api.js']
   for (const missing of names) {
     assert.throws(() => apiE2eFiles(names.filter(name => name !== missing)), { message: `Required API check is missing: ${missing}` })
   }

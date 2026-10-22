@@ -19,7 +19,7 @@ import { mapCompanionPresentation } from '@/presentation/companionPresentation'
 import CompanionChatPanel from './CompanionChatPanel.vue'
 
 // This component exists only in an explicitly opened interaction drawer. It
-// never acquires/replaces the Home observation lease or evaluates proposals.
+// never acquires/replaces the Home observation lease.
 // On Home it only reads the snapshot that page already observed.
 const user = useUserStore()
 const chat = useCompanionChatStore()

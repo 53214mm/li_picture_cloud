@@ -3,7 +3,7 @@
                     :data-animation-intent="animationIntent.state" data-animation-state="static"
                     :data-visual-stage="presentation.appearance.visualStage" accessible-label="绫页，中性半身像"
                     :data-presentation-availability="presentation.availability" :data-presentation-activity="presentation.activity"
-                    :data-presentation-affect="presentation.affect" :data-presentation-attention="presentation.attention"
+                    :data-presentation-affect="presentation.affect"
                     :data-presentation-rapport="presentation.rapport" :data-presentation-freshness="presentation.freshness" />
 </template>
 <script setup>

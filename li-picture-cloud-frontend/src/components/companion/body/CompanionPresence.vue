@@ -2,7 +2,7 @@
   <CompanionArtwork class="companion-presence" :asset="lingyeAssets.shell" decorative
                     :data-animation-intent="animationIntent.state" data-animation-state="static"
                     :data-presentation-availability="presentation.availability" :data-presentation-activity="presentation.activity"
-                    :data-presentation-affect="presentation.affect" :data-presentation-attention="presentation.attention"
+                    :data-presentation-affect="presentation.affect"
                     :data-presentation-rapport="presentation.rapport" :data-presentation-freshness="presentation.freshness" />
 </template>
 <script setup>

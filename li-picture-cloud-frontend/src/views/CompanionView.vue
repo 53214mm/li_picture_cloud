@@ -1,7 +1,6 @@
 <template>
   <div class="companion-page">
     <div class="habitat-container">
-      <router-link class="btn btn-outline" to="/companion/rehearsal">绫页鲜活伙伴 · 进入试演台</router-link>
       <section v-if="authError" class="state-panel state-error" role="alert">
         <span class="state-kicker">登录状态</span>
         <h1>暂时无法确认登录状态</h1>
@@ -50,7 +49,17 @@
               <div class="conversation-layout">
                 <CompanionChatPanel :chat-mode="home?.chatMode" :presentation="presentation"
                                     @presentation-change="chatSignal = $event" />
-                <CompanionProposalPanel :refresh-key="panelsRefreshKey" @presentation-change="proposalSignal = $event" />
+              </div>
+              <div class="chat-reset" data-testid="clear-chat">
+                <template v-if="!confirmingClear">
+                  <button type="button" class="link-button" :disabled="clearingChat" @click="confirmingClear = true">清空对话记录</button>
+                </template>
+                <template v-else>
+                  <span>清空后删除你和绫页的聊天消息，以及从聊天里整理出的经历；图片记忆和成长不受影响，且无法恢复。</span>
+                  <button type="button" class="link-button danger" :disabled="clearingChat" @click="clearChat">{{ clearingChat ? '正在清空…' : '确定清空' }}</button>
+                  <button type="button" class="link-button" :disabled="clearingChat" @click="confirmingClear = false">取消</button>
+                </template>
+                <span v-if="clearChatMessage" role="status">{{ clearChatMessage }}</span>
               </div>
             </section>
             <section v-show="activeZone === 'daily'" id="habitat-feed" class="home-zone" aria-labelledby="desk-title">
@@ -98,14 +107,9 @@
               </div>
             </section>
             <section v-show="activeZone === 'journal'" id="habitat-journal" class="home-zone" aria-labelledby="journal-title">
-              <header class="zone-heading"><div><span>03 / NOTES & STORIES</span><h2 id="journal-title" tabindex="-1">留影手记</h2></div><p>记忆可以确认与纠正，故事由你决定是否保存。</p></header>
+              <header class="zone-heading"><div><span>03 / NOTES</span><h2 id="journal-title" tabindex="-1">留影手记</h2></div><p>她记得的图，都可以确认与纠正。</p></header>
               <div class="journal-layout">
                 <CompanionMemoryPanel :refresh-key="panelsRefreshKey" />
-                <CompanionStoryPanel :pictures="pictures" :refresh-key="panelsRefreshKey" />
-              </div>
-              <div class="creation-notes">
-                <CompanionEmojiPanel :pictures="pictures" :refresh-key="panelsRefreshKey" />
-                <CompanionFusionPanel :pictures="pictures" :refresh-key="panelsRefreshKey" />
               </div>
             </section>
             <section v-show="activeZone === 'growth'" id="habitat-growth" class="home-zone" aria-labelledby="habitat-growth-title">
@@ -147,11 +151,8 @@ import CompanionGrowthTimeline from '@/components/companion/CompanionGrowthTimel
 import CompanionMoodPanel from '@/components/companion/CompanionMoodPanel.vue'
 import CompanionRelationshipPanel from '@/components/companion/CompanionRelationshipPanel.vue'
 import CompanionMemoryPanel from '@/components/companion/CompanionMemoryPanel.vue'
-import CompanionStoryPanel from '@/components/companion/CompanionStoryPanel.vue'
-import CompanionEmojiPanel from '@/components/companion/CompanionEmojiPanel.vue'
-import CompanionFusionPanel from '@/components/companion/CompanionFusionPanel.vue'
 import CompanionChatPanel from '@/components/companion/CompanionChatPanel.vue'
-import CompanionProposalPanel from '@/components/companion/CompanionProposalPanel.vue'
+import { useCompanionChatStore } from '@/stores/companionChat'
 import {
   adoptAuthoritativeHome,
   applyFeedResult,
@@ -189,7 +190,24 @@ const feedError = computed(() => feedState.value.error || (feedState.value.phase
 const panelsRefreshKey = ref(0)
 const homeFresh = ref(true)
 const chatSignal = ref({})
-const proposalSignal = ref({})
+const chat = useCompanionChatStore()
+const confirmingClear = ref(false)
+const clearingChat = ref(false)
+const clearChatMessage = ref('')
+async function clearChat() {
+  if (clearingChat.value) return
+  clearingChat.value = true
+  clearChatMessage.value = ''
+  try {
+    const deleted = await chat.clearHistory()
+    clearChatMessage.value = deleted == null ? '绫页还在回复，等她说完再清空。' : `已清空 ${deleted} 条聊天记录。`
+    if (deleted != null) confirmingClear.value = false
+  } catch {
+    clearChatMessage.value = '清空失败，请稍后重试。'
+  } finally {
+    clearingChat.value = false
+  }
+}
 const presentationStore = useCompanionPresentationStore()
 const { presentation } = storeToRefs(presentationStore)
 const presentationSource = presentationStore.acquireSource()
@@ -203,8 +221,7 @@ watchEffect(() => presentationSource.publish({
       : home.value ? 'ready' : pageLoading.value ? 'loading' : 'unobserved',
   homeFresh: homeFresh.value,
   feed: { pending: feedBusy.value, error: Boolean(feedError.value) },
-  chat: chatSignal.value,
-  proposal: proposalSignal.value
+  chat: chatSignal.value
 }))
 
 const authError = computed(() => userStore.authBootstrapError)
@@ -304,7 +321,7 @@ watch([() => interaction.destination, () => home.value?.companion?.id, sourceLoa
   const focusGeneration = selectionGeneration
   await nextTick()
   if (focusGeneration !== selectionGeneration || command.actor !== String(userStore.currentUser?.id)) return
-  const ids = { chat: 'companion-chat-input', proposal: 'proposal-title', feed: 'feeding-title' }
+  const ids = { chat: 'companion-chat-input', feed: 'feeding-title' }
   focusSection(ids[command.target] || ids.feed, { fallback: command.target === 'chat' ? 'chat-title' : null, block: 'center' })
 }, { flush: 'post' })
 
@@ -483,10 +500,14 @@ async function submitFeed() {
 .zone-heading > div > span { display: block; font-size: 9px; color: #6f7e63; letter-spacing: .16em; margin-bottom: 10px; }
 .zone-heading h2 { font-family: 'Noto Serif SC', 'Songti SC', SimSun, serif; font-size: 25px; font-weight: 500; letter-spacing: .06em; }
 .zone-heading > p { max-width: 280px; color: #737969; font-size: 12px; line-height: 1.9; }
-.conversation-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); align-items: start; gap: 20px; }
+.conversation-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 20px; }
+.chat-reset { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; color: #737969; font-size: 12px; line-height: 1.8; }
+.chat-reset .link-button { min-height: 32px; padding: 0; border: 0; background: none; color: #45644e; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.chat-reset .link-button.danger { color: #9b4a3a; }
+.chat-reset .link-button:disabled { opacity: .5; cursor: default; }
 .desk-layout { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 28px; align-items: start; }
-.journal-layout, .creation-notes, .state-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
-.creation-notes { margin-top: 4px; }
+.journal-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+.state-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
 .feeding-column { display: grid; gap: 16px; min-width: 0; }
 .feeding-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .feeding-heading h2 { margin-top: 6px; font-size: 18px; font-weight: 500; }
@@ -509,7 +530,7 @@ async function submitFeed() {
 .habitat-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 40px; padding-top: 24px; border-top: 1px solid #d9ddcf; color: #6f7a63; font-size: 11px; }
 .habitat-footer a { display: grid; align-items: center; min-height: 44px; }
 @media (max-width: 1100px) {
-  .conversation-layout, .journal-layout, .creation-notes { grid-template-columns: 1fr; }
+  .conversation-layout, .journal-layout { grid-template-columns: 1fr; }
   .desk-layout { grid-template-columns: minmax(0, 1fr) 200px; gap: 20px; }
   .habitat-navigation { gap: 6px 16px; padding-inline: 20px; }
 }

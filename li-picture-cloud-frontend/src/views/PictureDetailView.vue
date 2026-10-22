@@ -8,7 +8,7 @@
       <template v-else-if="picture">
         <div class="detail-layout">
           <!-- 图片展示区 -->
-          <div class="image-area" :data-observation-picture="picture.id" :data-observation-version="picture.updateTime || ''" @click="showFullscreen = true" title="点击全屏查看">
+          <div class="image-area" @click="showFullscreen = true" title="点击全屏查看">
             <img :src="picture.url" :alt="picture.name" class="main-image"
                  @dragstart="interaction.startDrag($event, picture)" @dragend="interaction.cancelDrag" />
             <span class="zoom-hint">🔍 点击全屏</span>
@@ -191,7 +191,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, inject, watch, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getPictureVOById, editPicture, deletePicture, reviewPicture, getPictureTagCategory, uploadPicture } from '@/api/picture'
@@ -205,8 +205,7 @@ import { collaborationMode } from '@/utils/spaceAccess'
 import { COMPANION_UI_ENABLED } from '@/config/features'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
 import { mayOfferCompanionPicture, normalizePictureId } from '@/presentation/companionInteraction'
-import { SITE_PRESENCE_KEY } from '@/presentation/sitePresence'
-import { onSiteNavigationIntent } from '@/presentation/sitePresenceNavigation'
+import { onSiteNavigationIntent } from '@/presentation/navigationIntent'
 import { formatDate } from '@/utils/date'
 const companionEnabled = COMPANION_UI_ENABLED
 const interaction = useCompanionInteractionStore()
@@ -214,7 +213,6 @@ const interaction = useCompanionInteractionStore()
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
-const presence = inject(SITE_PRESENCE_KEY, null)
 
 const picture = ref(null)
 const loading = ref(false)
@@ -284,7 +282,6 @@ const editForm = reactive({ name: '', introduction: '', category: '', tagsStr: '
 let active = true
 let generation = 0
 let pendingNavigation = null
-let openedContext = null
 let imageEditorContext = null
 
 function resetDetail() {
@@ -361,9 +358,6 @@ async function loadDetail() {
   resetDetail()
   if (!active || pendingNavigation || route.name !== 'picture-detail') return
   const context = captureContext()
-  if (!openedContext || openedContext.id !== context.id || openedContext.actor !== context.actor) {
-    openedContext = { id: context.id, actor: context.actor, emitted: false }
-  }
   if (!context.id) return
   loading.value = true
   void loadCategories(context)
@@ -371,12 +365,6 @@ async function loadDetail() {
     const result = await getPictureVOById(context.id)
     if (!isCurrent(context)) return
     picture.value = matchingPicture(result, context)
-    // Only the current authorized read signals an opening. Never send picture
-    // data, IDs, page text or a second read to the presence coordinator.
-    if (companionEnabled && !openedContext.emitted) {
-      openedContext.emitted = true
-      presence?.pictureOpened()
-    }
     void loadAccess(context, result)
   } catch (e) {
     if (!isCurrent(context)) return

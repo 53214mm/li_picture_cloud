@@ -4,7 +4,7 @@ import { isBusinessWrite } from './helpers/request-policy.js'
 
 const specimen = { id: '7001', lifeStage: 'LIGHT', lifeExperience: '42', level: 1, levelStartExperience: '0', nextLevelExperience: '100', revision: '9', traits: {}, skills: [] }
 const ok = (route, data) => route.fulfill({ json: { code: 0, data } })
-async function fixture(page, proposal = false) {
+async function fixture(page) {
   const state = { images: [], writes: [], errors: [] }
   page.on('request', request => {
     if (request.resourceType() === 'image') state.images.push(request.url())
@@ -15,8 +15,6 @@ async function fixture(page, proposal = false) {
     const path = new URL(route.request().url()).pathname
     if (path === '/api/user/current') return ok(route, { id: '42', userName: 'R13', userRole: 'user' })
     if (path === '/api/companion/me') return ok(route, { companion: specimen, mood: null, relationship: null, recentGrowth: [], nutrition: {}, chatPolicy: 'DEMO' })
-    if (path === '/api/companion/proposals/active') return ok(route, proposal ? { id: '91', status: 'PENDING', content: '来看看照片？', opportunityType: 'WEEKLY_REVIEW', impulseScore: 2 } : null)
-    if (path === '/api/companion/contract') return ok(route, { active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 1 })
     if (path.includes('tag_category')) return ok(route, { tagList: [], categoryList: [] })
     return ok(route, { records: [], total: 0 })
   })
@@ -59,7 +57,7 @@ test('R13 mobile starts with a compact clickable still and no atlas, leaving pho
 
 test('R13 breakpoint changes preserve the same static body and never enable animation', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
-  await fixture(page, true)
+  await fixture(page)
   await freezeClock(page)
   await page.goto('/companion')
   await expect(player(page)).toHaveAttribute('data-animation-intent', 'static')

@@ -2,9 +2,7 @@
   <div class="presence" :class="{ 'is-drop-target': interaction.dragging }" :aria-current="active ? 'page' : undefined"
        @dragover="interaction.dragOver" @drop.stop="interaction.drop">
     <button type="button" class="presence__mark" aria-label="和绫页互动" aria-haspopup="dialog" title="和绫页互动"
-            :aria-describedby="presentation.attention === 'proposal' ? hintId : undefined"
-            @click="interaction.open()"><CompanionPresence :presentation="presentation" /><span v-if="presentation.attention === 'proposal'" class="presence__hint" aria-hidden="true">✦</span></button>
-    <span v-if="presentation.attention === 'proposal'" :id="hintId" class="presence__hint-text">有一条待回应的提议</span>
+            @click="interaction.open()"><CompanionPresence :presentation="presentation" /></button>
     <router-link to="/companion" class="presence__label" aria-label="伙伴空间" :aria-current="active ? 'page' : undefined">
       <span class="presence__full">{{ interaction.dragging ? '拖入以选图' : '伙伴空间' }}</span><span class="presence__short">伙伴</span>
       <ShellIcon name="chevron" class="presence__arrow" />
@@ -14,11 +12,9 @@
 <script setup>
 import ShellIcon from '@/components/shell/ShellIcon.vue'
 import CompanionPresence from '@/components/companion/body/CompanionPresence.vue'
-import { useId } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCompanionPresentationStore } from '@/stores/companionPresentation'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
-const hintId = useId()
 const interaction = useCompanionInteractionStore()
 const { presentation } = storeToRefs(useCompanionPresentationStore())
 defineProps({ active: Boolean })
@@ -31,8 +27,6 @@ defineProps({ active: Boolean })
 .presence__label { flex: 1; display: flex; align-items: center; justify-content: space-between; min-height: 44px; gap: 8px; font-size: 0.875rem; font-weight: 600; white-space: nowrap; }
 .presence__mark:hover, .presence__mark:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 3px; }
 .presence.is-drop-target { outline: 2px dashed var(--lp-accent); outline-offset: -4px; }
-.presence__hint { position: absolute; right: -3px; top: -3px; font-size: .8rem; color: var(--lp-accent-strong); }
-.presence__hint-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .presence__arrow { width: 12px; height: 12px; }
 .presence__short { display: none; }
 @media (768px <= width < 1024px) {

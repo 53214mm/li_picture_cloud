@@ -17,16 +17,9 @@ import java.util.Optional;
 public class MybatisCompanionChatMessageRepository implements CompanionChatMessageRepository {
 
     private final CompanionChatMessageMapper messageMapper;
-    private final com.li.lipicturecloud.domain.companion.ChatSessionBoundaryRepository boundaries;
 
     public MybatisCompanionChatMessageRepository(CompanionChatMessageMapper messageMapper) {
-        this(messageMapper, null);
-    }
-    @org.springframework.beans.factory.annotation.Autowired
-    public MybatisCompanionChatMessageRepository(CompanionChatMessageMapper messageMapper,
-            com.li.lipicturecloud.domain.companion.ChatSessionBoundaryRepository boundaries) {
         this.messageMapper = messageMapper;
-        this.boundaries = boundaries;
     }
 
     @Override
@@ -45,7 +38,6 @@ public class MybatisCompanionChatMessageRepository implements CompanionChatMessa
         row.setModelCode(message.modelCode());
         row.setCreateTime(Date.from(message.createdTime()));
         messageMapper.insert(row);
-        if (boundaries != null) boundaries.advanceChatEpoch(message.subjectId());
         return message.withId(Objects.requireNonNull(row.getId(), "assigned message id"));
     }
 

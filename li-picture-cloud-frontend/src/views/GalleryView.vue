@@ -93,7 +93,6 @@
           v-for="pic in pictures"
           :key="pic.id"
           class="gallery-card"
-          :data-observation-picture="pic.id" :data-observation-version="pic.updateTime || ''"
           :to="`/picture/${pic.id}`"
           :aria-label="`查看图片：${pic.name || '未命名'}`"
           @dragstart="interaction.startDrag($event, pic)" @dragend="interaction.cancelDrag"

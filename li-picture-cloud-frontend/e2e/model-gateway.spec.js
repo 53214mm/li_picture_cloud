@@ -22,8 +22,6 @@ test('control center manages credentials connections routing and usage', async (
   await expect(page.getByRole('heading', { name: '模型连接', level: 1 })).toBeVisible()
   await openAdvanced(page)
   await expect(page.getByText('还没有 API Key。填写供应商和密钥后保存。')).toBeVisible()
-  // 普通用户看不到平台管理的 MCP 白名单区。
-  await expect(page.getByTestId('mcp-section')).toHaveCount(0)
 
   // 1. 保存凭据：明文只提交一次，界面只回显尾号。
   await page.getByLabel('供应商').first().selectOption('DEEPSEEK')

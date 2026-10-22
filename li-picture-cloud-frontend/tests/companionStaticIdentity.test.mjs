@@ -23,8 +23,7 @@ const aliases = {
   '@/stores/companionInteraction': boundary,
   '@/composables/useCompanionRenderPolicy': boundary,
   './lingyeAssets': boundary,
-  './SpritePlayer.vue': moduleUrl(`export default { setup() { throw new Error('Static artwork must never mount SpritePlayer') } }`),
-  '../CompanionProposalHint.vue': moduleUrl('export default { render() { return null } }')
+  './SpritePlayer.vue': moduleUrl(`export default { setup() { throw new Error('Static artwork must never mount SpritePlayer') } }`)
 }
 async function compile(name) {
   const { descriptor, errors } = parse(await readFile(new URL(`../src/components/companion/body/${name}.vue`, import.meta.url), 'utf8'))
@@ -52,7 +51,7 @@ function snapshot(stage = 'LIGHT', activity = 'idle', tone = 'neutral') {
   const axis = { energetic: 'energy', cheerful: 'joy', lonely: 'loneliness', inspired: 'inspiration', irritated: 'irritation' }[tone]
   if (axis) mood[axis] = 90
   const observed = mapCompanionPresentation({ homeStatus: 'ready', home: { companion: { id: '7', lifeStage: stage }, mood } })
-  return { ...observed, activity, attention: 'proposal' }
+  return { ...observed, activity }
 }
 
 test('L06 every shipped stage, activity and mood is static, including direct greeting requests', () => {
@@ -60,7 +59,7 @@ test('L06 every shipped stage, activity and mood is static, including direct gre
   const changes = []
   const animator = createCompanionAnimator({ onChange: value => changes.push(value), schedule: (...args) => timers.push(args) })
   for (const stage of ['LIGHT', 'SEEDLING', 'COMPANION', 'FUTURE', null]) {
-    for (const activity of ['idle', 'feeding', 'thinking', 'responding', 'acknowledging']) {
+    for (const activity of ['idle', 'feeding', 'thinking', 'responding']) {
       for (const tone of ['neutral', 'energetic', 'cheerful', 'lonely', 'inspired', 'irritated']) {
         const p = snapshot(stage, activity, tone)
         assert.equal(p.lifeStage, stage)
@@ -81,7 +80,7 @@ test('L06 real compiled Body stays static across live changes, interactions, bud
   const app = renderer.createApp({ render: () => h(Body, { presentation: state.presentation }) })
   app.mount(root)
   try {
-    for (const stage of ['LIGHT', 'SEEDLING', 'COMPANION', 'FUTURE']) for (const activity of ['idle', 'feeding', 'thinking', 'responding', 'acknowledging']) {
+    for (const stage of ['LIGHT', 'SEEDLING', 'COMPANION', 'FUTURE']) for (const activity of ['idle', 'feeding', 'thinking', 'responding']) {
       state.presentation = snapshot(stage, activity, 'inspired')
       await nextTick()
       const nodes = descendants(root)

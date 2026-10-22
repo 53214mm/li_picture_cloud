@@ -13,10 +13,6 @@
       </template>
       <p v-else role="alert">这张图片暂不可选择。此入口仅支持你自己的私有空间图片，请确认图片仍可访问。</p>
     </div>
-    <section v-if="proposalPreview" class="interaction-proposal" aria-label="当前伙伴提议">
-      <CompanionMessageBubble :message="proposalPreview.content" />
-      <button type="button" class="btn btn-outline" @click="go('proposal')">前往回应这条提议</button>
-    </section>
     <CompanionQuickChat v-if="!interaction.inspection" />
     <div class="interaction-actions">
       <button type="button" @click="go('chat')">打开完整对话 <span>前往伙伴空间</span></button>
@@ -32,10 +28,9 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import CompanionPortrait from './body/CompanionPortrait.vue'
 import CompanionQuickChat from './CompanionQuickChat.vue'
-import CompanionMessageBubble from './CompanionMessageBubble.vue'
 import { useCompanionPresentationStore } from '@/stores/companionPresentation'
 import { useCompanionInteractionStore } from '@/stores/companionInteraction'
-const { presentation, proposalPreview } = storeToRefs(useCompanionPresentationStore())
+const { presentation } = storeToRefs(useCompanionPresentationStore())
 const interaction = useCompanionInteractionStore()
 const router = useRouter()
 const emit = defineEmits(['close'])
@@ -50,8 +45,6 @@ async function go(target, pictureId = null) {
 .interaction-intro { display: flex; align-items: center; gap: 16px; }
 p { line-height: 1.7; font-size: .875rem; color: var(--lp-text-secondary); }
 .interaction-picture { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--lp-border-strong); border-radius: var(--lp-radius-m); overflow-wrap: anywhere; }
-.interaction-proposal { display: grid; gap: .75rem; }
-.interaction-proposal :deep(.companion-message) { margin-top: 0; }
 .interaction-actions { display: grid; gap: 8px; }
 .interaction-actions > * { display: grid; gap: 4px; min-height: 48px; padding: 12px; text-align: left; border: 1px solid var(--lp-border); border-radius: var(--lp-radius-s); }
 .interaction-actions > *:hover { background: var(--lp-accent-soft); }

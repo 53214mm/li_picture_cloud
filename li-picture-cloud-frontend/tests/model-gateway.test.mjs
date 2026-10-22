@@ -93,23 +93,6 @@ test('control center routing keeps platform default explicit', async () => {
   assert.doesNotMatch(view, /Number\(rawValue\)/)
 })
 
-test('mcp admin section is admin-gated and fail-closed', async () => {
-  const view = await readFile(fileURLToPath(new globalThis.URL('../src/components/model/ModelGatewayAdvanced.vue', import.meta.url)), 'utf8')
-  const api = await readFile(fileURLToPath(new globalThis.URL('../src/api/modelGateway.js', import.meta.url)), 'utf8')
-
-  // 仅平台管理员可见。
-  assert.match(view, /v-if="userStore\.isAdmin".*data-testid="mcp-section"/s)
-  // 保留服务、工具和地址的拒绝边界，用操作后果替代内部术语。
-  assert.match(view, /仅平台管理员可管理/)
-  assert.match(view, /只开放已登记并启用的服务和白名单工具，不支持未登记的服务地址/)
-  assert.match(view, /还没有白名单工具，此服务的工具不会出现在伙伴能力列表中/)
-  assert.doesNotMatch(view, /fail-closed/)
-  assert.match(api, /request\.get\('\/model\/mcp\/services'\)/)
-  assert.match(api, /request\.post\(`\/model\/mcp\/services\/\$\{code\}\/enable`\)/)
-  assert.match(api, /request\.post\(`\/model\/mcp\/services\/\$\{code\}\/tools\/\$\{toolName\}\/disable`\)/)
-  assert.match(api, /request\.delete\(`\/model\/mcp\/services\/\$\{code\}\/tools\/\$\{toolName\}`\)/)
-})
-
 test('usage table exposes the minimal unified usage snapshot columns', async () => {
   const view = await readFile(fileURLToPath(new globalThis.URL('../src/components/model/ModelGatewayAdvanced.vue', import.meta.url)), 'utf8')
 
@@ -157,7 +140,7 @@ test('model connection copy keeps actionable safety rules and folds technical me
 test('model gateway emptiness requires a successful read rather than a mutation outcome', async () => {
   const view = await readFile(fileURLToPath(new globalThis.URL('../src/components/model/ModelGatewayAdvanced.vue', import.meta.url)), 'utf8')
 
-  for (const status of ['listStatus', 'usageStatus', 'mcpStatus']) {
+  for (const status of ['listStatus', 'usageStatus']) {
     assert.match(view, new RegExp(`const ${status} = ref\\('loading'\\)`))
     assert.match(view, new RegExp(`${status}\\.value = 'ready'`))
     assert.match(view, new RegExp(`${status}\\.value = 'error'`))
@@ -169,15 +152,14 @@ test('model gateway emptiness requires a successful read rather than a mutation 
   assert.equal((view.match(/hasLoadedLists\.value = true/g) ?? []).length, 1)
   assert.doesNotMatch(view, /hasLoadedLists\.value = false/)
   assert.match(view, /v-else-if="usageStatus === 'ready'" class="empty-state">还没有调用记录/)
-  assert.match(view, /v-else-if="mcpStatus === 'ready'" class="empty-state">还没有 MCP 服务/)
-  assert.match(view, /v-if="mcpStatus === 'ready' && \(!service.tools \|\| service.tools.length === 0\)"/)
+  assert.doesNotMatch(view, /MCP/)
   assert.match(view, /v-if="listStatus === 'loading'" class="read-state" role="status"/)
   assert.match(view, /v-else-if="listStatus === 'error'" class="page-error" role="alert">\{\{ listError \}\}/)
   // 已知列表不会因写入失败变成未知；只由读取函数更新读取状态。
-  for (const name of ['submitCredential', 'removeCredential', 'submitConnection', 'confirmRotate', 'submitMcpService', 'submitMcpTool']) {
+  for (const name of ['submitCredential', 'removeCredential', 'submitConnection', 'confirmRotate']) {
     const body = view.match(new RegExp(`async function ${name}\\([^)]*\\) \\{([\\s\\S]*?)\\n\\}`))?.[1]
     assert.ok(body, `${name} is present`)
-    assert.doesNotMatch(body, /(?:list|usage|mcp)Status\.value\s*=/)
+    assert.doesNotMatch(body, /(?:list|usage)Status\.value\s*=/)
   }
 })
 

@@ -1,5 +1,5 @@
 // R07 consumes only the R06 protocol. These are rendering choices, not domain states.
-const activities = new Set(['idle', 'feeding', 'thinking', 'responding', 'acknowledging'])
+const activities = new Set(['idle', 'feeding', 'thinking', 'responding'])
 const idleTones = new Set(['neutral', 'energetic', 'cheerful', 'lonely', 'inspired', 'irritated'])
 
 export function mapCompanionAnimation(presentation) {
@@ -11,7 +11,7 @@ export function mapCompanionAnimation(presentation) {
     companionId: p?.companionId ?? null,
     idleTone: supported && p.freshness === 'fresh' && p.disposition?.mood?.status === 'known' && idleTones.has(p.disposition.mood.idleTone)
       ? p.disposition.mood.idleTone : 'neutral',
-    state: !supported ? 'static' : p.activity !== 'idle' ? 'focus' : p.attention === 'proposal' ? 'attention' : 'idle'
+    state: !supported ? 'static' : p.activity !== 'idle' ? 'focus' : 'idle'
   })
 }
 
@@ -20,7 +20,6 @@ export function mapCompanionAnimation(presentation) {
 const clips = {
   idle: [{ frame: 0, ms: 4200 }, { frame: 1, ms: 140 }],
   focus: [{ frame: 0, ms: 1600 }, { frame: 0, offsetY: 2, ms: 220 }, { frame: 1, offsetY: 2, ms: 140 }, { frame: 0, ms: 1800 }],
-  attention: [{ frame: 0, ms: 600 }, { frame: 1, ms: 140 }, { frame: 0, ms: 180 }, { frame: 1, ms: 140 }],
   greeting: [{ frame: 0, ms: 160 }, { frame: 1, ms: 140 }, { frame: 0, ms: 160 }]
 }
 // Same two frames, no new expression is painted onto the existing artwork.
@@ -42,7 +41,6 @@ export function createCompanionAnimator({ onChange, schedule = setTimeout, cance
   let state = 'static'
   let step = 0
   let identity = null
-  let attentionConsumed = false
   let lastInteraction = 0
   let idleTone = 'neutral'
   const currentClip = () => state === 'idle' ? idleClips[idleTone] : clips[state]
@@ -64,7 +62,7 @@ export function createCompanionAnimator({ onChange, schedule = setTimeout, cance
       step += 1
       if (step === currentClip().length) {
         step = 0
-        if (state === 'attention' || state === 'greeting') state = 'idle'
+        if (state === 'greeting') state = 'idle'
       }
       publish()
       next()
@@ -74,7 +72,6 @@ export function createCompanionAnimator({ onChange, schedule = setTimeout, cance
     stop()
     state = target
     step = 0
-    if (state === 'attention') attentionConsumed = true
     publish()
     if (state !== 'static') next()
   }
@@ -88,15 +85,11 @@ export function createCompanionAnimator({ onChange, schedule = setTimeout, cance
       const direct = Number.isSafeInteger(interactionRequest) && interactionRequest > lastInteraction
       lastInteraction = interactionRequest
       const changedIdentity = intent.companionId !== identity
-      if (changedIdentity) {
-        identity = intent.companionId
-        attentionConsumed = false
-      }
+      if (changedIdentity) identity = intent.companionId
       let target = playable ? intent.state : 'static'
       // Ephemeral input has lower priority than R06 facts. Never defer it while
-      // hidden, busy, reduced-motion or showing a proposal; never reset its quota.
+      // hidden, busy or reduced-motion; never reset its quota.
       if (target === 'idle' && (direct || state === 'greeting' && !changedIdentity)) target = 'greeting'
-      if (target === 'attention' && attentionConsumed && state !== 'attention') target = 'idle'
       if (changedIdentity || target !== state || target === 'idle' && changedTone) start(target)
     },
     destroy() {

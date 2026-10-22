@@ -38,7 +38,6 @@ public class MybatisChatSessionBoundaryRepository implements ChatSessionBoundary
         row.setSubjectId(subjectId);
         row.setLoginTime(login);
         row.setUpdateTime(login);
-        row.setChatEpoch(1L);
         try {
             mapper.insert(row);
         } catch (DuplicateKeyException concurrentLogin) {
@@ -50,17 +49,7 @@ public class MybatisChatSessionBoundaryRepository implements ChatSessionBoundary
         return mapper.update(null, new LambdaUpdateWrapper<CompanionChatBoundaryEntity>()
                 .eq(CompanionChatBoundaryEntity::getSubjectId, subjectId)
                 .set(CompanionChatBoundaryEntity::getLoginTime, login)
-                .setSql("chatEpoch = chatEpoch + 1")
                 .set(CompanionChatBoundaryEntity::getUpdateTime, login)) > 0;
     }
 
-    @Override public long chatEpoch(long subjectId) {
-        Long value=mapper.epoch(subjectId);return value == null ? 0 : value;
-    }
-    @Override public void advanceChatEpoch(long subjectId) {
-        if (mapper.advanceEpoch(subjectId) > 0) return;
-        var row=new CompanionChatBoundaryEntity();row.setSubjectId(subjectId);
-        row.setLoginTime(Date.from(Instant.EPOCH));row.setUpdateTime(new Date());row.setChatEpoch(1L);
-        try { mapper.insert(row); } catch (DuplicateKeyException race) { mapper.advanceEpoch(subjectId); }
-    }
 }

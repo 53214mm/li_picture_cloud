@@ -40,7 +40,6 @@ export function mapCompanionPresentation(input = {}) {
   const { home, homeStatus = 'unobserved' } = input
   const feed = record(input.feed)
   const chat = record(input.chat)
-  const proposal = record(input.proposal)
   let availability = input.enabled === false ? 'disabled' : homeStatus
   const id = companionId(home?.companion?.id)
   if (availability === 'ready') {
@@ -58,13 +57,11 @@ export function mapCompanionPresentation(input = {}) {
     if (!fresh) issues.push('home-stale')
     if (feed.error === true) issues.push('feed-failed')
     if (chat.error === true) issues.push('chat-failed')
-    if (proposal.error === true) issues.push('proposal-failed')
   }
   const activity = !ready ? 'idle'
     : chat.phase === 'streaming' ? 'responding'
       : chat.phase === 'waiting' ? 'thinking'
-        : feed.pending === true ? 'feeding'
-          : proposal.busy === true ? 'acknowledging' : 'idle'
+        : feed.pending === true ? 'feeding' : 'idle'
   const freshness = ready ? fresh ? 'fresh' : 'stale' : 'unknown'
   const affect = fresh ? affectFor(home.mood) : 'neutral'
   const rapport = fresh ? rapportFor(home.relationship) : 'neutral'
@@ -76,7 +73,6 @@ export function mapCompanionPresentation(input = {}) {
     lifeStage,
     freshness,
     activity,
-    attention: ready && proposal.status === 'PENDING' && proposal.loading !== true && proposal.error !== true ? 'proposal' : 'none',
     affect,
     rapport,
     disposition,

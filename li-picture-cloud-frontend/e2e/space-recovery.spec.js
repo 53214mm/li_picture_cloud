@@ -116,21 +116,6 @@ test('owned-space failure leaves joined teams usable and exposes a scoped retry 
   await page.screenshot({ path: testInfo.outputPath('space-read-recovery-320.png'), fullPage: true })
 })
 
-test('admin picture-ID filters preserve exact decimals and reject invalid text without broadening the query', async ({ page }) => {
-  const calls = await fixture(page, {}, { ...member, userRole: 'admin' })
-  await page.goto('/admin/companion-feed-runs')
-  await expect(page.getByRole('button', { name: '查询', exact: true })).toBeEnabled()
-  await page.getByLabel('图片 ID', { exact: true }).fill(pictureId)
-  await page.getByRole('button', { name: '查询', exact: true }).click()
-  await expect.poll(() => calls.filter(call => call.path === '/api/admin/companion/feed-runs/page').at(-1)?.body.pictureId).toBe(pictureId)
-  await expect(page.getByRole('button', { name: '查询', exact: true })).toBeEnabled()
-  const count = calls.filter(call => call.path === '/api/admin/companion/feed-runs/page').length
-  await page.getByLabel('图片 ID', { exact: true }).fill('9e18')
-  await page.getByRole('button', { name: '查询', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('请输入有效的图片 ID')
-  expect(calls.filter(call => call.path === '/api/admin/companion/feed-runs/page').length).toBe(count)
-})
-
 test('failed picture pagination keeps the displayed page accurate and retries the requested page', async ({ page }) => {
   let broken = true
   const nextPicture = { ...picture, id: '9223372036854775804', name: '第二页图片' }

@@ -79,6 +79,11 @@ springdoc:
     - /actuator/**
 
 app:
+  ai:
+    mcp:
+      # AI 助手可调用的 MCP 工具（逗号分隔，例如 generate_image,get_task_status）；留空则一个都不放行。
+      service: mxai-mcp-server
+      allowed-tools: ${MCP_ALLOWED_TOOLS:}
   cors:
     # 本地开发放行所有来源；生产 profile 必须通过 CORS_ALLOWED_ORIGINS 显式提供白名单。
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:*}
@@ -87,14 +92,6 @@ app:
     chat-policy: ${COMPANION_CHAT_POLICY:MODEL}
     chat-daily-limit: ${COMPANION_CHAT_DAILY_LIMIT:50}
     enabled: ${COMPANION_ENABLED:true}
-    presence:
-      enabled: ${COMPANION_PRESENCE_ENABLED:true}
-      # Permits explicit BYOK rehearsal/observation opt-in; no automatic authorization.
-      real-enabled: ${COMPANION_PRESENCE_REAL_ENABLED:false}
-    observation:
-      # Admission capability only. Browser automatic and visual grants remain default-off.
-      enabled: ${COMPANION_OBSERVATION_ENABLED:false}
-      real-visual-enabled: ${COMPANION_OBSERVATION_REAL_VISUAL_ENABLED:false}
     feeding-enabled: ${COMPANION_FEEDING_ENABLED:true}
     processing-timeout: ${COMPANION_PROCESSING_TIMEOUT:5m}
     nutrition-policy: ${COMPANION_NUTRITION_POLICY:METADATA_ONLY}

@@ -17,8 +17,6 @@ async function fixture(page, overrides = {}) {
     calls.push(path)
     if (path === '/api/user/current') return ok(route, { id: '42', userName: 'R11', userRole: 'user' })
     if (path === '/api/companion/me') return ok(route, { companion, mood, relationship, recentGrowth: [], nutrition: {}, chatPolicy: 'DEMO', ...overrides })
-    if (path === '/api/companion/proposals/active') return ok(route, null)
-    if (path === '/api/companion/contract') return ok(route, { active: false, quietStart: '23:00', quietEnd: '08:00', maxFrequencyHours: 1 })
     if (path === '/api/space/list/page/vo') return ok(route, { records: [] })
     if (path.includes('tag_category')) return ok(route, { tagList: [], categoryList: [] })
     return ok(route, { records: [], total: 0 })

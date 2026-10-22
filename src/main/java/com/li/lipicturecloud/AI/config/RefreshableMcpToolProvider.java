@@ -35,8 +35,7 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Component
-public class RefreshableMcpToolProvider implements ToolCallbackProvider,
-        com.li.lipicturecloud.application.airuntime.McpToolCacheInvalidator {
+public class RefreshableMcpToolProvider implements ToolCallbackProvider {
 
     @Value("${mxai.api-key}")
     private String apiKey;
@@ -153,8 +152,7 @@ public class RefreshableMcpToolProvider implements ToolCallbackProvider,
 
     // ======================== ToolCallback 实现 ========================
 
-    /** 白名单/启停变更后立即使缓存失效，下一次列举重新裁决。 */
-    @Override
+    /** 清空工具缓存，下一次列举重新裁决。 */
     public void invalidateToolCache() {
         synchronized (this) {
             cachedCallbacks = new ToolCallback[0];
